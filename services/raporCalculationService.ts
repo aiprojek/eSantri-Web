@@ -2,8 +2,9 @@ import { RaporTemplate, RaporSheet, Santri, RaporRecord, PondokSettings } from '
 import { extractTemplateKeys, ExtractedTemplateKey, getTemplateSheets } from './raporExcelService';
 export { getTemplateSheets };
 import { loadXLSX } from '../utils/lazyClientLibs';
-import { formatDate } from '../utils/formatters';
+import { formatDate, resolveTempatRapor } from '../utils/formatters';
 import { normalizeSubjectKeyForAvg } from '../utils/raporFormulaUtils';
+import { resolveMudirAamInfo } from '../utils/raporPlaceholderResolver';
 
 export interface PredikatResult {
     predikat: string;
@@ -54,6 +55,11 @@ export interface StudentLegerRow {
     rataRataFormatted: string;
     predikat: PredikatResult;
     ranking: number;
+    rankingKelas?: number;
+    rankingJenjang?: number;
+    rankingGlobal?: number;
+    totalSantriKelas?: number;
+    totalSantriJenjang?: number;
     sakit: number;
     izin: number;
     alpha: number;
@@ -566,14 +572,24 @@ export const exportLegerToExcel = async (params: {
     sheetData.push([]);
     sheetData.push([]);
     const tanggalCetak = formatDate(new Date());
-    const kotaPondok = settings?.tempatRaporDefault || 'Pesantren';
+    const kotaPondok = resolveTempatRapor(settings, 'Pesantren');
+    const hasConfiguredMudir = Boolean(
+        (settings?.mudirAamId !== undefined && settings?.mudirAamId !== null) ||
+        (settings?.namaMudir && settings.namaMudir.trim()) ||
+        (Array.isArray(settings?.tenagaPengajar) && settings.tenagaPengajar.some(tp =>
+            Array.isArray(tp.riwayatJabatan) &&
+            tp.riwayatJabatan.some(rj => !rj.tanggalSelesai && (rj.jabatan || '').toLowerCase().includes('mudir'))
+        ))
+    );
+    const mudirDisplay = hasConfiguredMudir ? resolveMudirAamInfo(settings).nama : '.........................';
+
     sheetData.push(['', '', '', '', '', '', '', '', '', '', '', '', `${kotaPondok}, ${tanggalCetak}`]);
     sheetData.push(['', '', '', 'Mengetahui,', '', '', '', '', '', '', '', '', 'Wali Kelas,']);
     sheetData.push(['', '', '', 'Kepala Madrasah / Mudir,', '', '', '', '', '', '', '', '', '']);
     sheetData.push([]);
     sheetData.push([]);
     sheetData.push([]);
-    sheetData.push(['', '', '', `(${settings?.namaMudir || '.........................'})`, '', '', '', '', '', '', '', '', `(${waliName})`]);
+    sheetData.push(['', '', '', `(${mudirDisplay})`, '', '', '', '', '', '', '', '', `(${waliName})`]);
 
     const ws = XLSX.utils.aoa_to_sheet(sheetData);
 

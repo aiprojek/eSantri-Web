@@ -1,12 +1,20 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../../../db';
 import { TenagaPengajar, RiwayatJabatan, KetersediaanPengajar, Jenjang, Kelas, Rombel } from '../../../types';
 import { useAppContext } from '../../../AppContext';
+import { SignatureDropzone } from '../../common/SignatureDropzone';
+import { findStrictTeacherTtdAsset } from '../../../utils/digitalAssetUtils';
+
+export interface TeacherTtdPayload {
+    action: 'upsert' | 'remove' | 'unchanged';
+    base64Image?: string;
+}
 
 interface TeacherModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (teacher: TenagaPengajar) => void;
+    onSave: (teacher: TenagaPengajar, ttdPayload?: TeacherTtdPayload) => void;
     modalData: {
         mode: 'add' | 'edit';
         item?: TenagaPengajar;
@@ -14,9 +22,16 @@ interface TeacherModalProps {
 }
 
 export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onSave, modalData }) => {
-    const { showAlert, settings } = useAppContext();
+    const { showAlert, showToast, settings } = useAppContext();
     const { mode, item } = modalData;
     const [teacher, setTeacher] = useState<Partial<TenagaPengajar>>({});
+    const digitalAssets = useLiveQuery(() => db.digitalAssets.toArray(), []) || [];
+    const existingTtdAsset = useMemo(
+        () => (mode === 'edit' && item ? findStrictTeacherTtdAsset(digitalAssets, item) : undefined),
+        [digitalAssets, mode, item]
+    );
+    const [ttdBase64, setTtdBase64] = useState<string | null>(null);
+    const [ttdDirty, setTtdDirty] = useState(false);
 
     const isNonPendidik = teacher.jenisPegawai === 'kependidikan';
 
@@ -62,8 +77,15 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
                 availableKelasIds: [],
                 kompetensiMapelIds: []
             });
+            setTtdDirty(false);
         }
     }, [isOpen, item]);
+
+    useEffect(() => {
+        if (isOpen && !ttdDirty) {
+            setTtdBase64(existingTtdAsset?.base64Image || null);
+        }
+    }, [isOpen, existingTtdAsset, ttdDirty]);
 
     // Group Mapel by Jenjang for Display
     const mapelByJenjang = useMemo(() => {
@@ -201,7 +223,16 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
             kompetensiMapelIds: isNonPendidik ? [] : (teacher.kompetensiMapelIds || []),
             configGaji: item?.configGaji
         };
-        onSave(teacherToSave);
+
+        let ttdPayload: TeacherTtdPayload = { action: 'unchanged' };
+        if (ttdDirty) {
+            if (ttdBase64) {
+                ttdPayload = { action: 'upsert', base64Image: ttdBase64 };
+            } else {
+                ttdPayload = { action: 'remove' };
+            }
+        }
+        onSave(teacherToSave, ttdPayload);
     }
     
     return (
@@ -596,6 +627,37 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
                         </div>
                     </details>
                     )}
+
+                    {/* TANDA TANGAN DIGITAL (TERINTEGRASI OTOMATIS KE DAFTAR ASET DIGITAL) */}
+                    <div className="rounded-xl border border-teal-200 bg-teal-50/30 p-4 space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                            <div>
+                                <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                    <i className="bi bi-pen-fill text-teal-600"></i>
+                                    Tanda Tangan Digital (TTD)
+                                </h4>
+                                <p className="text-xs text-slate-600 mt-0.5">
+                                    Otomatis tersimpan di <strong>Daftar Aset Digital</strong> dan langsung terhubung ke Rapor & Surat Menyurat sesuai jabatan pegawai ini.
+                                </p>
+                            </div>
+                            {existingTtdAsset && !ttdDirty && (
+                                <span className="text-[11px] font-medium text-teal-700 shrink-0 flex items-center gap-1">
+                                    <i className="bi bi-check-circle-fill"></i> Terdaftar di Aset
+                                </span>
+                            )}
+                        </div>
+                        <SignatureDropzone
+                            value={ttdBase64}
+                            onChange={(next) => {
+                                setTtdBase64(next);
+                                setTtdDirty(true);
+                            }}
+                            label=""
+                            compact
+                            helperText="Seret & lepas (drag & drop) gambar TTD ke sini, klik pilih berkas, atau tempel (Ctrl+V). Tersedia fitur Hapus Background Putih otomatis."
+                            onError={(msg) => showToast(msg, 'error')}
+                        />
+                    </div>
                 </div>
                 
                 <div className="p-4 border-t flex justify-end space-x-2 bg-gray-50 rounded-b-lg shrink-0">

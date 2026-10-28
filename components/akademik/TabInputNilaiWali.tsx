@@ -219,17 +219,25 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
     const handleAdminUnlockRapor = async () => {
         if (!canManageAllRombel) return;
         const updatedMap = { ...(settings.raporApprovalStatus || {}) };
-        if (activeRombelId && updatedMap[rombelLockKey] === 'locked') {
-            updatedMap[rombelLockKey] = 'verified';
-        }
         if (updatedMap[globalLockKey] === 'locked') {
+            if (activeRombelId) {
+                settings.rombel.forEach(r => {
+                    const rk = `${tahunAjaran}_${semester}_${r.id}`;
+                    if (!updatedMap[rk]) {
+                        updatedMap[rk] = 'locked';
+                    }
+                });
+            }
             updatedMap[globalLockKey] = 'verified';
+        }
+        if (activeRombelId) {
+            updatedMap[rombelLockKey] = 'verified';
         }
         await onUpdateSettings({
             ...settings,
             raporApprovalStatus: updatedMap
         });
-        showToast('Kunci rapor dibuka sementara (Status: Terverifikasi). Silakan lakukan revisi nilai.', 'info');
+        showToast('Kunci rapor rombel ini dibuka sementara (Status: Terverifikasi). Silakan lakukan revisi nilai.', 'info');
     };
 
     // Filter active non-deleted students in the active selection

@@ -29,6 +29,7 @@ import { SuratSantriSelectorModal } from './surat/SuratSantriSelectorModal';
 import { SuratSettingsDrawer } from './surat/SuratSettingsDrawer';
 import { SuratVariablePopover } from './surat/SuratVariablePopover';
 import { SuratSignatoryEditor } from './surat/SuratSignatoryEditor';
+import { findStrictTeacherTtdAsset, reconcileDigitalAssetsWithSettings } from '../utils/digitalAssetUtils';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { loadXLSX } from '../utils/lazyClientLibs';
@@ -722,6 +723,10 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
     const { suratTemplates, arsipSuratList, onSaveArsipSurat, settings, showToast } = useAppContext();
     const { santriList } = useSantriContext();
     const digitalAssets = useLiveQuery(() => db.digitalAssets.toArray(), []) || [];
+
+    useEffect(() => {
+        reconcileDigitalAssetsWithSettings(settings).catch(() => {});
+    }, [settings]);
     
     const [selectedTemplateId, setSelectedTemplateId] = useState<number | ''>('');
     
@@ -845,23 +850,19 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                 const mudir = settings.tenagaPengajar?.find(t => t.id === settings.mudirAamId);
                 resolvedNama = mudir?.nama || settings.namaMudir || resolvedNama || 'Pimpinan Pondok Pesantren';
                 resolvedNip = mudir?.nip || resolvedNip;
-                if (!resolvedSignatureUrl) {
-                    const matchAsset = digitalAssets.find(a => 
-                        a.type === 'ttd' && a.namaPemilik.trim().toLowerCase() === resolvedNama.trim().toLowerCase()
-                    );
-                    if (matchAsset) resolvedSignatureUrl = matchAsset.base64Image;
-                }
+                const matchAsset = mudir
+                    ? findStrictTeacherTtdAsset(digitalAssets, mudir)
+                    : (settings.namaMudir ? findStrictTeacherTtdAsset(digitalAssets, { nama: settings.namaMudir }) : undefined);
+                resolvedSignatureUrl = matchAsset?.base64Image;
             } else if (sig.sourceType === 'guru' && sig.sourceId) {
                 const guru = settings.tenagaPengajar?.find(t => t.id === Number(sig.sourceId));
                 if (guru) {
                     resolvedNama = guru.nama;
                     resolvedNip = guru.nip || resolvedNip;
-                    if (!resolvedSignatureUrl) {
-                        const matchAsset = digitalAssets.find(a => 
-                            a.type === 'ttd' && a.namaPemilik.trim().toLowerCase() === guru.nama.trim().toLowerCase()
-                        );
-                        if (matchAsset) resolvedSignatureUrl = matchAsset.base64Image;
-                    }
+                    const matchAsset = findStrictTeacherTtdAsset(digitalAssets, guru);
+                    resolvedSignatureUrl = matchAsset?.base64Image;
+                } else {
+                    resolvedSignatureUrl = undefined;
                 }
             } else if (sig.sourceType === 'wali_kelas') {
                 if (targetSantri && targetSantri.rombelId) {
@@ -870,15 +871,15 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                     if (wali) {
                         resolvedNama = wali.nama;
                         resolvedNip = wali.nip;
-                        const matchAsset = digitalAssets.find(a => 
-                            a.type === 'ttd' && a.namaPemilik.trim().toLowerCase() === wali.nama.trim().toLowerCase()
-                        );
-                        if (matchAsset) resolvedSignatureUrl = matchAsset.base64Image;
+                        const matchAsset = findStrictTeacherTtdAsset(digitalAssets, wali);
+                        resolvedSignatureUrl = matchAsset?.base64Image;
                     } else {
                         resolvedNama = 'Wali Kelas ' + (rombel?.nama || '');
+                        resolvedSignatureUrl = undefined;
                     }
                 } else {
                     resolvedNama = '(Wali Kelas Santri Terkait)';
+                    resolvedSignatureUrl = undefined;
                 }
             } else if (sig.sourceType === 'musyrif') {
                 if (targetSantri && targetSantri.kamarId) {
@@ -887,22 +888,24 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                     if (musyrif) {
                         resolvedNama = musyrif.nama;
                         resolvedNip = musyrif.nip;
-                        const matchAsset = digitalAssets.find(a => 
-                            a.type === 'ttd' && a.namaPemilik.trim().toLowerCase() === musyrif.nama.trim().toLowerCase()
-                        );
-                        if (matchAsset) resolvedSignatureUrl = matchAsset.base64Image;
+                        const matchAsset = findStrictTeacherTtdAsset(digitalAssets, musyrif);
+                        resolvedSignatureUrl = matchAsset?.base64Image;
                     } else {
                         resolvedNama = 'Musyrif Kamar ' + (kamar?.nama || '');
+                        resolvedSignatureUrl = undefined;
                     }
                 } else {
                     resolvedNama = '(Musyrif Asrama Terkait)';
+                    resolvedSignatureUrl = undefined;
                 }
             } else if (sig.sourceType === 'digital_asset' && sig.sourceId) {
                 const asset = digitalAssets.find(a => a.id === String(sig.sourceId));
                 if (asset) {
                     resolvedNama = asset.namaPemilik || resolvedNama;
                     resolvedJabatan = asset.jabatan || resolvedJabatan;
-                    resolvedSignatureUrl = asset.base64Image || resolvedSignatureUrl;
+                    resolvedSignatureUrl = asset.base64Image || undefined;
+                } else {
+                    resolvedSignatureUrl = undefined;
                 }
             }
         }
@@ -962,18 +965,21 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                         nama: s.nama.replace(/{PIMPINAN_PONDOK}/g, pimpinanName)
                     };
                     if (sigCopy.mode === 'auto' && !sigCopy.signatureUrl) {
-                        const matchAsset = digitalAssets.find(a => 
-                            a.type === 'ttd' && a.namaPemilik.trim().toLowerCase() === sigCopy.nama.trim().toLowerCase()
+                        const matchTeacher = settings.tenagaPengajar?.find(
+                            tp => tp.nama.trim().toLowerCase() === sigCopy.nama.trim().toLowerCase()
                         );
+                        const matchAsset = matchTeacher
+                            ? findStrictTeacherTtdAsset(digitalAssets, matchTeacher)
+                            : findStrictTeacherTtdAsset(digitalAssets, { nama: sigCopy.nama });
                         if (matchAsset) sigCopy.signatureUrl = matchAsset.base64Image;
                     }
                     return sigCopy;
                 });
                 setActiveSignatories(resolved);
             } else {
-                const matchMudirAsset = digitalAssets.find(a => 
-                    a.type === 'ttd' && a.namaPemilik.trim().toLowerCase() === pimpinanName.trim().toLowerCase()
-                );
+                const matchMudirAsset = mudir
+                    ? findStrictTeacherTtdAsset(digitalAssets, mudir)
+                    : findStrictTeacherTtdAsset(digitalAssets, { nama: pimpinanName });
                 setActiveSignatories([{ 
                     id: 'default', 
                     mode: 'auto',

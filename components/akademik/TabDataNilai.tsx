@@ -175,10 +175,24 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
         return extractTemplateKeys(activeTemplate, selectedSheetId);
     }, [activeTemplate, selectedSheetId]);
 
-    const handleDeleteRecord = (id: number) => {
+    const isRecordLocked = (rec: RaporRecord, fallbackRombelId?: number): boolean => {
+        const approvalMap = settings.raporApprovalStatus || {};
+        if (approvalMap[`${rec.tahunAjaran}_${rec.semester}_all`] === 'locked') return true;
+        const targetRombelId = rec.rombelId || fallbackRombelId || 0;
+        if (targetRombelId > 0 && approvalMap[`${rec.tahunAjaran}_${rec.semester}_${targetRombelId}`] === 'locked') {
+            return true;
+        }
+        return false;
+    };
+
+    const handleDeleteRecord = (rec: RaporRecord, fallbackRombelId?: number) => {
+        if (isRecordLocked(rec, fallbackRombelId)) {
+            showToast('Data nilai tidak dapat dihapus karena rapor pada rombel ini sedang dikunci. Buka kunci terlebih dahulu di menu Cetak Rapor.', 'error');
+            return;
+        }
         showConfirmation('Hapus Data Rapor?', 'Data nilai santri ini akan dihapus dari arsip.', async () => {
-            await db.raporRecords.delete(id);
-            setArchiveRecords(prev => prev.filter(p => p.id !== id));
+            await db.raporRecords.update(rec.id, { deleted: true, lastModified: Date.now() });
+            setArchiveRecords(prev => prev.filter(p => p.id !== rec.id));
             showToast('Data rapor berhasil dihapus.', 'success');
         }, { confirmColor: 'red' });
     };
@@ -1063,6 +1077,7 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
                                     const { rec, santri, rombel, jenjang, stats } = item;
                                     const rombelName = rombel?.nama || '-';
                                     const jenjangName = jenjang?.nama || '';
+                                    const locked = isRecordLocked(rec, rombel?.id);
 
                                     return (
                                         <tr key={rec.id} className="hover:bg-slate-50/70 transition-colors group">
@@ -1073,9 +1088,19 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
                                             </td>
                                             <td className="p-4">
                                                 <div className="flex flex-col gap-1 items-start">
-                                                    <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-100">
-                                                        {rombelName}
-                                                    </span>
+                                                    <div className="flex flex-wrap items-center gap-1">
+                                                        <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-100">
+                                                            {rombelName}
+                                                        </span>
+                                                        {locked && (
+                                                            <span
+                                                                className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 inline-flex items-center gap-1"
+                                                                title="Rapor rombel ini telah disahkan & dikunci"
+                                                            >
+                                                                <i className="bi bi-lock-fill"></i> Terkunci
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     {jenjangName && (
                                                         <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50/60 px-1.5 py-0.2 rounded border border-indigo-100">
                                                             {jenjangName}
@@ -1123,11 +1148,16 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
                                                     {canWrite && (
                                                         <button 
                                                             type="button"
-                                                            onClick={() => handleDeleteRecord(rec.id)} 
-                                                            className="p-1.5 text-red-500 hover:text-white hover:bg-red-500 rounded-xl transition-all border border-red-100 shadow-sm active:scale-95" 
-                                                            title="Hapus Data"
+                                                            onClick={() => handleDeleteRecord(rec, rombel?.id)}
+                                                            disabled={locked}
+                                                            className={`p-1.5 rounded-xl transition-all border shadow-sm ${
+                                                                locked
+                                                                    ? 'text-slate-300 bg-slate-50 border-slate-200 cursor-not-allowed'
+                                                                    : 'text-red-500 hover:text-white hover:bg-red-500 border-red-100 active:scale-95'
+                                                            }`}
+                                                            title={locked ? 'Terkunci — Buka kunci di menu Cetak Rapor untuk menghapus' : 'Hapus Data'}
                                                         >
-                                                            <i className="bi bi-trash-fill text-sm"></i>
+                                                            <i className={`bi ${locked ? 'bi-lock-fill' : 'bi-trash-fill'} text-sm`}></i>
                                                         </button>
                                                     )}
                                                 </div>

@@ -288,6 +288,9 @@ export type TextTransformMode = 'none' | 'uppercase' | 'lowercase' | 'capitalize
 
 export interface FormulaEvalMeta {
     rank?: number;
+    rankKelas?: number;
+    rankJenjang?: number;
+    rankGlobal?: number;
     tahunAjaran?: string;          // otomatis (mengikuti hijriEnabled di Data Master)
     tahunAjaranMasehi?: string;    // khusus Masehi (misal "2026/2027")
     tahunAjaranHijriah?: string;   // khusus Hijriah (misal "1448/1449 H")
@@ -480,7 +483,11 @@ export function angkaKeArab(input: number | string): string {
     if (input === null || input === undefined) return '-';
     const raw = String(input).trim();
     if (raw === '') return '-';
-    return raw.replace(/[0-9]/g, d => ARABIC_DIGITS[parseInt(d, 10)] ?? d).replace(/\./g, '٫');
+    return raw
+        .replace(/([0-9]),([0-9])/g, '$1٫$2')
+        .replace(/([0-9])\.([0-9])/g, '$1٫$2')
+        .replace(/[0-9]/g, d => ARABIC_DIGITS[parseInt(d, 10)] ?? d)
+        .replace(/\./g, '٫');
 }
 
 /**
@@ -1287,7 +1294,36 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta, isNested = fa
                 return nilaiKePredikatOtomatis(val, mode);
             }
             if (fnName === 'RANK' || fnName === 'PERINGKAT') {
-                return meta?.rank && meta.rank > 0 ? String(meta.rank) : '-';
+                let scope: 'rombel' | 'kelas' | 'jenjang' | 'global' = 'rombel';
+                let limit = 0;
+
+                for (let idx = 0; idx < evalArgs.length; idx++) {
+                    const cleanArg = unquote(evalArgs[idx]).trim().toLowerCase();
+                    if (cleanArg === 'kelas' || cleanArg === 'tingkat' || cleanArg === 'paralel') {
+                        scope = 'kelas';
+                    } else if (cleanArg === 'jenjang' || cleanArg === 'marhalah') {
+                        scope = 'jenjang';
+                    } else if (cleanArg === 'global' || cleanArg === 'pondok' || cleanArg === 'all') {
+                        scope = 'global';
+                    } else if (cleanArg === 'rombel') {
+                        scope = 'rombel';
+                    } else if (idx >= 1 && /^\d+$/.test(cleanArg)) {
+                        limit = parseInt(cleanArg, 10);
+                    }
+                }
+
+                let effectiveRank = meta?.rank;
+                if (scope === 'kelas') {
+                    effectiveRank = meta?.rankKelas ?? meta?.rank;
+                } else if (scope === 'jenjang') {
+                    effectiveRank = meta?.rankJenjang ?? meta?.rank;
+                } else if (scope === 'global') {
+                    effectiveRank = meta?.rankGlobal ?? meta?.rank;
+                }
+
+                if (!effectiveRank || effectiveRank <= 0) return '-';
+                if (limit > 0 && effectiveRank > limit) return '-';
+                return String(effectiveRank);
             }
         }
     }

@@ -4,34 +4,186 @@
 import { Santri, PondokSettings, RaporRecord, NilaiMapel, RaporTemplate, GridCell } from '../types';
 import { db } from '../db';
 import { getTemplateSheets } from './raporExcelService';
+import { parseExcelCellCoord, parseExcelRangeCoord } from '../utils/raporFormulaUtils';
+
+// --- HELPER: RESOLVE MASTER CELL IN MERGED GRID ---
+const resolveMasterGridCell = (cells: GridCell[][], row: number, col: number): GridCell | null => {
+    const direct = cells[row]?.[col];
+    if (direct && !direct.hidden) return direct;
+    for (let r = 0; r <= row; r++) {
+        const rowArr = cells[r];
+        if (!rowArr) continue;
+        for (let c = 0; c <= col; c++) {
+            const candidate = rowArr[c];
+            if (!candidate || candidate.hidden) continue;
+            const rs = candidate.rowSpan || 1;
+            const cs = candidate.colSpan || 1;
+            if (r + rs > row && c + cs > col) {
+                return candidate;
+            }
+        }
+    }
+    return direct || null;
+};
+
+// --- HELPER: EXPAND EXCEL CELL & RANGE COORDINATES TO $KEY / INLINE EXPRESSIONS ---
+const expandSheetFormulaCoords = (rawExpr: string, sheetCells: GridCell[][], depth = 0): string => {
+    let body = (rawExpr || '').trim();
+    if (body.startsWith('=')) body = body.substring(1).trim();
+    if (!body || depth > 6 || !sheetCells || sheetCells.length === 0) return body;
+
+    const maxRows = sheetCells.length;
+    const maxCols = sheetCells.reduce((m, r) => Math.max(m, r ? r.length : 0), 0);
+
+    const cellToExprToken = (r: number, c: number, forRange = false): string | null => {
+        const master = resolveMasterGridCell(sheetCells, r, c);
+        if (!master) return forRange ? null : '0';
+
+        const trimmedKey = master.key?.trim();
+        if (trimmedKey && (master.type === 'input' || master.type === 'dropdown' || master.type === 'formula')) {
+            return `$${trimmedKey}`;
+        }
+
+        if (master.type === 'formula' && master.value) {
+            const inner = expandSheetFormulaCoords(master.value, sheetCells, depth + 1);
+            return inner ? `(${inner})` : '0';
+        }
+
+        const rawVal = (master.value ?? '').trim();
+        if (!rawVal) return forRange ? null : '0';
+        if (/^\$[A-Za-z0-9_]+$/.test(rawVal)) return rawVal;
+
+        const normalizedNum = rawVal.replace(',', '.');
+        if (/^-?\d+(\.\d+)?$/.test(normalizedNum)) {
+            return normalizedNum;
+        }
+
+        return forRange ? null : JSON.stringify(rawVal);
+    };
+
+    // Split outside string literals so quoted text is untouched
+    const segments = body.split(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g);
+    return segments.map((seg, idx) => {
+        if (idx % 2 === 1) return seg; // quoted string literal
+
+        // 1. Expand range coordinates like D6:D15 or $D$6:$D$15
+        let processed = seg.replace(/\$?[A-Za-z]{1,2}\$?\d{1,3}\s*:\s*\$?[A-Za-z]{1,2}\$?\d{1,3}/g, (match) => {
+            const range = parseExcelRangeCoord(match);
+            if (!range) return match;
+            const tokens: string[] = [];
+            const seenMasters = new Set<string>();
+            for (let r = range.rMin; r <= Math.min(range.rMax, maxRows - 1); r++) {
+                for (let c = range.cMin; c <= Math.min(range.cMax, maxCols - 1); c++) {
+                    const master = resolveMasterGridCell(sheetCells, r, c);
+                    if (!master) continue;
+                    const mId = `${master.row}_${master.col}`;
+                    if (seenMasters.has(mId)) continue;
+                    seenMasters.add(mId);
+                    const tok = cellToExprToken(r, c, true);
+                    if (tok !== null) tokens.push(tok);
+                }
+            }
+            return tokens.length > 0 ? tokens.join(', ') : '0';
+        });
+
+        // 2. Expand single cell coordinates like D6, $D$6, $D6, D$6
+        processed = processed.replace(/(?<![A-Za-z0-9_$])(\$?[A-Za-z]{1,2}\$?\d{1,3})(?![A-Za-z0-9_(])/g, (match) => {
+            const coord = parseExcelCellCoord(match);
+            if (!coord) return match;
+            if (coord.r >= maxRows || coord.c >= maxCols) return match;
+            return cellToExprToken(coord.r, coord.c, false) ?? '0';
+        });
+
+        return processed;
+    }).join('');
+};
+
+// --- HELPER: SPLIT TOP-LEVEL FORMULA ARGUMENTS ---
+const splitTopLevelArgs = (inner: string): string[] => {
+    const args: string[] = [];
+    let current = '';
+    let depth = 0;
+    let quote: string | null = null;
+    for (let i = 0; i < inner.length; i++) {
+        const ch = inner[i];
+        if (quote) {
+            current += ch;
+            if (ch === quote && inner[i - 1] !== '\\') quote = null;
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            current += ch;
+            continue;
+        }
+        if (ch === '(') { depth++; current += ch; continue; }
+        if (ch === ')') { depth = Math.max(0, depth - 1); current += ch; continue; }
+        if ((ch === ',' || ch === ';') && depth === 0) {
+            args.push(current.trim());
+            current = '';
+            continue;
+        }
+        current += ch;
+    }
+    if (current.trim() !== '') args.push(current.trim());
+    return args;
+};
 
 // --- HELPER: CONVERT EXCEL SYNTAX TO JS ---
 const convertFormulaToJs = (expression: string): string => {
-    let js = expression.trim();
-    if (js.startsWith('=')) {
-        js = js.substring(1).trim();
+    let raw = (expression || '').trim();
+    if (raw.startsWith('=')) {
+        raw = raw.substring(1).trim();
     }
-    // Replace $KEY with function call
-    js = js.replace(/\$([a-zA-Z0-9_]+)\b/g, "getValue('$1', rowId)");
-    
-    // Functions mappings
-    js = js.replace(/RATA2\(/g, 'average(');
-    js = js.replace(/AVERAGE\(/g, 'average(');
-    js = js.replace(/SUM\(/g, 'sum(');
-    js = js.replace(/MIN\(/g, 'Math.min(');
-    js = js.replace(/MAX\(/g, 'Math.max(');
-    // Logic Functions
-    js = js.replace(/IF\(/g, 'excelIf(');
-    js = js.replace(/AND\(/g, 'excelAnd(');
-    js = js.replace(/OR\(/g, 'excelOr(');
-    
-    // Text Functions
-    js = js.replace(/TERBILANG\(/g, 'terbilang(');
-    
-    // Prevent Rank crash in row context
-    js = js.replace(/RANK\(/g, '0 * ('); 
 
-    return js;
+    const segments = raw.split(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g);
+    return segments.map((seg, idx) => {
+        if (idx % 2 === 1) return seg; // preserve string literals
+
+        let js = seg;
+        // Support Indonesian semicolon argument separator
+        js = js.replace(/;/g, ',');
+        // Excel comparison operators
+        js = js.replace(/<>/g, '!=');
+        js = js.replace(/(?<![<>!=])=(?!=)/g, '==');
+        // Excel string concatenation operator &
+        js = js.replace(/(?<!&)&(?!&)/g, " + '' + ");
+
+        // Replace $KEY with function call
+        js = js.replace(/\$([a-zA-Z0-9_]+)\b/g, "getValue('$1', rowId)");
+
+        // Numeric & Aggregation Functions
+        js = js.replace(/\b(?:RATA2|AVERAGE|AVG|RERATA)\s*\(/gi, 'average(');
+        js = js.replace(/\b(?:SUM|JUMLAH|TOTAL)\s*\(/gi, 'sum(');
+        js = js.replace(/\bMIN\s*\(/gi, 'excelMin(');
+        js = js.replace(/\bMAX\s*\(/gi, 'excelMax(');
+
+        // Rounding & Precision Functions
+        js = js.replace(/\b(?:ROUNDUP|BULAT_ATAS)\s*\(/gi, 'excelRoundUp(');
+        js = js.replace(/\b(?:ROUNDDOWN|BULAT_BAWAH)\s*\(/gi, 'excelRoundDown(');
+        js = js.replace(/\b(?:ROUND|BULAT)\s*\(/gi, 'excelRound(');
+        js = js.replace(/\bINT\s*\(/gi, 'Math.floor(');
+        js = js.replace(/\b(?:FIXED|DESIMAL)\s*\(/gi, 'excelFixed(');
+
+        // Logic Functions
+        js = js.replace(/\b(?:IF|JIKA)\s*\(/gi, 'excelIf(');
+        js = js.replace(/\b(?:AND|DAN)\s*\(/gi, 'excelAnd(');
+        js = js.replace(/\b(?:OR|ATAU)\s*\(/gi, 'excelOr(');
+        js = js.replace(/\b(?:NOT|TIDAK)\s*\(/gi, 'excelNot(');
+
+        // Predikat, Terbilang, Arabic & Text Functions
+        js = js.replace(/\b(?:PREDIKAT|HURUF|TAQDIR)\s*\(/gi, 'excelPredikat(');
+        js = js.replace(/\bTERBILANG\s*\(/gi, 'terbilang(');
+        js = js.replace(/\b(?:ARAB|ANGKA_ARAB)\s*\(/gi, 'angkaKeArab(');
+        js = js.replace(/\b(?:CONCATENATE|CONCAT|GABUNG)\s*\(/gi, 'excelConcat(');
+        js = js.replace(/\b(?:UPPER|BESAR|KAPITAL)\s*\(/gi, 'excelUpper(');
+        js = js.replace(/\b(?:LOWER|KECIL)\s*\(/gi, 'excelLower(');
+
+        // Prevent inline nested RANK crash in row context
+        js = js.replace(/\b(?:RANK|PERINGKAT)\s*\(/gi, '0 * (');
+
+        return js;
+    }).join('');
 };
 
 export interface GeneratorConfig {
@@ -56,7 +208,7 @@ export interface GeneratorConfig {
 
 interface RankConfig {
     targetKey: string;
-    sourceKey: string;
+    sourceJs: string;
     limit: number;
     scope: 'rombel' | 'kelas' | 'jenjang' | 'global';
 }
@@ -69,6 +221,7 @@ export interface FormInteractiveCell {
     sheetId: string;
     sheetName: string;
     formulaValue?: string;
+    decimalPlaces?: number;
     row: number;
     col: number;
 }
@@ -209,6 +362,10 @@ export const generateRaporFormHtml = (
                             label = cell.value.trim();
                         }
 
+                        const expandedFormula = cell.type === 'formula' && cell.value
+                            ? expandSheetFormulaCoords(cell.value, sheet.cells)
+                            : cell.value;
+
                         const formCell: FormInteractiveCell = {
                             key: trimmedKey,
                             label: label || trimmedKey,
@@ -216,35 +373,44 @@ export const generateRaporFormHtml = (
                             options: cell.options,
                             sheetId: sheet.id,
                             sheetName: sheet.name || 'Lembar 1',
-                            formulaValue: cell.value,
+                            formulaValue: expandedFormula,
+                            decimalPlaces: cell.decimalPlaces,
                             row: r,
                             col: c
                         };
 
                         interactiveCells.push(formCell);
 
-                        if (cell.type === 'formula' && cell.value) {
-                            const rankMatch = cell.value.match(/RANK\(\$([A-Z0-9_]+)(?:,\s*["']?([a-zA-Z0-9_]+)["']?)?(?:,\s*["']?([a-zA-Z0-9_]+)["']?)?\)/i);
-                            if (rankMatch) {
-                                const p1 = rankMatch[2];
-                                const p2 = rankMatch[3];
+                        if (cell.type === 'formula' && expandedFormula) {
+                            const topRankMatch = expandedFormula.trim().match(/^(?:RANK|PERINGKAT)\s*\(([\s\S]*)\)$/i);
+                            if (topRankMatch) {
+                                const rankArgs = splitTopLevelArgs(topRankMatch[1]);
+                                const sourceExpr = rankArgs[0] || '0';
                                 let scope: 'rombel' | 'kelas' | 'jenjang' | 'global' = defaultRankingScope;
                                 let limit = 0;
 
-                                const checkParam = (p: string | undefined) => {
-                                    if (!p) return;
-                                    if (/^\d+$/.test(p)) {
-                                        limit = parseInt(p, 10);
-                                    } else if (['rombel', 'kelas', 'jenjang', 'global'].includes(p.toLowerCase())) {
-                                        scope = p.toLowerCase() as any;
+                                const checkParam = (rawParam: string | undefined) => {
+                                    if (!rawParam) return;
+                                    const cleaned = rawParam.trim().replace(/^["']|["']$/g, '').trim().toLowerCase();
+                                    if (!cleaned) return;
+                                    if (/^\d+$/.test(cleaned)) {
+                                        limit = parseInt(cleaned, 10);
+                                    } else if (cleaned === 'rombel') {
+                                        scope = 'rombel';
+                                    } else if (cleaned === 'kelas' || cleaned === 'tingkat' || cleaned === 'paralel') {
+                                        scope = 'kelas';
+                                    } else if (cleaned === 'jenjang' || cleaned === 'marhalah') {
+                                        scope = 'jenjang';
+                                    } else if (cleaned === 'global' || cleaned === 'pondok' || cleaned === 'all') {
+                                        scope = 'global';
                                     }
                                 };
-                                checkParam(p1);
-                                checkParam(p2);
+                                checkParam(rankArgs[1]);
+                                checkParam(rankArgs[2]);
 
                                 rankConfigs.push({
-                                    targetKey: trimmedKey, 
-                                    sourceKey: rankMatch[1],
+                                    targetKey: trimmedKey,
+                                    sourceJs: convertFormulaToJs(sourceExpr),
                                     limit,
                                     scope
                                 });
@@ -260,12 +426,13 @@ export const generateRaporFormHtml = (
 
     const formulaScripts = formulaCells.map(c => {
         const jsExpression = convertFormulaToJs(c.formulaValue || '');
+        const decLiteral = c.decimalPlaces !== undefined && c.decimalPlaces !== null ? c.decimalPlaces : 'null';
         return `
         try {
             const val = ${jsExpression};
             const field = document.getElementById('val_' + rowId + '_${c.key}');
             const cardField = document.getElementById('card_val_' + rowId + '_${c.key}');
-            const formatted = (typeof val === 'string') ? val : (isNaN(val) ? '-' : Number(val).toFixed(2).replace(/[.,]00$/, ""));
+            const formatted = formatFormulaOutput(val, ${decLiteral});
             if(field) field.value = formatted;
             if(cardField) cardField.value = formatted;
         } catch(e) {}
@@ -450,7 +617,12 @@ export const generateRaporFormHtml = (
             jenjangId: s.jenjangId || 0
         };
     });
-    const rankConfigsJson = JSON.stringify(rankConfigs);
+    const rankConfigsScript = `[${rankConfigs.map(rc => `{
+        targetKey: ${JSON.stringify(rc.targetKey)},
+        evalSource: function(rowId) { try { const v = (${rc.sourceJs}); return typeof v === 'number' && !isNaN(v) ? v : (parseFloat(v) || 0); } catch(e) { return 0; } },
+        limit: ${rc.limit},
+        scope: ${JSON.stringify(rc.scope)}
+    }`).join(',')}]`;
     const rangeKeyPart = config.kelasRange ? `range_${config.kelasRange.kelasIds.join('_')}` : (config.kelasId || config.jenjangId || 0);
     const localStorageKey = `esantri_leger_${config.template.id}_${config.tahunAjaran}_${config.semester}_${config.rombelId || rangeKeyPart}`;
 
@@ -535,16 +707,24 @@ export const generateRaporFormHtml = (
             const encoded = btoa(unescape(encodeURIComponent(jsonString)));
             let message = "*Setoran Data Rapor (Grid V2)*\\nKelas: ${contextName}\\nTemplate: ${config.template.name}\\n\\n*KODE DATA:*\\nRAPOR_V2_START\\n" + encoded + "\\nRAPOR_V2_END";
             
-            navigator.clipboard.writeText(message).then(() => {
-                alert("Data berhasil disalin ke clipboard! Silakan paste (tempel) di chat WhatsApp.");
-                const waUrl = "${waDest}" ? 'https://wa.me/${waDest}' : 'https://wa.me/';
-                window.open(waUrl, '_blank');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(message).then(() => {
+                    const waUrl = "${waDest}" ? 'https://wa.me/${waDest}' : 'https://wa.me/';
+                    showFormToast("Kode nilai berhasil disalin ke Clipboard! Silakan tempel (Paste) pada chat WhatsApp.", "success", waUrl);
+                    const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
+                    btn.disabled = false; btn.innerHTML = originalText;
+                }).catch(() => {
+                    const waUrl = ("${waDest}" ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
+                    showFormToast("Membuka WhatsApp untuk pengiriman data nilai...", "info", waUrl);
+                    const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
+                    btn.disabled = false; btn.innerHTML = originalText;
+                });
+            } else {
+                const waUrl = ("${waDest}" ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
+                showFormToast("Membuka WhatsApp untuk pengiriman data nilai...", "info", waUrl);
+                const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
                 btn.disabled = false; btn.innerHTML = originalText;
-            }).catch(err => {
-                const waUrl = "${waDest}" ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=';
-                window.open(waUrl + encodeURIComponent(message), '_blank');
-                btn.disabled = false; btn.innerHTML = originalText;
-            });
+            }
         `;
     } else {
         submissionScript = `
@@ -555,21 +735,31 @@ export const generateRaporFormHtml = (
             })
             .then((res) => {
                  if (!res.ok) throw new Error('HTTP ' + res.status);
-                 ${config.submissionMethod === 'google_sheet' ? `alert('Data Berhasil Terkirim!\\n\\nCatatan: Jika data tidak muncul di Spreadsheet, pastikan Anda sudah memberikan izin (Authorize) dan memilih "Anyone" saat Deploy.'); btn.disabled = false; btn.innerHTML = originalText;` : `
+                 ${config.submissionMethod === 'google_sheet' ? `showFormToast('Data nilai berhasil dikirim ke Cloud Spreadsheet!', 'success'); btn.disabled = false; btn.innerHTML = originalText;` : `
                     const jsonString = JSON.stringify(payload);
                     const encoded = btoa(unescape(encodeURIComponent(jsonString)));
-                    let message = "*Setoran Data Rapor (Hybrid)*\\nKelas: ${contextName}\\nStatus: ✅ Terupload ke Cloud\\n\\n*BACKUP DATA:*\\nRAPOR_V2_START\\n" + encoded + "\\nRAPOR_V2_END";
-                    navigator.clipboard.writeText(message).then(() => {
-                        alert("Data berhasil dikirim ke Cloud & disalin ke clipboard! Silakan paste (tempel) di chat WhatsApp sebagai backup.");
-                        window.open(("${waDest}" ? 'https://wa.me/${waDest}' : 'https://wa.me/'), '_blank');
+                    let message = "*Setoran Data Rapor (Hybrid)*\\nKelas: ${contextName}\\nStatus: Terupload ke Cloud\\n\\n*BACKUP DATA:*\\nRAPOR_V2_START\\n" + encoded + "\\nRAPOR_V2_END";
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(message).then(() => {
+                            const waUrl = "${waDest}" ? 'https://wa.me/${waDest}' : 'https://wa.me/';
+                            showFormToast("Terkirim ke Cloud & disalin ke Clipboard! Silakan tempel di WhatsApp sebagai cadangan.", "success", waUrl);
+                            const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
+                            btn.disabled = false; btn.innerHTML = originalText;
+                        }).catch(() => {
+                            const waUrl = ("${waDest}" ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
+                            showFormToast("Terkirim ke Cloud! Klik tombol WhatsApp jika belum terbuka otomatis.", "success", waUrl);
+                            const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
+                            btn.disabled = false; btn.innerHTML = originalText;
+                        });
+                    } else {
+                        const waUrl = ("${waDest}" ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
+                        showFormToast("Terkirim ke Cloud! Membuka WhatsApp...", "success", waUrl);
+                        const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
                         btn.disabled = false; btn.innerHTML = originalText;
-                    }).catch(err => {
-                        window.open(("${waDest}" ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message), '_blank');
-                        btn.disabled = false; btn.innerHTML = originalText;
-                    });
+                    }
                  `}
             }).catch(err => { 
-                alert('Gagal mengirim ke Cloud. Pastikan URL Script benar dan Anda terhubung internet.\\n\\nError: ' + err); 
+                showFormToast('Gagal mengirim ke Cloud. Pastikan URL Script benar & internet aktif (' + err + ')', 'error'); 
                 btn.disabled = false; btn.innerHTML = originalText; 
             });
         `;
@@ -655,24 +845,143 @@ export const generateRaporFormHtml = (
     <script>
         const santriList = ${JSON.stringify(santriMetaArray)};
         const santriIds = santriList.map(s => s.id);
-        const rankConfigs = ${rankConfigsJson};
+        const rankConfigs = ${rankConfigsScript};
         const defaultRankingScope = "${defaultRankingScope}";
         const storageKey = "${localStorageKey}";
         let currentCardIndex = 0;
         let currentActiveSheet = 'all';
+        let toastTimer = null;
+
+        function showFormToast(msg, type = 'success', actionUrl = '') {
+            const box = document.getElementById('form-toast');
+            const textEl = document.getElementById('form-toast-text');
+            const linkEl = document.getElementById('form-toast-link');
+            if (!box || !textEl) return;
+            if (toastTimer) clearTimeout(toastTimer);
+            textEl.textContent = msg;
+            box.className = 'fixed bottom-5 right-5 z-50 max-w-md px-4 py-3 rounded-2xl shadow-2xl border text-xs font-bold flex items-center gap-3 transition-all ' +
+                (type === 'error'
+                    ? 'bg-rose-900 text-white border-rose-700'
+                    : type === 'info'
+                    ? 'bg-slate-900 text-white border-slate-700'
+                    : 'bg-teal-900 text-white border-teal-700');
+            if (linkEl) {
+                if (actionUrl) {
+                    linkEl.href = actionUrl;
+                    linkEl.style.display = 'inline-flex';
+                } else {
+                    linkEl.style.display = 'none';
+                }
+            }
+            box.style.display = 'flex';
+            toastTimer = setTimeout(() => {
+                box.style.display = 'none';
+            }, actionUrl ? 9000 : 4500);
+        }
 
         function getValue(key, rowId) { 
             const el = document.getElementById('val_' + rowId + '_' + key) || document.getElementById('card_val_' + rowId + '_' + key); 
             if (!el) return 0; 
-            const val = el.value; 
-            if (val === '') return 0; 
-            if (!isNaN(parseFloat(val)) && isFinite(val)) return parseFloat(val); 
-            return val; 
+            const raw = String(el.value ?? '').trim(); 
+            if (raw === '') return 0; 
+            const normalized = raw.indexOf(',') !== -1 && raw.indexOf('.') === -1 ? raw.replace(',', '.') : raw;
+            if (!isNaN(Number(normalized)) && normalized !== '') return Number(normalized); 
+            return raw; 
         }
         function average(...args) { const validArgs = args.filter(a => typeof a === 'number' && !isNaN(a)); if (validArgs.length === 0) return 0; return validArgs.reduce((a,b)=>a+b,0)/validArgs.length; }
-        function terbilang(n) { if (isNaN(n) || n === '') return ''; var num = Math.round(n); var words = ["nol", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"]; if (num < 0) return "minus " + terbilang(-num); if (num < 12) return words[num]; if (num < 20) return terbilang(num - 10) + " belas"; if (num < 100) return terbilang(Math.floor(num / 10)) + " puluh" + (num % 10 === 0 ? "" : " " + terbilang(num % 10)); if (num < 200) return "seratus" + (num % 100 === 0 ? "" : " " + terbilang(num % 100)); if (num < 1000) return terbilang(Math.floor(num / 100)) + " ratus" + (num % 100 === 0 ? "" : " " + terbilang(num % 100)); return num.toString(); }
         function sum(...args) { return args.reduce((a, b) => a + (typeof b === 'number' && !isNaN(b) ? b : 0), 0); }
-        function excelIf(c, t, f) { return c ? t : f; } function excelAnd(...args) { return args.every(Boolean); } function excelOr(...args) { return args.some(Boolean); }
+        function excelMin(...args) { const valid = args.filter(a => typeof a === 'number' && !isNaN(a)); return valid.length === 0 ? 0 : Math.min(...valid); }
+        function excelMax(...args) { const valid = args.filter(a => typeof a === 'number' && !isNaN(a)); return valid.length === 0 ? 0 : Math.max(...valid); }
+        function excelRound(num, digits = 0) {
+            const n = Number(num);
+            const d = Math.max(0, Math.min(10, Math.trunc(Number(digits) || 0)));
+            if (!isFinite(n)) return 0;
+            const factor = Math.pow(10, d);
+            const rounded = Math.floor(Math.abs(n) * factor + 0.5 + 1e-12) / factor;
+            return n < 0 ? -rounded : rounded;
+        }
+        function excelRoundUp(num, digits = 0) {
+            const n = Number(num);
+            const d = Math.max(0, Math.min(10, Math.trunc(Number(digits) || 0)));
+            if (!isFinite(n)) return 0;
+            const factor = Math.pow(10, d);
+            const ceiled = Math.ceil(Math.abs(n) * factor - 1e-12) / factor;
+            return n < 0 ? -ceiled : ceiled;
+        }
+        function excelRoundDown(num, digits = 0) {
+            const n = Number(num);
+            const d = Math.max(0, Math.min(10, Math.trunc(Number(digits) || 0)));
+            if (!isFinite(n)) return 0;
+            const factor = Math.pow(10, d);
+            const floored = Math.floor(Math.abs(n) * factor + 1e-12) / factor;
+            return n < 0 ? -floored : floored;
+        }
+        function excelFixed(num, digits = 2) {
+            const n = Number(num);
+            const d = Math.max(0, Math.min(6, Math.trunc(Number(digits ?? 2))));
+            if (!isFinite(n)) return (0).toFixed(d);
+            return excelRound(n, d).toFixed(d);
+        }
+        function formatFormulaOutput(val, decimalPlaces) {
+            if (typeof val === 'string') return val;
+            if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
+            const n = Number(val);
+            if (val === null || val === undefined || isNaN(n) || !isFinite(n)) return '-';
+            if (decimalPlaces !== null && decimalPlaces !== undefined) {
+                const d = Math.max(0, Math.min(6, Number(decimalPlaces)));
+                return excelRound(n, d).toFixed(d);
+            }
+            const r2 = excelRound(n, 2);
+            return Number.isInteger(r2) ? String(r2) : String(Number(r2.toFixed(2)));
+        }
+        function excelPredikat(score, mode = 'huruf') {
+            const n = Number(score);
+            if (isNaN(n) || !isFinite(n)) return '-';
+            const m = String(mode || 'huruf').toLowerCase().trim();
+            const tier = n >= 90 ? 0 : n >= 80 ? 1 : n >= 70 ? 2 : n >= 60 ? 3 : 4;
+            if (m === 'indo' || m === 'indonesia' || m === 'deskripsi') {
+                return ['Sangat Baik', 'Baik', 'Cukup', 'Kurang', 'Sangat Kurang'][tier];
+            }
+            if (m === 'taqdir' || m === 'arab_latin' || m === 'latin') {
+                return ['Mumtaz', 'Jayyid Jiddan', 'Jayyid', 'Maqbul', 'Rasib'][tier];
+            }
+            if (m === 'arab') {
+                return ['ممتاز', 'جيد جدا', 'جيد', 'مقبول', 'راسب'][tier];
+            }
+            return ['A', 'B', 'C', 'D', 'E'][tier];
+        }
+        function angkaKeArab(val) {
+            if (val === null || val === undefined || val === '') return '';
+            const digits = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+            const s = String(val);
+            let out = '';
+            for (let i = 0; i < s.length; i++) {
+                const ch = s[i];
+                const code = ch.charCodeAt(0);
+                if (code >= 48 && code <= 57) {
+                    out += digits[code - 48];
+                } else if ((ch === '.' || ch === ',') && i > 0 && i < s.length - 1) {
+                    const prev = s.charCodeAt(i - 1);
+                    const next = s.charCodeAt(i + 1);
+                    if (prev >= 48 && prev <= 57 && next >= 48 && next <= 57) {
+                        out += '٫';
+                    } else {
+                        out += ch;
+                    }
+                } else {
+                    out += ch;
+                }
+            }
+            return out;
+        }
+        function terbilang(n) { if (isNaN(n) || n === '') return ''; var num = Math.round(Number(n)); var words = ["nol", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"]; if (num < 0) return "minus " + terbilang(-num); if (num < 12) return words[num]; if (num < 20) return terbilang(num - 10) + " belas"; if (num < 100) return terbilang(Math.floor(num / 10)) + " puluh" + (num % 10 === 0 ? "" : " " + terbilang(num % 10)); if (num < 200) return "seratus" + (num % 100 === 0 ? "" : " " + terbilang(num % 100)); if (num < 1000) return terbilang(Math.floor(num / 100)) + " ratus" + (num % 100 === 0 ? "" : " " + terbilang(num % 100)); return num.toString(); }
+        function excelIf(c, t, f) { return c ? t : f; }
+        function excelAnd(...args) { return args.every(Boolean); }
+        function excelOr(...args) { return args.some(Boolean); }
+        function excelNot(v) { return !Boolean(v); }
+        function excelConcat(...args) { return args.map(a => (a === null || a === undefined) ? '' : String(a)).join(''); }
+        function excelUpper(v) { return String(v ?? '').toUpperCase(); }
+        function excelLower(v) { return String(v ?? '').toLowerCase(); }
 
         function calculateRanks() { 
             if (rankConfigs.length === 0) return; 
@@ -686,15 +995,20 @@ export const generateRaporFormHtml = (
                     else if (scope === 'jenjang') gKey = 'jenjang_' + s.jenjangId;
                     
                     if (!groups[gKey]) groups[gKey] = [];
-                    const el = document.getElementById('val_' + s.id + '_' + cfg.sourceKey) || document.getElementById('card_val_' + s.id + '_' + cfg.sourceKey);
-                    const val = el ? parseFloat(el.value) || 0 : 0;
+                    const val = typeof cfg.evalSource === 'function' ? cfg.evalSource(s.id) : 0;
                     groups[gKey].push({ id: s.id, val });
                 });
 
                 Object.values(groups).forEach(studentGroup => {
                     const sorted = [...studentGroup].sort((a,b) => b.val - a.val);
                     const rankMap = {};
-                    sorted.forEach((item, index) => { rankMap[item.id] = index + 1; });
+                    sorted.forEach((item, index) => {
+                        if (index > 0 && Math.abs(item.val - sorted[index - 1].val) < 1e-9) {
+                            rankMap[item.id] = rankMap[sorted[index - 1].id];
+                        } else {
+                            rankMap[item.id] = index + 1;
+                        }
+                    });
                     studentGroup.forEach(item => {
                         const targetEl = document.getElementById('val_' + item.id + '_' + cfg.targetKey);
                         const cardTargetEl = document.getElementById('card_val_' + item.id + '_' + cfg.targetKey);
@@ -706,8 +1020,14 @@ export const generateRaporFormHtml = (
             }); 
         }
 
+        function runRowFormulasOnce(rowId) {
+            ${formulaScripts}
+        }
+
         function calculateRow(rowId) { 
-            ${formulaScripts} 
+            // 2-pass evaluation so chained formula cells (e.g. RATA_RATA -> PREDIKAT) stay synchronized
+            runRowFormulasOnce(rowId);
+            runRowFormulasOnce(rowId);
             calculateRanks(); 
         }
 
@@ -915,8 +1235,8 @@ export const generateRaporFormHtml = (
                     draft.records[sid] = row; 
                 }); 
                 localStorage.setItem(storageKey, JSON.stringify(draft)); 
-                alert('✅ Draft nilai berhasil disimpan di perangkat ini!'); 
-            } catch (e) { alert('Gagal menyimpan draft: ' + e.message); } 
+                showFormToast('Draft nilai berhasil disimpan di perangkat ini.', 'success'); 
+            } catch (e) { showFormToast('Gagal menyimpan draft: ' + e.message, 'error'); } 
         }
 
         function loadDraft() { 
@@ -969,8 +1289,9 @@ export const generateRaporFormHtml = (
                 a.download = "backup-nilai-${contextName.replace(/[^a-zA-Z0-9]/g, '-')}.json";
                 a.click();
                 URL.revokeObjectURL(url);
+                showFormToast('File cadangan JSON berhasil diunduh.', 'success');
             } catch(err) {
-                alert('Gagal download backup: ' + err.message);
+                showFormToast('Gagal mengunduh cadangan: ' + err.message, 'error');
             }
         }
 
@@ -1016,7 +1337,7 @@ export const generateRaporFormHtml = (
                 }; 
                 ${submissionScript} 
             } catch (e) { 
-                alert("Error: " + e.message); 
+                showFormToast("Terjadi kesalahan: " + e.message, "error"); 
                 btn.disabled = false; 
                 btn.innerHTML = originalText; 
             } 
@@ -1136,8 +1457,16 @@ export const generateRaporFormHtml = (
         <!-- FOOTER -->
         <div class="px-4 py-3 text-center text-[11px] text-slate-500 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-2">
             <span>eSantri Web Rapor • Offline-First Digital Ledger</span>
-            <span class="font-semibold text-slate-600">Dibuat dengan eSantri Web by AI Projek</span>
+            <span class="font-semibold text-slate-600">dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id</span>
         </div>
+    </div>
+
+    <!-- NON-BLOCKING TOAST NOTIFICATION -->
+    <div id="form-toast" style="display: none;" class="fixed bottom-5 right-5 z-50 max-w-md px-4 py-3 rounded-2xl shadow-2xl border border-teal-700 bg-teal-900 text-white text-xs font-bold items-center gap-3">
+        <span id="form-toast-text" class="leading-snug"></span>
+        <a id="form-toast-link" href="#" target="_blank" rel="noopener noreferrer" style="display: none;" class="px-2.5 py-1 bg-emerald-400 text-teal-950 rounded-lg font-black whitespace-nowrap hover:bg-emerald-300">
+            Buka WA
+        </a>
     </div>
 </body>
 </html>`;
@@ -1153,40 +1482,166 @@ export const fetchRaporFromCloud = async (scriptUrl: string): Promise<any[]> => 
     } catch (e) { console.error("Fetch Cloud Error:", e); throw e; }
 };
 
+const decodeBase64Utf8 = (b64: string): string => {
+    const cleaned = b64.trim().replace(/\s+/g, '');
+    try {
+        const binary = atob(cleaned);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return new TextDecoder('utf-8').decode(bytes);
+    } catch {
+        return decodeURIComponent(escape(atob(cleaned)));
+    }
+};
+
 export const parseRaporDataV2 = async (encryptedString: string, settings: PondokSettings): Promise<{ successCount: number; errors: string[] }> => {
     try {
-        const decoded = decodeURIComponent(escape(atob(encryptedString.trim())));
+        const decoded = decodeBase64Utf8(encryptedString);
         const data = JSON.parse(decoded);
-        let successCount = 0; const errors: string[] = [];
+        let successCount = 0;
+        const errors: string[] = [];
+
         const processPayload = async (payload: any) => {
-             const template = settings.raporTemplates?.find(t => t.id === payload.meta.templateId);
-             if (!template) { errors.push(`Template ID ${payload.meta.templateId} tidak ditemukan.`); return; }
-             for (const rec of payload.records) {
-                let targetRombelId = payload.meta.rombelId;
-                if (targetRombelId === 0) {
-                     const s = await db.santri.get(rec.santriId);
-                     if (s) targetRombelId = s.rombelId;
+            const template = settings.raporTemplates?.find(t => t.id === payload.meta.templateId);
+            if (!template) {
+                errors.push(`Template ID ${payload.meta.templateId} tidak ditemukan.`);
+                return;
+            }
+
+            const approvalMap = settings.raporApprovalStatus || {};
+            const globalLockKey = `${payload.meta.tahunAjaran}_${payload.meta.semester}_all`;
+
+            for (const rec of payload.records || []) {
+                const santriIdNum = Number(rec.santriId);
+                if (!santriIdNum) continue;
+
+                const santriObj = await db.santri.get(santriIdNum);
+                const existing = await db.raporRecords
+                    .where({
+                        santriId: santriIdNum,
+                        tahunAjaran: payload.meta.tahunAjaran,
+                        semester: payload.meta.semester
+                    })
+                    .first();
+
+                const metaRombelId = Number(payload.meta.rombelId) || 0;
+                const targetRombelId = metaRombelId > 0
+                    ? metaRombelId
+                    : (santriObj?.rombelId || existing?.rombelId || 0);
+
+                const rombelLockKey = targetRombelId > 0
+                    ? `${payload.meta.tahunAjaran}_${payload.meta.semester}_${targetRombelId}`
+                    : '';
+
+                if (approvalMap[globalLockKey] === 'locked' || (rombelLockKey && approvalMap[rombelLockKey] === 'locked')) {
+                    const sName = rec.santriName || santriObj?.namaLengkap || `ID ${santriIdNum}`;
+                    errors.push(`Rapor terkunci: Nilai ${sName} ditolak karena rapor rombel telah disahkan/dikunci.`);
+                    continue;
                 }
 
-                const existing = await db.raporRecords.where({ santriId: rec.santriId, tahunAjaran: payload.meta.tahunAjaran, semester: payload.meta.semester }).first();
-                let customData: any = existing && existing.customData ? JSON.parse(existing.customData) : {};
-                
-                // Smart Merge: Only update if the incoming value is not empty
-                Object.keys(rec.data).forEach(key => {
-                    const val = rec.data[key];
-                    if (val !== "" && val !== null && val !== undefined) {
-                        customData[key] = val;
-                    }
-                });
+                const rombelObj = settings.rombel.find(r => Number(r.id) === Number(targetRombelId));
+                const targetKelasId = santriObj?.kelasId || rombelObj?.kelasId || existing?.kelasId || 0;
+                const kelasObj = settings.kelas.find(k => Number(k.id) === Number(targetKelasId));
+                const targetJenjangId = santriObj?.jenjangId || kelasObj?.jenjangId || existing?.jenjangId || 0;
 
-                const recordToSave = { santriId: rec.santriId, tahunAjaran: payload.meta.tahunAjaran, semester: payload.meta.semester, rombelId: targetRombelId, jenjangId: 0, kelasId: 0, nilai: existing ? existing.nilai : [], sakit: existing ? existing.sakit : 0, izin: existing ? existing.izin : 0, alpha: existing ? existing.alpha : 0, kepribadian: existing ? existing.kepribadian : [], ekstrakurikuler: existing ? existing.ekstrakurikuler : [], catatanWaliKelas: existing ? existing.catatanWaliKelas : '', keputusan: existing ? existing.keputusan : '', tanggalRapor: new Date().toISOString(), customData: JSON.stringify(customData) };
-                if (existing) await db.raporRecords.put({ ...recordToSave, id: existing.id } as RaporRecord); else await db.raporRecords.add(recordToSave as unknown as RaporRecord);
+                let customData: Record<string, any> = {};
+                if (existing && !existing.deleted && existing.customData) {
+                    try {
+                        customData = JSON.parse(existing.customData);
+                    } catch {
+                        customData = {};
+                    }
+                }
+
+                // Smart Merge: Only update if incoming value is non-empty
+                if (rec.data && typeof rec.data === 'object') {
+                    Object.keys(rec.data).forEach(key => {
+                        const val = rec.data[key];
+                        if (val !== '' && val !== null && val !== undefined) {
+                            customData[key] = val;
+                        }
+                    });
+                }
+
+                const parseNumField = (keys: string[], fallback: number): number => {
+                    for (const k of keys) {
+                        if (customData[k] !== undefined && customData[k] !== null && String(customData[k]).trim() !== '') {
+                            const parsed = parseInt(String(customData[k]), 10);
+                            if (!isNaN(parsed)) return parsed;
+                        }
+                    }
+                    return fallback;
+                };
+
+                const parseStrField = (keys: string[], fallback: string): string => {
+                    for (const k of keys) {
+                        if (customData[k] !== undefined && customData[k] !== null && String(customData[k]).trim() !== '') {
+                            return String(customData[k]);
+                        }
+                    }
+                    return fallback;
+                };
+
+                const baseExisting = existing && !existing.deleted ? existing : null;
+
+                const recordToSave: Omit<RaporRecord, 'id'> = {
+                    santriId: santriIdNum,
+                    tahunAjaran: payload.meta.tahunAjaran,
+                    semester: payload.meta.semester,
+                    rombelId: targetRombelId,
+                    jenjangId: targetJenjangId,
+                    kelasId: targetKelasId,
+                    nilai: baseExisting?.nilai || [],
+                    sakit: parseNumField(['SAKIT', 'JML_SAKIT'], baseExisting?.sakit || 0),
+                    izin: parseNumField(['IZIN', 'JML_IZIN'], baseExisting?.izin || 0),
+                    alpha: parseNumField(['ALPHA', 'ALPA', 'TANPA_KETERANGAN'], baseExisting?.alpha || 0),
+                    kepribadian: baseExisting?.kepribadian || [],
+                    ekstrakurikuler: baseExisting?.ekstrakurikuler || [],
+                    catatanWaliKelas: parseStrField(['CATATAN_WALI_KELAS', 'CATATAN_WALI', 'CATATAN'], baseExisting?.catatanWaliKelas || ''),
+                    keputusan: parseStrField(['KEPUTUSAN', 'STATUS_NAIK'], baseExisting?.keputusan || ''),
+                    tahfizhGanjil: baseExisting?.tahfizhGanjil,
+                    tahfizhGenap: baseExisting?.tahfizhGenap,
+                    tanggalRapor: new Date().toISOString(),
+                    customData: JSON.stringify(customData),
+                    deleted: false,
+                    lastModified: Date.now()
+                };
+
+                if (existing) {
+                    await db.raporRecords.put({ ...recordToSave, id: existing.id } as RaporRecord);
+                } else {
+                    await db.raporRecords.add(recordToSave as RaporRecord);
+                }
                 successCount++;
-             }
+            }
         };
-        if (data.meta && data.records) await processPayload(data);
-        else if (Array.isArray(data)) { for (const row of data) { if (!row.DataJSON) continue; try { await processPayload({ meta: { rombelId: parseInt(row.RombelID), tahunAjaran: row.TahunAjaran, semester: row.Semester, templateId: row.TemplateID }, records: [{ santriId: parseInt(row.SantriID), data: JSON.parse(row.DataJSON) }] }); } catch(err: any) { errors.push(err.message); } } }
-        else throw new Error("Format data tidak dikenali.");
+
+        if (data.meta && data.records) {
+            await processPayload(data);
+        } else if (Array.isArray(data)) {
+            for (const row of data) {
+                if (!row.DataJSON) continue;
+                try {
+                    await processPayload({
+                        meta: {
+                            rombelId: parseInt(row.RombelID, 10) || 0,
+                            tahunAjaran: row.TahunAjaran,
+                            semester: row.Semester,
+                            templateId: row.TemplateID
+                        },
+                        records: [{ santriId: parseInt(row.SantriID, 10), santriName: row.NamaSantri, data: JSON.parse(row.DataJSON) }]
+                    });
+                } catch (err: any) {
+                    errors.push(err.message);
+                }
+            }
+        } else {
+            throw new Error("Format data tidak dikenali.");
+        }
         return { successCount, errors };
-    } catch (e) { throw new Error("Gagal memproses data: " + (e as Error).message); }
+    } catch (e) {
+        throw new Error("Gagal memproses data: " + (e as Error).message);
+    }
 };

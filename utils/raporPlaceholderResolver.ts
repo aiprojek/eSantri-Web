@@ -11,13 +11,15 @@ import {
 } from './formatters';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
+import { findStrictTeacherTtdAsset } from './digitalAssetUtils';
 import {
     evaluateRaporFormula,
     isRaporFormulaExpression,
     parseExcelCellCoord,
     parseExcelRangeCoord,
     splitTopLevelArgs,
-    normalizeSubjectKeyForAvg
+    normalizeSubjectKeyForAvg,
+    formatCellNumericDisplay
 } from './raporFormulaUtils';
 import { resolveAcademicYearLabels } from './academicYear';
 
@@ -125,9 +127,13 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
             { tag: '$RATA_RATA', label: 'Nilai Rata-Rata', description: 'Rata-rata seluruh nilai mapel santri', example: '85.50' },
             { tag: '$RATA_RATA_KELAS', label: 'Rata-Rata Umum Kelas', description: 'Rata-rata nilai gabungan seluruh santri di rombel', example: '83.45' },
             { tag: '$PREDIKAT_RATA_RATA', label: 'Predikat Rata-Rata', description: 'Predikat hasil belajar (Mumtaz/Jayyid Jiddan/dll)', example: 'Jayyid Jiddan' },
-            { tag: '$PERINGKAT', label: 'Peringkat / Ranking', description: 'Peringkat santri di rombel', example: '3' },
+            { tag: '$PERINGKAT', label: 'Peringkat / Ranking Rombel', description: 'Peringkat santri di rombel', example: '3' },
             { tag: '$RANKING', label: 'Ranking Kelas (Alias)', description: 'Peringkat santri di rombel', example: '3' },
+            { tag: '$PERINGKAT_KELAS', label: 'Peringkat Paralel Tingkat Kelas', description: 'Peringkat gabungan seluruh rombel se-tingkat kelas', example: '5' },
+            { tag: '$PERINGKAT_JENJANG', label: 'Peringkat Paralel Marhalah', description: 'Peringkat gabungan seluruh kelas di marhalah/jenjang', example: '12' },
             { tag: '$TOTAL_SANTRI', label: 'Jumlah Santri di Rombel', description: 'Total santri dalam satu rombel', example: '32' },
+            { tag: '$TOTAL_SANTRI_KELAS', label: 'Jumlah Santri Se-Tingkat Kelas', description: 'Total santri gabungan rombel paralel di tingkat kelas', example: '96' },
+            { tag: '$TOTAL_SANTRI_JENJANG', label: 'Jumlah Santri Se-Marhalah', description: 'Total santri gabungan di marhalah/jenjang', example: '280' },
         ]
     },
     {
@@ -223,9 +229,10 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
             { tag: '$LOGO_PONPES', label: 'Logo Pondok Pesantren', description: 'Gambar logo resmi pondok', example: '[Gambar Logo Ponpes]', isMedia: true },
             { tag: '$LOGO_YAYASAN', label: 'Logo Yayasan', description: 'Gambar logo yayasan', example: '[Gambar Logo Yayasan]', isMedia: true },
             { tag: '$STEMPEL_PONPES', label: 'Stempel Resmi Pondok', description: 'Cap stempel lembaga', example: '[Gambar Stempel Ponpes]', isMedia: true },
-            { tag: '$TTD_WALI_KELAS', label: 'Tanda Tangan Wali Kelas', description: 'TTD digital wali kelas rombel', example: '[TTD Wali Kelas]', isMedia: true },
-            { tag: '$TTD_MUDIR_MARHALAH', label: 'Tanda Tangan Mudir Marhalah', description: 'TTD digital Mudir Marhalah / Kepala Jenjang', example: '[TTD Mudir Marhalah]', isMedia: true },
-            { tag: '$TTD_MUDIR', label: 'Tanda Tangan Mudir Aam / Pimpinan', description: 'TTD digital Mudir Aam / Pimpinan Pondok', example: '[TTD Mudir]', isMedia: true },
+            { tag: '$KOP_SURAT', label: 'Kop Dokumen / Rapor', description: 'Gambar header kop lembaga dari Aset Digital', example: '[Gambar Kop]', isMedia: true },
+            { tag: '$TTD_WALI_KELAS', label: 'Tanda Tangan Wali Kelas', description: 'TTD wali kelas sesuai rombel santri (kosong otomatis jika belum ada)', example: '[TTD Wali Kelas]', isMedia: true },
+            { tag: '$TTD_MUDIR_MARHALAH', label: 'Tanda Tangan Mudir Marhalah', description: 'TTD Mudir Marhalah sesuai jenjang santri (kosong otomatis jika belum ada)', example: '[TTD Mudir Marhalah]', isMedia: true },
+            { tag: '$TTD_MUDIR', label: 'Tanda Tangan Mudir Aam / Pimpinan', description: 'TTD Mudir Aam / Pimpinan Pondok (kosong otomatis jika belum ada)', example: '[TTD Mudir]', isMedia: true },
         ]
     }
 ];
@@ -240,7 +247,12 @@ export interface RaporResolveContext {
         totalNilai?: number;
         rataRata?: number;
         ranking?: number;
+        rankingKelas?: number;
+        rankingJenjang?: number;
+        rankingGlobal?: number;
         totalSantri?: number;
+        totalSantriKelas?: number;
+        totalSantriJenjang?: number;
         predikat?: string;
         classAverages?: Record<string, number>;
         classOverallAverage?: number;
@@ -341,14 +353,27 @@ export const resolveMudirMarhalahTeacher = (
         if (matchedWithKet) return matchedWithKet;
     }
 
-    return settings.tenagaPengajar.find(tp =>
-        Array.isArray(tp.riwayatJabatan) &&
-        tp.riwayatJabatan.some(rj => {
-            if (rj.tanggalSelesai) return false;
-            const jbt = (rj.jabatan || '').toLowerCase();
-            return jbt.includes('mudir marhalah') || jbt.includes('kepala marhalah');
-        })
+    // 3. Fallback umum hanya jika jenjang belum ditentukan ATAU hanya ada 1 jenjang di pondok
+    //    DAN pengajar tersebut tidak sedang menjadi Mudir di jenjang lain
+    const otherJenjangMudirIds = new Set(
+        (settings.jenjang || [])
+            .filter(j => (!jenjang || Number(j.id) !== Number(jenjang.id)) && j.mudirId !== undefined && j.mudirId !== null)
+            .map(j => Number(j.mudirId))
     );
+
+    if (!jenjang || (settings.jenjang || []).length <= 1) {
+        return settings.tenagaPengajar.find(tp =>
+            !otherJenjangMudirIds.has(Number(tp.id)) &&
+            Array.isArray(tp.riwayatJabatan) &&
+            tp.riwayatJabatan.some(rj => {
+                if (rj.tanggalSelesai) return false;
+                const jbt = (rj.jabatan || '').toLowerCase();
+                return jbt.includes('mudir marhalah') || jbt.includes('kepala marhalah');
+            })
+        );
+    }
+
+    return undefined;
 };
 
 export const resolveMudirAamInfo = (
@@ -391,6 +416,7 @@ const normalizeMediaTag = (raw: string): string => {
     if (u === 'LOGO_PONPES' || u === 'LOGO') return '$LOGO_PONPES';
     if (u === 'LOGO_YAYASAN') return '$LOGO_YAYASAN';
     if (u === 'STEMPEL_PONPES' || u === 'STEMPEL') return '$STEMPEL_PONPES';
+    if (u === 'KOP_SURAT' || u === 'KOP_PONPES' || u === 'KOP') return '$KOP_SURAT';
     if (u === 'TTD_WALI_KELAS' || u === 'TTD_WALIKELAS' || u === 'TTD_WALI') return '$TTD_WALI_KELAS';
     if (u === 'TTD_MUDIR_MARHALAH' || u === 'TTD_MUDIRMARHALAH' || u === 'TTD_KEPALA_MARHALAH' || u === 'TTD_MUDIR_JENJANG' || u === 'TTD_KEPALA_JENJANG') {
         return '$TTD_MUDIR_MARHALAH';
@@ -408,6 +434,7 @@ export const isMediaTag = (value: string): boolean => {
     return v === '$LOGO_PONPES' ||
            v === '$LOGO_YAYASAN' ||
            v === '$STEMPEL_PONPES' ||
+           v === '$KOP_SURAT' ||
            v === '$TTD_WALI_KELAS' ||
            v === '$TTD_MUDIR_MARHALAH' ||
            v === '$TTD_MUDIR' ||
@@ -421,76 +448,73 @@ export const getMediaTagImageSrc = (tag: string, context: RaporResolveContext): 
     const t = normalizeMediaTag(tag);
     if (!t) return null;
 
-    const findTtdByOwnerName = (name?: string | null) => {
-        if (!name || !name.trim()) return undefined;
-        const target = name.trim().toLowerCase();
-        return digitalAssets.find(a => a.type === 'ttd' && (a.namaPemilik || '').trim().toLowerCase() === target);
-    };
-
     if (t === '$LOGO_PONPES') {
-        return settings?.logoPonpesUrl || null;
+        if (settings?.logoPonpesUrl) return settings.logoPonpesUrl;
+        const logoAsset = digitalAssets.find(a => a.systemRole === 'logo_ponpes' || a.id === 'aset_utama_logo_ponpes');
+        return logoAsset?.base64Image || null;
     }
     if (t === '$LOGO_YAYASAN') {
-        return settings?.logoYayasanUrl || null;
+        if (settings?.logoYayasanUrl) return settings.logoYayasanUrl;
+        const logoAsset = digitalAssets.find(a => a.systemRole === 'logo_yayasan' || a.id === 'aset_utama_logo_yayasan');
+        return logoAsset?.base64Image || null;
     }
     if (t === '$STEMPEL_PONPES') {
         if (settings?.stempelPonpesUrl) return settings.stempelPonpesUrl;
+        const primaryStempel = digitalAssets.find(a => a.systemRole === 'stempel_ponpes' || a.id === 'aset_utama_stempel_ponpes');
+        if (primaryStempel?.base64Image) return primaryStempel.base64Image;
         const stempelAsset = digitalAssets.find(a => a.type === 'stempel');
         return stempelAsset?.base64Image || null;
     }
+    if (t === '$KOP_SURAT') {
+        const kopAsset = digitalAssets.find(a => a.type === 'kop');
+        return kopAsset?.base64Image || null;
+    }
     if (t === '$TTD_WALI_KELAS') {
-        if (settings) {
-            const { rombel } = resolveSantriAcademicHierarchy(santri, settings);
-            const teacher = resolveWaliKelasTeacher(rombel || settings.rombel?.[0], settings);
-            if (teacher) {
-                const teacherAsset = findTtdByOwnerName(teacher.nama);
-                if (teacherAsset?.base64Image) return teacherAsset.base64Image;
-            }
-        }
-        const anyWaliAsset = digitalAssets.find(a => a.type === 'ttd' && (a.jabatan || '').toLowerCase().includes('wali'));
-        return anyWaliAsset?.base64Image || null;
+        if (!settings) return null;
+        const { rombel } = resolveSantriAcademicHierarchy(santri, settings);
+        const targetRombel = rombel || (!santri ? settings.rombel?.[0] : undefined);
+        const teacher = resolveWaliKelasTeacher(targetRombel, settings);
+        // Jika rombel belum punya wali kelas ATAU wali kelas tersebut belum punya TTD digital,
+        // biarkan KOSONG (null) untuk tanda tangan basah — JANGAN PERNAH mengambil TTD pejabat lain!
+        if (!teacher) return null;
+        const teacherAsset = findStrictTeacherTtdAsset(digitalAssets, teacher);
+        return teacherAsset?.base64Image || null;
     }
     if (t === '$TTD_MUDIR_MARHALAH') {
-        if (settings) {
-            const { jenjang } = resolveSantriAcademicHierarchy(santri, settings);
-            const mudirMarhalah = resolveMudirMarhalahTeacher(jenjang || settings.jenjang?.[0], settings);
-            if (mudirMarhalah) {
-                const mmAsset = findTtdByOwnerName(mudirMarhalah.nama);
-                if (mmAsset?.base64Image) return mmAsset.base64Image;
-            }
-        }
-        const fallbackMmAsset = digitalAssets.find(a => {
-            if (a.type !== 'ttd') return false;
-            const jbt = (a.jabatan || '').toLowerCase();
-            return jbt.includes('marhalah') || jbt.includes('jenjang');
-        });
-        return fallbackMmAsset?.base64Image || null;
+        if (!settings) return null;
+        const { jenjang } = resolveSantriAcademicHierarchy(santri, settings);
+        const targetJenjang = jenjang || (!santri ? settings.jenjang?.[0] : undefined);
+        const mudirMarhalah = resolveMudirMarhalahTeacher(targetJenjang, settings);
+        // Jika jenjang belum punya Mudir Marhalah ATAU Mudir Marhalah tersebut belum punya TTD,
+        // biarkan KOSONG (null) — jangan mengambil TTD Mudir Aam atau Mudir Marhalah lain!
+        if (!mudirMarhalah) return null;
+        const mmAsset = findStrictTeacherTtdAsset(digitalAssets, mudirMarhalah);
+        return mmAsset?.base64Image || null;
     }
     if (t === '$TTD_MUDIR') {
+        if (!settings) return null;
         const mudirInfo = resolveMudirAamInfo(settings);
-        const byOwner = findTtdByOwnerName(mudirInfo.teacher?.nama || mudirInfo.nama);
-        if (byOwner?.base64Image) return byOwner.base64Image;
-
-        const mudirAsset = digitalAssets.find(a => {
-            if (a.type !== 'ttd') return false;
-            const jbt = (a.jabatan || '').toLowerCase();
-            return (jbt.includes('mudir') && !jbt.includes('marhalah')) || jbt.includes('pimpinan') || jbt.includes('pengasuh');
-        }) || digitalAssets.find(a => a.type === 'ttd' && (a.jabatan || '').toLowerCase().includes('mudir'));
-        return mudirAsset?.base64Image || null;
+        if (mudirInfo.teacher) {
+            const mudirAsset = findStrictTeacherTtdAsset(digitalAssets, mudirInfo.teacher);
+            return mudirAsset?.base64Image || null;
+        }
+        if (settings.namaMudir && settings.namaMudir.trim() !== '') {
+            const manualMudirAsset = findStrictTeacherTtdAsset(digitalAssets, { nama: settings.namaMudir });
+            return manualMudirAsset?.base64Image || null;
+        }
+        return null;
     }
     if (t.startsWith('$TTD_PENGAJAR')) {
-        // e.g. $TTD_PENGAJAR:12 or $TTD_PENGAJAR_12 or $TTD_PENGAJAR
+        // e.g. $TTD_PENGAJAR:12 or $TTD_PENGAJAR_12
         const match = tag.trim().match(/[:_](\d+)/);
         if (match && settings) {
             const teacherId = parseInt(match[1], 10);
             const teacher = settings.tenagaPengajar.find(tp => Number(tp.id) === teacherId);
-            if (teacher) {
-                const teacherAsset = findTtdByOwnerName(teacher.nama);
-                if (teacherAsset?.base64Image) return teacherAsset.base64Image;
-            }
+            if (!teacher) return null;
+            const teacherAsset = findStrictTeacherTtdAsset(digitalAssets, teacher);
+            return teacherAsset?.base64Image || null;
         }
-        const anyTeacherAsset = digitalAssets.find(a => a.type === 'ttd');
-        return anyTeacherAsset?.base64Image || null;
+        return null;
     }
     if (t.startsWith('$ASSET_')) {
         const assetId = t.replace('$ASSET_', '');
@@ -834,7 +858,12 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     let avgScore = context.calculation?.rataRata;
     let predikatStr = context.calculation?.predikat;
     const rankVal = context.calculation?.ranking;
+    const rankKelasVal = context.calculation?.rankingKelas ?? rankVal;
+    const rankJenjangVal = context.calculation?.rankingJenjang ?? rankVal;
+    const rankGlobalVal = context.calculation?.rankingGlobal ?? rankVal;
     const totalSantriVal = context.calculation?.totalSantri;
+    const totalSantriKelasVal = context.calculation?.totalSantriKelas ?? totalSantriVal;
+    const totalSantriJenjangVal = context.calculation?.totalSantriJenjang ?? totalSantriVal;
 
     if (totalScore === undefined || avgScore === undefined) {
         let sum = 0;
@@ -931,7 +960,11 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     setToken('$PREDIKAT_RATA_RATA', predikatStr || '-');
     setToken('$PERINGKAT', rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
     setToken('$RANKING', rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
+    setToken('$PERINGKAT_KELAS', rankKelasVal !== undefined && rankKelasVal > 0 ? String(rankKelasVal) : '-');
+    setToken('$PERINGKAT_JENJANG', rankJenjangVal !== undefined && rankJenjangVal > 0 ? String(rankJenjangVal) : '-');
     setToken('$TOTAL_SANTRI', totalSantriVal !== undefined && totalSantriVal > 0 ? String(totalSantriVal) : '-');
+    setToken('$TOTAL_SANTRI_KELAS', totalSantriKelasVal !== undefined && totalSantriKelasVal > 0 ? String(totalSantriKelasVal) : '-');
+    setToken('$TOTAL_SANTRI_JENJANG', totalSantriJenjangVal !== undefined && totalSantriJenjangVal > 0 ? String(totalSantriJenjangVal) : '-');
 
     // Daftarkan juga tag per mapel seperti $RATA2_KELAS_FIQIH, $RERATA_KELAS_FIQIH, dan $NRK_FIQIH untuk sel bertipe Data Dinamis
     for (const [normKey, avgNum] of Object.entries(effectiveClassAverages)) {
@@ -1134,7 +1167,13 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         if (cell.type === 'formula') {
             if (cell.value && cell.value.trim() !== '') {
                 const rawExpr = cell.value.trim().startsWith('=') ? cell.value : `=${cell.value.trim()}`;
-                return resolveRaporText(rawExpr, childCtx);
+                const evaluated = resolveRaporText(rawExpr, {
+                    ...childCtx,
+                    decimalPlaces: cell.decimalPlaces !== undefined ? cell.decimalPlaces : 6
+                });
+                return cell.decimalPlaces !== undefined
+                    ? formatCellNumericDisplay(evaluated, cell.decimalPlaces)
+                    : evaluated;
             }
             if (cell.key) {
                 const kToken = `$${cell.key.trim().toUpperCase().replace(/[\s-]+/g, '_')}`;
@@ -1513,6 +1552,9 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     // Evaluasi seluruh rumus sel rapor (=SUM, =RATA2, =RATA2_KELAS, =IF, =PREDIKAT, =TERBILANG, =ARAB, =UPPER, =LOWER, =PROPER, =TAHUN_AJAR_*, =SEMESTER, =TITIMANGSA*, =TANGGAL_RAPOR*, =TEMPAT_RAPOR, &)
     return evaluateRaporFormula(substituted, {
         rank: rankVal,
+        rankKelas: rankKelasVal,
+        rankJenjang: rankJenjangVal,
+        rankGlobal: rankGlobalVal,
         tahunAjaran: yearInfo.otomatis,
         tahunAjaranMasehi: yearInfo.masehi,
         tahunAjaranHijriah: yearInfo.hijriah,

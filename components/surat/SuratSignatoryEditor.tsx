@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { SuratSignatory, PondokSettings, Santri, DigitalAsset, SignatorySourceType } from '../../types';
+import { findStrictTeacherTtdAsset } from '../../utils/digitalAssetUtils';
 
 interface SuratSignatoryEditorProps {
     signatory: SuratSignatory;
@@ -91,7 +92,7 @@ export const SuratSignatoryEditor: React.FC<SuratSignatoryEditorProps> = ({
         let newNama = signatory.nama;
         let newJabatan = signatory.jabatan;
         let newNip = signatory.nip || '';
-        let newSigUrl = signatory.signatureUrl;
+        let newSigUrl: string | undefined = undefined;
 
         if (type === 'mudir') {
             newNama = mudirTeacher?.nama || settings.namaMudir || 'Pimpinan Pondok Pesantren';
@@ -99,10 +100,9 @@ export const SuratSignatoryEditor: React.FC<SuratSignatoryEditorProps> = ({
             if (!newJabatan || newJabatan === 'Pejabat' || newJabatan.includes('Wali')) {
                 newJabatan = 'Pimpinan Pondok Pesantren';
             }
-            // Auto match TTD asset
-            const matchAsset = ttdAssets.find(a => 
-                a.namaPemilik.trim().toLowerCase() === newNama.trim().toLowerCase()
-            );
+            const matchAsset = mudirTeacher
+                ? findStrictTeacherTtdAsset(ttdAssets, mudirTeacher)
+                : findStrictTeacherTtdAsset(ttdAssets, { nama: newNama });
             if (matchAsset) newSigUrl = matchAsset.base64Image;
         } else if (type === 'guru') {
             const targetTeacherId = specificId ? Number(specificId) : (signatory.sourceId ? Number(signatory.sourceId) : (teachers[0]?.id || 0));
@@ -110,15 +110,11 @@ export const SuratSignatoryEditor: React.FC<SuratSignatoryEditorProps> = ({
             if (teacher) {
                 newNama = teacher.nama;
                 newNip = teacher.nip || '';
-                // Suggest primary active jabatan
                 const activeJabatan = teacher.riwayatJabatan?.find(r => !r.tanggalSelesai)?.jabatan;
                 if (activeJabatan) {
                     newJabatan = activeJabatan;
                 }
-                // Auto match TTD asset
-                const matchAsset = ttdAssets.find(a => 
-                    a.namaPemilik.trim().toLowerCase() === teacher.nama.trim().toLowerCase()
-                );
+                const matchAsset = findStrictTeacherTtdAsset(ttdAssets, teacher);
                 if (matchAsset) newSigUrl = matchAsset.base64Image;
             }
         } else if (type === 'wali_kelas') {
@@ -126,9 +122,7 @@ export const SuratSignatoryEditor: React.FC<SuratSignatoryEditorProps> = ({
             if (santriWaliKelas) {
                 newNama = santriWaliKelas.nama;
                 newNip = santriWaliKelas.nip || '';
-                const matchAsset = ttdAssets.find(a => 
-                    a.namaPemilik.trim().toLowerCase() === santriWaliKelas.nama.trim().toLowerCase()
-                );
+                const matchAsset = findStrictTeacherTtdAsset(ttdAssets, santriWaliKelas);
                 if (matchAsset) newSigUrl = matchAsset.base64Image;
             } else {
                 newNama = '{WALI_KELAS}';
@@ -139,9 +133,7 @@ export const SuratSignatoryEditor: React.FC<SuratSignatoryEditorProps> = ({
             if (santriMusyrif) {
                 newNama = santriMusyrif.nama;
                 newNip = santriMusyrif.nip || '';
-                const matchAsset = ttdAssets.find(a => 
-                    a.namaPemilik.trim().toLowerCase() === santriMusyrif.nama.trim().toLowerCase()
-                );
+                const matchAsset = findStrictTeacherTtdAsset(ttdAssets, santriMusyrif);
                 if (matchAsset) newSigUrl = matchAsset.base64Image;
             } else {
                 newNama = '{MUSYRIF}';

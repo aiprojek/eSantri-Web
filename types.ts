@@ -734,9 +734,11 @@ export interface WaGatewayConfig {
 
 export interface DigitalAsset {
     id: string;
-    type: 'ttd' | 'stempel' | 'kop';
+    type: 'ttd' | 'stempel' | 'kop' | 'lainnya';
     namaPemilik: string;
     jabatan: string;
+    guruId?: number;
+    systemRole?: 'logo_ponpes' | 'logo_yayasan' | 'stempel_ponpes' | 'kop_utama';
     base64Image: string;
     lastModified?: number;
 }

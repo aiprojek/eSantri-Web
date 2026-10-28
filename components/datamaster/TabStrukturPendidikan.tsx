@@ -1,11 +1,20 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { PondokSettings, Jenjang, Kelas, Rombel } from '../../types';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../../db';
+import { PondokSettings, Jenjang, Kelas, Rombel, TenagaPengajar } from '../../types';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { StructureModal } from '../settings/modals/StructureModal';
 import { BulkMasterEditor } from './modals/BulkMasterEditor';
+import { SignatureDropzone } from '../common/SignatureDropzone';
 import { loadXLSX } from '../../utils/lazyClientLibs';
+import {
+    getActiveTenagaPengajar,
+    findStrictTeacherTtdAsset,
+    upsertTeacherTtdAsset,
+    removeTeacherTtdAsset,
+    getTeacherPrimaryRoleLabel,
+} from '../../utils/digitalAssetUtils';
 
 type StructureItem = Jenjang | Kelas | Rombel;
 
@@ -38,14 +47,14 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
     const [searchKelas, setSearchKelas] = useState('');
     const [searchRombel, setSearchRombel] = useState('');
 
-    // Calculate active teachers for dropdowns (Mudir, Wali Kelas)
+    const digitalAssets = useLiveQuery(() => db.digitalAssets.toArray(), []) || [];
+    const [quickTtdTeacher, setQuickTtdTeacher] = useState<TenagaPengajar | null>(null);
+    const [quickTtdDraft, setQuickTtdDraft] = useState<string | null>(null);
+
+    // Seluruh tenaga pendidik & pengurus aktif untuk dropdown Mudir Marhalah & Wali Kelas
     const activeTeachers = useMemo(() => {
-        return localSettings.tenagaPengajar.filter(t => {
-            if (!t.riwayatJabatan || t.riwayatJabatan.length === 0) return false;
-            const latestRiwayat = [...t.riwayatJabatan].sort((a, b) => new Date(b.tanggalMulai).getTime() - new Date(a.tanggalMulai).getTime())[0];
-            return !latestRiwayat.tanggalSelesai;
-        });
-    }, [localSettings.tenagaPengajar]);
+        return getActiveTenagaPengajar(localSettings);
+    }, [localSettings]);
 
     const [isExporting, setIsExporting] = useState(false);
     const [isActionOpen, setIsActionOpen] = useState(false);
@@ -401,6 +410,14 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
             );
         };
 
+        const getAssignedTeacher = (item: StructureItem): TenagaPengajar | undefined => {
+            let teacherId: number | undefined;
+            if (listName === 'jenjang') teacherId = (item as Jenjang).mudirId;
+            if (listName === 'rombel') teacherId = (item as Rombel).waliKelasId;
+            if (!teacherId) return undefined;
+            return localSettings.tenagaPengajar.find(t => t.id === teacherId);
+        };
+
         const getAssignmentName = (item: StructureItem) => {
             let teacherId: number | undefined;
             if (listName === 'jenjang') teacherId = (item as Jenjang).mudirId;
@@ -498,7 +515,31 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
                                                         })()}
                                                     </span>
                                                 )}
-                                                {getAssignmentName(item) && <span className="text-blue-600 font-medium"><i className="bi bi-person-check mr-1"></i>{getAssignmentName(item)}</span>}
+                                                {getAssignmentName(item) && (() => {
+                                                    const assignedTeacher = getAssignedTeacher(item);
+                                                    const hasTtd = assignedTeacher ? Boolean(findStrictTeacherTtdAsset(digitalAssets, assignedTeacher)) : false;
+                                                    return (
+                                                        <span className="inline-flex items-center gap-1.5 text-blue-600 font-medium">
+                                                            <span><i className="bi bi-person-check mr-1"></i>{getAssignmentName(item)}</span>
+                                                            {assignedTeacher && canWrite && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const existing = findStrictTeacherTtdAsset(digitalAssets, assignedTeacher);
+                                                                        setQuickTtdTeacher(assignedTeacher);
+                                                                        setQuickTtdDraft(existing?.base64Image || null);
+                                                                    }}
+                                                                    className={`text-[10px] font-semibold underline-offset-2 hover:underline ${
+                                                                        hasTtd ? 'text-teal-700' : 'text-amber-700'
+                                                                    }`}
+                                                                    title={hasTtd ? 'TTD sudah siap — klik untuk lihat/ganti' : 'Belum ada TTD — klik untuk unggah TTD pejabat ini'}
+                                                                >
+                                                                    {hasTtd ? '(✓ TTD)' : '(+ Upload TTD)'}
+                                                                </button>
+                                                            )}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </div>
                                         </div>
                                     </div>
@@ -729,6 +770,79 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
                     onSave={handleBulkSave}
                     initialData={bulkInitialData}
                 />
+            )}
+
+            {quickTtdTeacher && (
+                <div
+                    className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+                    onClick={() => setQuickTtdTeacher(null)}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between border-b border-slate-100 p-4 bg-slate-50/70">
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                    <i className="bi bi-pen-fill text-teal-600"></i>
+                                    TTD Digital: {quickTtdTeacher.nama}
+                                </h3>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                    {getTeacherPrimaryRoleLabel(quickTtdTeacher, localSettings)} • Otomatis terdaftar di Aset Digital
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setQuickTtdTeacher(null)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                            >
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+
+                        <div className="p-5">
+                            <SignatureDropzone
+                                value={quickTtdDraft}
+                                onChange={(next) => setQuickTtdDraft(next)}
+                                label="Unggah / Seret Gambar TTD"
+                                helperText="Seret & lepas (drag & drop) gambar TTD ke sini, pilih berkas, atau tempel (Ctrl+V)."
+                                onError={(msg) => showToast(msg, 'error')}
+                            />
+                        </div>
+
+                        <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setQuickTtdTeacher(null)}
+                                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl border border-slate-200 bg-white"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    try {
+                                        if (quickTtdDraft) {
+                                            await upsertTeacherTtdAsset(quickTtdTeacher, quickTtdDraft, localSettings);
+                                            showToast(`TTD ${quickTtdTeacher.nama} tersimpan & terdaftar di Aset Digital!`, 'success');
+                                        } else {
+                                            await removeTeacherTtdAsset(quickTtdTeacher);
+                                            showToast(`TTD ${quickTtdTeacher.nama} dihapus dari Aset Digital.`, 'info');
+                                        }
+                                        setQuickTtdTeacher(null);
+                                    } catch (err) {
+                                        console.error(err);
+                                        showToast('Gagal menyimpan TTD.', 'error');
+                                    }
+                                }}
+                                className="px-5 py-2 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs inline-flex items-center gap-1.5"
+                            >
+                                <i className="bi bi-check-lg"></i>
+                                <span>Simpan TTD</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

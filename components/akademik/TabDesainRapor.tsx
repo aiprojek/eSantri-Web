@@ -30,6 +30,7 @@ import {
     resolveMudirAamInfo,
     formatTeacherNip
 } from '../../utils/raporPlaceholderResolver';
+import { findStrictTeacherTtdAsset, reconcileDigitalAssetsWithSettings } from '../../utils/digitalAssetUtils';
 import {
     RAPOR_FORMULA_SUGGESTIONS,
     applyCellTextTransform,
@@ -704,6 +705,10 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
     const { santriList } = useSantriContext();
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
     const digitalAssets = useLiveQuery(() => db.digitalAssets.toArray(), []) || [];
+
+    useEffect(() => {
+        reconcileDigitalAssetsWithSettings(settings).catch(() => {});
+    }, [settings]);
     const raporRecords = useLiveQuery(() => db.raporRecords.filter(r => !r.deleted).toArray(), []) || [];
 
     const [templates, setTemplates] = useState<RaporTemplate[]>(settings.raporTemplates || []);
@@ -6898,26 +6903,50 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                     ))}
                                 </div>
 
-                                {/* Specific Teacher Signature Helper */}
+                                {/* Specific Teacher Signature & Custom Digital Asset Helper */}
                                 {selectedTagCategory === 'media' && (
-                                    <div className="p-2 bg-white rounded-lg border border-purple-200 space-y-1.5 mt-2">
-                                        <label className="block text-[10px] font-bold text-gray-700 uppercase">TTD Pengajar Spesifik</label>
-                                        <div className="flex gap-1.5">
+                                    <div className="space-y-2 mt-2">
+                                        <div className="p-2 bg-white rounded-lg border border-purple-200 space-y-1.5">
+                                            <label className="block text-[10px] font-bold text-gray-700 uppercase">TTD Pengajar / Pengurus Spesifik</label>
                                             <select
                                                 id="specificTeacherTtdSelect"
+                                                value={activeCellData.value?.startsWith('$TTD_PENGAJAR:') ? activeCellData.value : ''}
                                                 className="w-full text-xs border rounded p-1.5 bg-gray-50 font-medium"
                                                 onChange={e => {
                                                     if (e.target.value) updateActiveCell({ value: e.target.value });
                                                 }}
                                             >
-                                                <option value="">-- Pilih Guru / Ustadz --</option>
-                                                {settings.tenagaPengajar.map(t => (
-                                                    <option key={t.id} value={`$TTD_PENGAJAR:${t.id}`}>
-                                                        {t.nama}
-                                                    </option>
-                                                ))}
+                                                <option value="">-- Pilih Guru / Pengurus --</option>
+                                                {settings.tenagaPengajar.map(t => {
+                                                    const hasTtd = Boolean(findStrictTeacherTtdAsset(digitalAssets, t));
+                                                    return (
+                                                        <option key={t.id} value={`$TTD_PENGAJAR:${t.id}`}>
+                                                            {t.nama} {hasTtd ? '(✓ Ada TTD)' : '(Belum ada TTD)'}
+                                                        </option>
+                                                    );
+                                                })}
                                             </select>
                                         </div>
+
+                                        {digitalAssets.length > 0 && (
+                                            <div className="p-2 bg-white rounded-lg border border-purple-200 space-y-1.5">
+                                                <label className="block text-[10px] font-bold text-gray-700 uppercase">Pilih dari Daftar Aset Digital ($ASSET)</label>
+                                                <select
+                                                    value={activeCellData.value?.startsWith('$ASSET_') ? activeCellData.value : ''}
+                                                    className="w-full text-xs border rounded p-1.5 bg-gray-50 font-medium"
+                                                    onChange={e => {
+                                                        if (e.target.value) updateActiveCell({ value: e.target.value });
+                                                    }}
+                                                >
+                                                    <option value="">-- Pilih Aset Tersimpan --</option>
+                                                    {digitalAssets.map(asset => (
+                                                        <option key={asset.id} value={`$ASSET_${asset.id}`}>
+                                                            [{asset.type.toUpperCase()}] {asset.namaPemilik} {asset.jabatan ? `— ${asset.jabatan}` : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -8308,7 +8337,12 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                         totalNilai: sumVal || 850,
                         rataRata: avgVal,
                         ranking: 1,
+                        rankingKelas: 2,
+                        rankingJenjang: 4,
+                        rankingGlobal: 7,
                         totalSantri: Math.max(1, effectiveSantriOptions.length || 28),
+                        totalSantriKelas: Math.max(2, (effectiveSantriOptions.length || 28) * 3),
+                        totalSantriJenjang: Math.max(4, (effectiveSantriOptions.length || 28) * 9),
                         predikat: avgVal >= 90 ? 'A' : avgVal >= 80 ? 'B' : 'C',
                         classAverages: previewClassAverages,
                         classOverallAverage: computedClassOverallAvg,
@@ -8323,11 +8357,15 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                             row.forEach(c => {
                                 if (!c.hidden && c.type === 'formula' && c.key && c.value) {
                                     const rawExpr = c.value.trim().startsWith('=') ? c.value : `=${c.value.trim()}`;
-                                    baseExtraVars[c.key] = resolveRaporText(rawExpr, {
+                                    const evaluatedVal = resolveRaporText(rawExpr, {
                                         ...baseResolveContext,
                                         sheetCells: sheetObj.cells,
-                                        currentCellCoord: { r: c.row, c: c.col }
+                                        currentCellCoord: { r: c.row, c: c.col },
+                                        decimalPlaces: c.decimalPlaces !== undefined ? c.decimalPlaces : 4
                                     });
+                                    baseExtraVars[c.key] = c.decimalPlaces !== undefined
+                                        ? formatCellNumericDisplay(evaluatedVal, c.decimalPlaces)
+                                        : evaluatedVal;
                                 }
                             });
                         });
@@ -8675,20 +8713,22 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                                     const upperMedia = val.toUpperCase();
                                                     const isStempel = upperMedia.includes('STEMPEL');
                                                     const isTtd = upperMedia.includes('TTD');
+                                                    const isKop = upperMedia.includes('KOP');
                                                     return {
                                                         content: (
                                                             <div className="flex items-center justify-center p-0.5">
                                                                 <img
                                                                     src={imgSrc}
                                                                     alt={val}
-                                                                    className={`object-contain ${isStempel ? 'max-h-12 max-w-[80px] opacity-90' : isTtd ? 'max-h-10 max-w-[100px]' : 'max-h-10 max-w-[80px]'}`}
+                                                                    className={`object-contain ${isKop ? 'w-full max-h-24' : isStempel ? 'max-h-12 max-w-[80px] opacity-90' : isTtd ? 'max-h-10 max-w-[100px]' : 'max-h-10 max-w-[80px]'}`}
                                                                 />
                                                             </div>
                                                         ),
                                                         isMedia: true
                                                     };
                                                 }
-                                                return { content: getSimulatedValue(cell), isMedia: true };
+                                                // Di Mode Pratinjau Cetak, biarkan kosong bersih (sama seperti hasil cetak asli) jika TTD/aset belum diunggah
+                                                return { content: null, isMedia: true };
                                             }
                                             if (cell.type === 'input') {
                                                 const v = cell.key ? baseExtraVars[cell.key] : '';

@@ -1,8 +1,16 @@
-
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../../../db';
 import { AiConfig, PondokSettings, PondokCustomInfoField, TenagaPengajar, Jenjang } from '../../../types';
-import { compressImage } from '../../../utils/imageOptimizer';
+import { optimizeSignatureImage } from '../../../utils/imageOptimizer';
+import {
+    findStrictTeacherTtdAsset,
+    upsertTeacherTtdAsset,
+    removeTeacherTtdAsset,
+    upsertInstitutionDigitalAsset,
+} from '../../../utils/digitalAssetUtils';
 import { SectionCard } from '../../common/SectionCard';
+import { SignatureDropzone } from '../../common/SignatureDropzone';
 import { formatCustomFieldTag, getKopIdentityLines } from '../../common/PrintHeader';
 import { useAppContext } from '../../../AppContext';
 import { APP_VERSION } from '../../../version';
@@ -16,72 +24,153 @@ interface TabUmumProps {
 const LogoUploader: React.FC<{
     label: string;
     logoUrl?: string;
+    systemRole: 'logo_yayasan' | 'logo_ponpes' | 'stempel_ponpes';
+    namaPonpes?: string;
+    namaYayasan?: string;
     onLogoChange: (url: string) => void;
-}> = ({ label, logoUrl, onLogoChange }) => {
+}> = ({ label, logoUrl, systemRole, namaPonpes, namaYayasan, onLogoChange }) => {
+    const { showToast } = useAppContext();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isDragOver, setIsDragOver] = useState(false);
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            setIsProcessing(true);
-            try {
-                // Logo mungkin butuh resolusi sedikit lebih baik dari pas foto, tapi tetap dikompres
-                // Max width 500px cukup untuk kop surat
-                const compressedBase64 = await compressImage(file, 500, 0.8);
-                onLogoChange(compressedBase64);
-            } catch (error) {
-                console.error("Gagal kompres logo:", error);
-                alert("Gagal memproses gambar.");
-            } finally {
-                setIsProcessing(false);
-                if(fileInputRef.current) fileInputRef.current.value = '';
-            }
+    const syncAndApply = async (nextUrl: string) => {
+        onLogoChange(nextUrl);
+        await upsertInstitutionDigitalAsset(systemRole, nextUrl || null, namaPonpes, namaYayasan).catch(() => {});
+    };
+
+    const processFile = async (file: File) => {
+        if (!file.type.startsWith('image/')) {
+            showToast('Gunakan berkas gambar (PNG, JPG, WEBP, atau SVG).', 'error');
+            return;
+        }
+        setIsProcessing(true);
+        try {
+            const optimized = await optimizeSignatureImage(file, {
+                maxWidth: 550,
+                maxHeight: 550,
+                removeWhiteBg: false,
+                autoTrim: systemRole === 'stempel_ponpes',
+            });
+            await syncAndApply(optimized);
+            showToast(`${label} berhasil dimuat & disinkronkan ke Daftar Aset Digital.`, 'success');
+        } catch (error: any) {
+            console.error('Gagal memproses gambar:', error);
+            showToast(error?.message || 'Gagal memproses gambar.', 'error');
+        } finally {
+            setIsProcessing(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    const handleCleanWhiteBg = async () => {
+        if (!logoUrl) return;
+        setIsProcessing(true);
+        try {
+            const cleaned = await optimizeSignatureImage(logoUrl, {
+                maxWidth: 550,
+                maxHeight: 550,
+                removeWhiteBg: true,
+                autoTrim: true,
+            });
+            await syncAndApply(cleaned);
+            showToast(`Background putih pada ${label} berhasil dibuat transparan.`, 'success');
+        } catch (err: any) {
+            showToast(err?.message || 'Gagal memproses transparansi gambar.', 'error');
+        } finally {
+            setIsProcessing(false);
         }
     };
 
     return (
-        <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
-            <div className="flex items-center gap-4">
-                <img 
-                    src={logoUrl || 'https://placehold.co/100x100/e2e8f0/334155?text=Logo'} 
-                    alt={label} 
-                    className={`h-20 w-20 rounded-md bg-slate-100 object-contain p-1 ${isProcessing ? 'opacity-50' : ''}`}
-                />
-                <div className="flex-grow space-y-2">
-                    <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-600">URL Logo (atau Upload)</label>
-                        <input
-                            type="text"
-                            placeholder="https://example.com/logo.png"
-                            value={logoUrl?.startsWith('data:') ? '(Gambar Terupload)' : logoUrl || ''}
-                            onChange={(e) => onLogoChange(e.target.value)}
-                            disabled={logoUrl?.startsWith('data:')}
-                            className="app-input block w-full p-2.5 text-sm disabled:text-slate-500"
+        <div
+            onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                if (!isDragOver) setIsDragOver(true);
+            }}
+            onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setIsDragOver(false);
+                }
+            }}
+            onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragOver(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) processFile(file);
+            }}
+            className={`rounded-xl border-2 p-3.5 transition-all ${
+                isDragOver ? 'border-dashed border-teal-500 bg-teal-50/60' : 'border-slate-200 bg-slate-50/40'
+            }`}
+        >
+            <label className="mb-2 block text-sm font-semibold text-slate-800">{label}</label>
+            <div className="flex items-start gap-3.5">
+                <div
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Klik atau seret gambar ke sini"
+                    className="h-20 w-20 shrink-0 cursor-pointer rounded-lg border border-slate-200 flex items-center justify-center p-1.5 overflow-hidden bg-[linear-gradient(45deg,#f1f5f9_25%,transparent_25%,transparent_75%,#f1f5f9_75%,#f1f5f9),linear-gradient(45deg,#f1f5f9_25%,transparent_25%,transparent_75%,#f1f5f9_75%,#f1f5f9)] bg-[length:14px_14px] bg-[position:0_0,7px_7px] bg-white hover:border-teal-400"
+                >
+                    {logoUrl ? (
+                        <img
+                            src={logoUrl}
+                            alt={label}
+                            className={`max-h-full max-w-full object-contain ${isProcessing ? 'opacity-50' : ''}`}
                         />
-                    </div>
-                    <div className="flex items-center gap-2">
+                    ) : (
+                        <div className="text-center text-slate-400 text-[10px] leading-tight">
+                            <i className="bi bi-cloud-arrow-up text-lg block text-teal-600 mb-0.5"></i>
+                            Drop / Pilih
+                        </div>
+                    )}
+                </div>
+                <div className="flex-grow space-y-2 min-w-0">
+                    <input
+                        type="text"
+                        placeholder="URL gambar atau seret berkas ke sini..."
+                        value={logoUrl?.startsWith('data:') ? '(Tersimpan di Aset Digital)' : logoUrl || ''}
+                        onChange={(e) => syncAndApply(e.target.value)}
+                        disabled={logoUrl?.startsWith('data:')}
+                        className="app-input block w-full p-2 text-xs disabled:text-slate-500"
+                    />
+                    <div className="flex flex-wrap items-center gap-1.5">
                         <input
                             type="file"
-                            accept="image/*"
+                            accept="image/png,image/jpeg,image/webp,image/svg+xml"
                             ref={fileInputRef}
-                            onChange={handleFileUpload}
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) processFile(file);
+                            }}
                             className="hidden"
                         />
                         <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={isProcessing}
-                            className="inline-flex items-center gap-2 rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:bg-slate-400"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:bg-slate-400"
                         >
-                            {isProcessing ? '...' : 'Upload'}
+                            <i className="bi bi-upload"></i>
+                            {isProcessing ? 'Memproses...' : 'Pilih Berkas'}
                         </button>
-                        {logoUrl && (
-                             <button
+                        {logoUrl && logoUrl.startsWith('data:') && (
+                            <button
                                 type="button"
-                                onClick={() => onLogoChange('')}
-                                className="rounded-md bg-red-100 px-4 py-2 text-sm font-medium text-red-700 hover:text-red-900"
+                                onClick={handleCleanWhiteBg}
+                                disabled={isProcessing}
+                                title="Ubah background putih menjadi transparan"
+                                className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-white px-2.5 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-50"
+                            >
+                                <i className="bi bi-eraser"></i>
+                                Transparan
+                            </button>
+                        )}
+                        {logoUrl && (
+                            <button
+                                type="button"
+                                onClick={() => syncAndApply('')}
+                                className="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100"
                             >
                                 Hapus
                             </button>
@@ -95,6 +184,17 @@ const LogoUploader: React.FC<{
 
 export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChange, activeTeachers }) => {
     const { showToast } = useAppContext();
+    const digitalAssets = useLiveQuery(() => db.digitalAssets.toArray(), []) || [];
+    const selectedMudirTeacher = useMemo(
+        () => localSettings.tenagaPengajar.find((t) => t.id === localSettings.mudirAamId),
+        [localSettings.tenagaPengajar, localSettings.mudirAamId]
+    );
+    const mudirTtdAsset = useMemo(
+        () => (selectedMudirTeacher ? findStrictTeacherTtdAsset(digitalAssets, selectedMudirTeacher) : undefined),
+        [digitalAssets, selectedMudirTeacher]
+    );
+    const [isMudirTtdModalOpen, setIsMudirTtdModalOpen] = useState(false);
+    const [mudirTtdDraft, setMudirTtdDraft] = useState<string | null>(null);
     // --- PWA & Offline State ---
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
     const [isOfflineReady, setIsOfflineReady] = useState(false);
@@ -524,11 +624,33 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                         <input type="text" value={localSettings.namaPonpes} onChange={(e) => handleInputChange('namaPonpes', e.target.value)} className="app-input block w-full p-2.5 text-sm" />
                     </div>
                     <div>
-                        <label className="mb-1 block text-sm font-medium text-slate-700">Mudir Aam</label>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">Mudir Aam / Pimpinan Pondok</label>
                         <select value={localSettings.mudirAamId || ''} onChange={(e) => handleInputChange('mudirAamId', e.target.value ? parseInt(e.target.value) : undefined)} className="app-select block w-full p-2.5 text-sm">
                              <option value="">-- Pilih Mudir Aam --</option>
                              {activeTeachers.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
                         </select>
+                        {selectedMudirTeacher && (
+                            <div className="mt-2 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs">
+                                {mudirTtdAsset ? (
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <img src={mudirTtdAsset.base64Image} alt="TTD Mudir" className="h-6 w-12 object-contain bg-white rounded border border-slate-200 p-0.5" />
+                                        <span className="text-teal-700 font-medium truncate">TTD Mudir Aam Terdaftar</span>
+                                    </div>
+                                ) : (
+                                    <span className="text-amber-700">Belum ada TTD digital Mudir Aam</span>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setMudirTtdDraft(mudirTtdAsset?.base64Image || null);
+                                        setIsMudirTtdModalOpen(true);
+                                    }}
+                                    className="font-semibold text-teal-700 hover:text-teal-900 shrink-0 ml-2"
+                                >
+                                    {mudirTtdAsset ? 'Ubah TTD' : '+ Upload TTD'}
+                                </button>
+                            </div>
+                        )}
                     </div>
                      <div>
                         <div className="mb-1 flex items-center justify-between">
@@ -896,16 +1018,25 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                     <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t mt-6">
                         <LogoUploader 
                             label="Logo Yayasan"
+                            systemRole="logo_yayasan"
+                            namaPonpes={localSettings.namaPonpes}
+                            namaYayasan={localSettings.namaYayasan}
                             logoUrl={localSettings.logoYayasanUrl}
                             onLogoChange={(url) => handleInputChange('logoYayasanUrl', url)}
                         />
                         <LogoUploader 
                             label="Logo Pondok Pesantren"
+                            systemRole="logo_ponpes"
+                            namaPonpes={localSettings.namaPonpes}
+                            namaYayasan={localSettings.namaYayasan}
                             logoUrl={localSettings.logoPonpesUrl}
                             onLogoChange={(url) => handleInputChange('logoPonpesUrl', url)}
                         />
                         <LogoUploader 
                             label="Stempel Resmi Pondok"
+                            systemRole="stempel_ponpes"
+                            namaPonpes={localSettings.namaPonpes}
+                            namaYayasan={localSettings.namaYayasan}
                             logoUrl={localSettings.stempelPonpesUrl}
                             onLogoChange={(url) => handleInputChange('stempelPonpesUrl', url)}
                         />
@@ -1207,6 +1338,84 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                     </span>
                 </label>
             </SectionCard>
+
+            {isMudirTtdModalOpen && selectedMudirTeacher && (
+                <div
+                    className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+                    onClick={() => setIsMudirTtdModalOpen(false)}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between border-b border-slate-100 p-4 bg-slate-50/70">
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                    <i className="bi bi-pen-fill text-teal-600"></i>
+                                    TTD Mudir Aam: {selectedMudirTeacher.nama}
+                                </h3>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                    Otomatis tersimpan di Daftar Aset Digital ($TTD_MUDIR)
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsMudirTtdModalOpen(false)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                            >
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+
+                        <div className="p-5">
+                            <SignatureDropzone
+                                value={mudirTtdDraft}
+                                onChange={(next) => setMudirTtdDraft(next)}
+                                label="Unggah / Seret TTD Pimpinan Pondok"
+                                helperText="Seret & lepas gambar TTD ke sini, pilih berkas, atau tempel (Ctrl+V). Tersedia fitur Hapus Background Putih otomatis."
+                                onError={(msg) => showToast(msg, 'error')}
+                            />
+                        </div>
+
+                        <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setIsMudirTtdModalOpen(false)}
+                                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl border border-slate-200 bg-white"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    try {
+                                        if (mudirTtdDraft) {
+                                            await upsertTeacherTtdAsset(
+                                                selectedMudirTeacher,
+                                                mudirTtdDraft,
+                                                localSettings,
+                                                'Mudir Aam / Pimpinan Pondok'
+                                            );
+                                            showToast(`TTD Mudir Aam (${selectedMudirTeacher.nama}) berhasil disimpan ke Aset Digital!`, 'success');
+                                        } else {
+                                            await removeTeacherTtdAsset(selectedMudirTeacher);
+                                            showToast('TTD Mudir Aam dihapus dari Aset Digital.', 'info');
+                                        }
+                                        setIsMudirTtdModalOpen(false);
+                                    } catch (err) {
+                                        console.error(err);
+                                        showToast('Gagal menyimpan TTD Mudir Aam.', 'error');
+                                    }
+                                }}
+                                className="px-5 py-2 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs inline-flex items-center gap-1.5"
+                            >
+                                <i className="bi bi-check-lg"></i>
+                                <span>Simpan TTD</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

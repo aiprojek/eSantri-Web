@@ -5,6 +5,7 @@ import { useAppContext } from '../AppContext';
 import { LoadingFallback } from './common/LoadingFallback';
 import { HeaderTabs, HeaderTabItem } from './common/HeaderTabs';
 import { PageHeader } from './common/PageHeader';
+import { getActiveTenagaPengajar } from '../utils/digitalAssetUtils';
 
 const TabUmum = React.lazy(() => import('./settings/tabs/TabUmum').then((module) => ({ default: module.TabUmum })));
 const TabAkun = React.lazy(() => import('./settings/tabs/TabAkun').then((module) => ({ default: module.TabAkun })));
@@ -92,9 +93,9 @@ const Settings: React.FC = () => {
         }
     }, [localSettings.jenjang, localSettings.nisSettings.jenjangConfig]);
 
-    const activeTeachers = useMemo(() => 
-        localSettings.tenagaPengajar.filter(t => !t.riwayatJabatan.some(r => r.tanggalSelesai)),
-        [localSettings.tenagaPengajar]
+    const activeTeachers = useMemo(
+        () => getActiveTenagaPengajar(localSettings),
+        [localSettings]
     );
 
     const hasUnsavedChanges = useMemo(() => {

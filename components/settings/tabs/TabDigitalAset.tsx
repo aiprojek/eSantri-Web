@@ -1,98 +1,209 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { DigitalAsset } from '../../../types';
 import { db } from '../../../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAppContext } from '../../../AppContext';
 import { SectionCard } from '../../common/SectionCard';
-import { compressImage } from '../../../utils/imageOptimizer';
+import { SignatureDropzone } from '../../common/SignatureDropzone';
+import { optimizeSignatureImage } from '../../../utils/imageOptimizer';
+import {
+    getActiveTenagaPengajar,
+    getTeacherPrimaryRoleLabel,
+    findStrictTeacherTtdAsset,
+    upsertTeacherTtdAsset,
+    reconcileDigitalAssetsWithSettings,
+    upsertInstitutionDigitalAsset,
+} from '../../../utils/digitalAssetUtils';
+
+type AssetFilterType = 'all' | 'ttd' | 'stempel' | 'kop' | 'lainnya';
 
 export const TabDigitalAset: React.FC = () => {
-    const { settings, showToast, showConfirmation } = useAppContext();
-    const [isUploading, setIsUploading] = useState(false);
+    const { settings, onSaveSettings, showToast, showConfirmation } = useAppContext();
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingAsset, setEditingAsset] = useState<DigitalAsset | null>(null);
     const [previewingAsset, setPreviewingAsset] = useState<DigitalAsset | null>(null);
-    const [activeFilter, setActiveFilter] = useState<'all' | 'ttd' | 'stempel' | 'kop'>('all');
+    const [activeFilter, setActiveFilter] = useState<AssetFilterType>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+    const [isPageDropActive, setIsPageDropActive] = useState(false);
+    const pageDragCounter = useRef(0);
 
-    // Form state
-    const [formData, setFormData] = useState({
-        type: 'ttd' as 'ttd' | 'stempel' | 'kop',
-        namaPemilik: '',
+    const [formData, setFormData] = useState<{
+        type: DigitalAsset['type'];
+        selectedOwnerKey: string; // 'guru:<id>' | '__custom__' | ''
+        customNama: string;
+        jabatan: string;
+        base64Image: string;
+        setAsPrimaryStempel: boolean;
+    }>({
+        type: 'ttd',
+        selectedOwnerKey: '',
+        customNama: '',
         jabatan: '',
         base64Image: '',
-        customNama: ''
+        setAsPrimaryStempel: false,
     });
 
     const assets = useLiveQuery(() => db.digitalAssets.toArray(), []) || [];
 
-    // Active teachers from settings
-    const activeTeachers = useMemo(() =>
-        (settings.tenagaPengajar || []).filter(t => !t.riwayatJabatan.some(r => r.tanggalSelesai)),
-        [settings.tenagaPengajar]
+    useEffect(() => {
+        reconcileDigitalAssetsWithSettings(settings).catch(() => {});
+    }, [settings]);
+
+    // Seluruh tenaga pendidik & kependidikan/pengurus aktif (tanpa bug riwayatJabatan masa lalu)
+    const activeTeachers = useMemo(
+        () => [...getActiveTenagaPengajar(settings)].sort((a, b) => a.nama.localeCompare(b.nama)),
+        [settings]
     );
 
-    const counts = useMemo(() => ({
-        total: assets.length,
-        ttd: assets.filter(a => a.type === 'ttd').length,
-        stempel: assets.filter(a => a.type === 'stempel').length,
-        kop: assets.filter(a => a.type === 'kop').length,
-    }), [assets]);
+    const counts = useMemo(
+        () => ({
+            total: assets.length,
+            ttd: assets.filter((a) => a.type === 'ttd').length,
+            stempel: assets.filter((a) => a.type === 'stempel').length,
+            kop: assets.filter((a) => a.type === 'kop').length,
+            lainnya: assets.filter((a) => a.type === 'lainnya').length,
+        }),
+        [assets]
+    );
 
     const filteredAssets = useMemo(() => {
-        return assets.filter(a => {
+        return assets.filter((a) => {
             const matchesFilter = activeFilter === 'all' || a.type === activeFilter;
-            const matchesSearch = !searchQuery.trim() || 
-                a.namaPemilik.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (a.jabatan && a.jabatan.toLowerCase().includes(searchQuery.toLowerCase()));
+            const q = searchQuery.trim().toLowerCase();
+            const matchesSearch =
+                !q ||
+                a.namaPemilik.toLowerCase().includes(q) ||
+                (a.jabatan && a.jabatan.toLowerCase().includes(q));
             return matchesFilter && matchesSearch;
         });
     }, [assets, activeFilter, searchQuery]);
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            setIsUploading(true);
-            try {
-                // Resize and compress cleanly
-                const compressedBase64 = await compressImage(file, 600, 0.9);
-                setFormData(prev => ({ ...prev, base64Image: compressedBase64 }));
-                showToast('Gambar berhasil diunggah dan dioptimalkan.', 'info');
-            } catch (error) {
-                console.error("Gagal kompres gambar:", error);
-                showToast("Gagal memproses file gambar. Pastikan format PNG/JPG valid.", 'error');
-            } finally {
-                setIsUploading(false);
+    const resetForm = () => {
+        setFormData({
+            type: 'ttd',
+            selectedOwnerKey: '',
+            customNama: '',
+            jabatan: '',
+            base64Image: '',
+            setAsPrimaryStempel: false,
+        });
+        setEditingAsset(null);
+    };
+
+    const handleOwnerSelectChange = (val: string) => {
+        if (val === '__custom__' || val === '') {
+            setFormData((prev) => ({
+                ...prev,
+                selectedOwnerKey: val,
+                customNama: val === '__custom__' ? prev.customNama : '',
+            }));
+            return;
+        }
+
+        if (val.startsWith('guru:')) {
+            const guruId = Number(val.slice(5));
+            const teacher = activeTeachers.find((t) => Number(t.id) === guruId);
+            if (teacher) {
+                const roleLabel = getTeacherPrimaryRoleLabel(teacher, settings);
+                const existingTtd = formData.type === 'ttd' ? findStrictTeacherTtdAsset(assets, teacher) : undefined;
+                setFormData((prev) => ({
+                    ...prev,
+                    selectedOwnerKey: val,
+                    customNama: '',
+                    jabatan: roleLabel,
+                    base64Image: prev.base64Image || existingTtd?.base64Image || '',
+                }));
             }
         }
     };
 
     const handleSave = async () => {
-        const finalNama = formData.namaPemilik === '__custom__' ? formData.customNama.trim() : formData.namaPemilik.trim();
+        let finalNama = '';
+        let linkedGuruId: number | undefined = undefined;
+
+        if (formData.selectedOwnerKey.startsWith('guru:')) {
+            const guruId = Number(formData.selectedOwnerKey.slice(5));
+            const selectedTeacher = activeTeachers.find((t) => Number(t.id) === guruId);
+            if (selectedTeacher) {
+                finalNama = selectedTeacher.nama.trim();
+                linkedGuruId = selectedTeacher.id;
+            }
+        } else if (formData.selectedOwnerKey === '__custom__') {
+            finalNama = formData.customNama.trim();
+        }
 
         if (!finalNama) {
-            showToast('Nama Pemilik atau Nama Instansi wajib diisi!', 'info');
+            showToast('Pilih pemilik dari Data Master atau ketik nama instansi/pemilik.', 'info');
             return;
         }
 
         if (!formData.base64Image) {
-            showToast('File gambar tanda tangan / stempel / kop surat wajib diunggah!', 'info');
+            showToast('Unggah atau seret gambar aset terlebih dahulu.', 'info');
             return;
         }
 
-        const asset: DigitalAsset = {
-            id: editingAsset?.id || `asset_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-            type: formData.type,
-            namaPemilik: finalNama,
-            jabatan: formData.jabatan.trim(),
-            base64Image: formData.base64Image,
-            lastModified: Date.now()
-        };
-
         try {
+            // Jika TTD untuk guru/pengurus dari Data Master, gunakan upsertTeacherTtdAsset agar bebas duplikat & sinkron penuh
+            if (formData.type === 'ttd' && linkedGuruId !== undefined) {
+                const teacher = activeTeachers.find((t) => Number(t.id) === linkedGuruId);
+                if (teacher) {
+                    await upsertTeacherTtdAsset(teacher, formData.base64Image, settings, formData.jabatan.trim());
+                    showToast(`TTD ${teacher.nama} tersimpan dan terhubung ke Data Master.`, 'success');
+                    setShowAddModal(false);
+                    resetForm();
+                    return;
+                }
+            }
+
+            // Jika mengedit aset utama lembaga (Logo / Stempel Utama), sinkronkan balik ke PondokSettings
+            if (editingAsset?.systemRole && editingAsset.systemRole !== 'kop_utama') {
+                await upsertInstitutionDigitalAsset(
+                    editingAsset.systemRole,
+                    formData.base64Image,
+                    settings.namaPonpes,
+                    settings.namaYayasan
+                );
+                const patchKey =
+                    editingAsset.systemRole === 'logo_ponpes'
+                        ? 'logoPonpesUrl'
+                        : editingAsset.systemRole === 'logo_yayasan'
+                        ? 'logoYayasanUrl'
+                        : 'stempelPonpesUrl';
+                await onSaveSettings({ ...settings, [patchKey]: formData.base64Image });
+                showToast('Aset utama lembaga diperbarui dan disinkronkan ke Pengaturan Umum.', 'success');
+                setShowAddModal(false);
+                resetForm();
+                return;
+            }
+
+            if (formData.type === 'stempel' && formData.setAsPrimaryStempel) {
+                await upsertInstitutionDigitalAsset(
+                    'stempel_ponpes',
+                    formData.base64Image,
+                    finalNama || settings.namaPonpes,
+                    settings.namaYayasan
+                );
+                await onSaveSettings({ ...settings, stempelPonpesUrl: formData.base64Image });
+                showToast('Stempel disimpan dan ditetapkan sebagai Stempel Resmi Utama Pondok.', 'success');
+                setShowAddModal(false);
+                resetForm();
+                return;
+            }
+
+            const asset: DigitalAsset = {
+                id: editingAsset?.id || `asset_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                type: formData.type,
+                namaPemilik: finalNama,
+                jabatan: formData.jabatan.trim(),
+                guruId: formData.type === 'ttd' ? linkedGuruId : undefined,
+                systemRole: editingAsset?.systemRole,
+                base64Image: formData.base64Image,
+                lastModified: Date.now(),
+            };
+
             await db.digitalAssets.put(asset);
-            showToast(editingAsset ? 'Aset digital berhasil diperbarui!' : 'Aset digital berhasil ditambahkan!', 'success');
+            showToast(editingAsset ? 'Aset digital berhasil diperbarui.' : 'Aset digital berhasil ditambahkan.', 'success');
             setShowAddModal(false);
             resetForm();
         } catch (error) {
@@ -101,13 +212,20 @@ export const TabDigitalAset: React.FC = () => {
         }
     };
 
-    const handleDelete = (id: string, name: string) => {
+    const handleDelete = (asset: DigitalAsset) => {
         showConfirmation(
             'Hapus Aset Digital',
-            `Apakah Anda yakin ingin menghapus aset digital untuk "${name}"? Dokumen surat atau cetakan yang menggunakan aset ini mungkin akan kehilangan visualnya.`,
+            `Apakah Anda yakin ingin menghapus aset "${asset.namaPemilik}"? Cetakan Rapor atau Surat yang merujuk aset ini akan otomatis dikosongkan.`,
             async () => {
                 try {
-                    await db.digitalAssets.delete(id);
+                    await db.digitalAssets.delete(asset.id);
+                    if (asset.systemRole === 'logo_ponpes') {
+                        await onSaveSettings({ ...settings, logoPonpesUrl: '' });
+                    } else if (asset.systemRole === 'logo_yayasan') {
+                        await onSaveSettings({ ...settings, logoYayasanUrl: '' });
+                    } else if (asset.systemRole === 'stempel_ponpes') {
+                        await onSaveSettings({ ...settings, stempelPonpesUrl: '' });
+                    }
                     showToast('Aset digital berhasil dihapus.', 'success');
                 } catch (error) {
                     console.error('Gagal hapus aset:', error);
@@ -120,20 +238,20 @@ export const TabDigitalAset: React.FC = () => {
 
     const openEditModal = (asset: DigitalAsset) => {
         setEditingAsset(asset);
-        const isFromMaster = activeTeachers.some(t => t.nama === asset.namaPemilik);
+        const matchedTeacher =
+            asset.guruId !== undefined
+                ? activeTeachers.find((t) => Number(t.id) === Number(asset.guruId))
+                : activeTeachers.find((t) => t.nama.trim().toLowerCase() === asset.namaPemilik.trim().toLowerCase());
+
         setFormData({
             type: asset.type,
-            namaPemilik: isFromMaster ? asset.namaPemilik : '__custom__',
-            customNama: isFromMaster ? '' : asset.namaPemilik,
+            selectedOwnerKey: matchedTeacher && asset.type === 'ttd' ? `guru:${matchedTeacher.id}` : '__custom__',
+            customNama: matchedTeacher && asset.type === 'ttd' ? '' : asset.namaPemilik,
             jabatan: asset.jabatan || '',
-            base64Image: asset.base64Image
+            base64Image: asset.base64Image,
+            setAsPrimaryStempel: asset.systemRole === 'stempel_ponpes',
         });
         setShowAddModal(true);
-    };
-
-    const resetForm = () => {
-        setFormData({ type: 'ttd', namaPemilik: '', customNama: '', jabatan: '', base64Image: '' });
-        setEditingAsset(null);
     };
 
     const downloadAssetImage = (asset: DigitalAsset) => {
@@ -147,34 +265,106 @@ export const TabDigitalAset: React.FC = () => {
         showToast('Gambar berhasil diunduh.', 'success');
     };
 
-    const getTypeBadge = (type: 'ttd' | 'stempel' | 'kop') => {
+    const copyMediaTag = (asset: DigitalAsset) => {
+        let tag = `$ASSET_${asset.id}`;
+        if (asset.systemRole === 'logo_ponpes') tag = '$LOGO_PONPES';
+        else if (asset.systemRole === 'logo_yayasan') tag = '$LOGO_YAYASAN';
+        else if (asset.systemRole === 'stempel_ponpes') tag = '$STEMPEL_PONPES';
+        else if (asset.type === 'kop') tag = '$KOP_SURAT';
+        else if (asset.type === 'ttd' && asset.guruId !== undefined) tag = `$TTD_PENGAJAR:${asset.guruId}`;
+
+        navigator.clipboard?.writeText(tag).then(() => {
+            showToast(`Kode tag ${tag} disalin ke papan klip.`, 'success');
+        }).catch(() => {
+            showToast(`Gunakan kode tag: ${tag}`, 'info');
+        });
+    };
+
+    const handlePageDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+        if (showAddModal) return;
+        e.preventDefault();
+        pageDragCounter.current += 1;
+        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+            setIsPageDropActive(true);
+        }
+    };
+
+    const handlePageDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        if (showAddModal) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    };
+
+    const handlePageDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        if (showAddModal) return;
+        e.preventDefault();
+        pageDragCounter.current = Math.max(0, pageDragCounter.current - 1);
+        if (pageDragCounter.current === 0) {
+            setIsPageDropActive(false);
+        }
+    };
+
+    const handlePageDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+        if (showAddModal) return;
+        e.preventDefault();
+        e.stopPropagation();
+        pageDragCounter.current = 0;
+        setIsPageDropActive(false);
+
+        const file = e.dataTransfer.files?.[0];
+        if (!file || !file.type.startsWith('image/')) {
+            if (file) showToast('Gunakan berkas gambar (PNG, JPG, WEBP, atau SVG).', 'error');
+            return;
+        }
+
+        try {
+            const optimized = await optimizeSignatureImage(file, { maxWidth: 650, maxHeight: 360 });
+            resetForm();
+            setFormData((prev) => ({
+                ...prev,
+                type: activeFilter === 'all' ? 'ttd' : activeFilter,
+                base64Image: optimized,
+            }));
+            setShowAddModal(true);
+            showToast('Gambar berhasil dimuat. Pilih pemilik aset lalu klik Simpan.', 'info');
+        } catch (err: any) {
+            showToast(err?.message || 'Gagal memuat berkas gambar.', 'error');
+        }
+    };
+
+    const getTypeLabel = (type: DigitalAsset['type']) => {
         switch (type) {
             case 'ttd':
-                return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                        <i className="bi bi-pen-fill"></i> Tanda Tangan
-                    </span>
-                );
+                return <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700"><i className="bi bi-pen-fill"></i> Tanda Tangan</span>;
             case 'stempel':
-                return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                        <i className="bi bi-patch-check-fill"></i> Stempel Resmi
-                    </span>
-                );
+                return <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700"><i className="bi bi-patch-check-fill"></i> Stempel Resmi</span>;
             case 'kop':
-                return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                        <i className="bi bi-file-earmark-richtext-fill"></i> Kop Surat
-                    </span>
-                );
+                return <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700"><i className="bi bi-file-earmark-richtext-fill"></i> Kop Dokumen</span>;
+            default:
+                return <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700"><i className="bi bi-shield-check"></i> Logo / Identitas</span>;
         }
     };
 
     return (
-        <div className="space-y-6">
+        <div
+            className="space-y-6 relative"
+            onDragEnter={handlePageDragEnter}
+            onDragOver={handlePageDragOver}
+            onDragLeave={handlePageDragLeave}
+            onDrop={handlePageDrop}
+        >
+            {isPageDropActive && (
+                <div className="fixed inset-4 z-[140] rounded-2xl border-2 border-dashed border-teal-500 bg-teal-900/20 backdrop-blur-xs pointer-events-none flex items-center justify-center">
+                    <div className="bg-white px-6 py-4 rounded-2xl shadow-xl border border-teal-200 flex items-center gap-3 text-teal-800 font-bold text-sm">
+                        <i className="bi bi-cloud-arrow-down-fill text-2xl text-teal-600"></i>
+                        <span>Lepaskan berkas gambar di mana saja untuk menambahkan Aset Digital baru</span>
+                    </div>
+                </div>
+            )}
+
             <SectionCard
-                title="Manajemen Aset Digital"
-                description="Kelola tanda tangan pejabat pesantren, cap/stempel resmi, dan header kop surat untuk keperluan cetak otomatis dokumen, kwitansi, serta surat menyurat."
+                title="Manajemen Aset Digital Terpusat"
+                description="Kelola tanda tangan pengurus/pendidik (terintegrasi dua arah dengan Data Master), stempel resmi, logo lembaga, dan kop dokumen. Anda juga dapat menyeret & melepas (drag & drop) gambar langsung ke halaman ini."
                 contentClassName="p-5 sm:p-6 space-y-5"
             >
                 {/* Stats Summary Bar */}
@@ -211,8 +401,8 @@ export const TabDigitalAset: React.FC = () => {
                             <i className="bi bi-file-earmark-richtext"></i>
                         </div>
                         <div>
-                            <div className="text-xs font-medium text-purple-700">Kop Surat</div>
-                            <div className="text-lg font-bold text-purple-950">{counts.kop}</div>
+                            <div className="text-xs font-medium text-purple-700">Kop & Logo</div>
+                            <div className="text-lg font-bold text-purple-950">{counts.kop + counts.lainnya}</div>
                         </div>
                     </div>
                 </div>
@@ -220,7 +410,7 @@ export const TabDigitalAset: React.FC = () => {
                 {/* Filter & Action Toolbar */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2">
                     <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+                        <div className="flex flex-wrap rounded-xl bg-slate-100 p-1 border border-slate-200">
                             <button
                                 type="button"
                                 onClick={() => setActiveFilter('all')}
@@ -255,25 +445,34 @@ export const TabDigitalAset: React.FC = () => {
                                     activeFilter === 'kop' ? 'bg-purple-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                                 }`}
                             >
-                                Kop Surat ({counts.kop})
+                                Kop ({counts.kop})
                             </button>
+                            {counts.lainnya > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveFilter('lainnya')}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                        activeFilter === 'lainnya' ? 'bg-teal-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                                    }`}
+                                >
+                                    Logo ({counts.lainnya})
+                                </button>
+                            )}
                         </div>
 
-                        {/* Search Input */}
                         <div className="relative min-w-[200px]">
                             <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                             <input
                                 type="text"
                                 placeholder="Cari nama atau jabatan..."
                                 value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
+                                onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
                             />
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2 self-end md:self-auto">
-                        {/* View Switcher */}
                         <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
                             <button
                                 type="button"
@@ -299,7 +498,10 @@ export const TabDigitalAset: React.FC = () => {
 
                         <button
                             type="button"
-                            onClick={() => { resetForm(); setShowAddModal(true); }}
+                            onClick={() => {
+                                resetForm();
+                                setShowAddModal(true);
+                            }}
                             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold shadow-xs transition-colors"
                         >
                             <i className="bi bi-plus-lg"></i>
@@ -308,26 +510,30 @@ export const TabDigitalAset: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Main Content: Table or Grid */}
+                {/* Main Content */}
                 {filteredAssets.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 p-12 text-center text-slate-500 bg-slate-50/50">
+                    <div className="rounded-2xl border-2 border-dashed border-slate-200 p-12 text-center text-slate-500 bg-slate-50/50">
                         <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center text-2xl">
-                            <i className="bi bi-image"></i>
+                            <i className="bi bi-cloud-arrow-up"></i>
                         </div>
                         <h4 className="font-semibold text-slate-700 text-sm">Belum Ada Aset Digital</h4>
-                        <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                            {searchQuery ? 'Tidak ada aset yang cocok dengan kata kunci pencarian.' : 'Unggah tanda tangan transparan, stempel lembaga, atau kop surat resmi untuk digunakan otomatis.'}
+                        <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                            {searchQuery
+                                ? 'Tidak ada aset yang cocok dengan kata kunci pencarian.'
+                                : 'Seret & lepas (drag & drop) gambar langsung ke halaman ini, tambahkan dari Data Master, atau klik tombol di bawah.'}
                         </p>
                         <button
                             type="button"
-                            onClick={() => { resetForm(); setShowAddModal(true); }}
+                            onClick={() => {
+                                resetForm();
+                                setShowAddModal(true);
+                            }}
                             className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 shadow-xs"
                         >
                             <i className="bi bi-plus-circle"></i> Tambah Aset Pertama
                         </button>
                     </div>
                 ) : viewMode === 'table' ? (
-                    /* Table View */
                     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs text-slate-600">
@@ -337,152 +543,188 @@ export const TabDigitalAset: React.FC = () => {
                                         <th scope="col" className="px-4 py-3 w-28 text-center">Pratinjau</th>
                                         <th scope="col" className="px-4 py-3">Tipe Aset</th>
                                         <th scope="col" className="px-4 py-3">Nama Pemilik / Dokumen</th>
-                                        <th scope="col" className="px-4 py-3">Jabatan Struktural</th>
+                                        <th scope="col" className="px-4 py-3">Jabatan & Sinkronisasi</th>
                                         <th scope="col" className="px-4 py-3 text-right">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {filteredAssets.map((asset, index) => (
-                                        <tr key={asset.id} className="hover:bg-slate-50/80 transition-colors">
-                                            <td className="px-4 py-3 text-center text-slate-400 font-medium">{index + 1}</td>
-                                            <td className="px-4 py-3 text-center">
-                                                <div 
-                                                    onClick={() => setPreviewingAsset(asset)}
-                                                    className="group relative w-20 h-12 mx-auto rounded-lg border border-slate-200 bg-slate-100/70 p-1 flex items-center justify-center cursor-pointer hover:border-teal-400 hover:shadow-xs transition-all overflow-hidden"
-                                                    title="Klik untuk melihat resolusi penuh"
-                                                >
-                                                    <img
-                                                        src={asset.base64Image}
-                                                        alt={asset.namaPemilik}
-                                                        className="max-h-full max-w-full object-contain"
-                                                    />
-                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                                                        <i className="bi bi-zoom-in text-xs"></i>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3 font-medium">
-                                                {getTypeBadge(asset.type)}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <div className="font-semibold text-slate-800 text-sm">{asset.namaPemilik}</div>
-                                                <div className="text-[11px] text-slate-400">ID: {asset.id.substring(0, 14)}...</div>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <div className="text-slate-700 font-medium">{asset.jabatan || '-'}</div>
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <div className="inline-flex items-center gap-1">
-                                                    <button
-                                                        type="button"
+                                    {filteredAssets.map((asset, index) => {
+                                        const isLinkedMaster = asset.type === 'ttd' && asset.guruId !== undefined;
+                                        return (
+                                            <tr key={asset.id} className="hover:bg-slate-50/80 transition-colors">
+                                                <td className="px-4 py-3 text-center text-slate-400 font-medium">{index + 1}</td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <div
                                                         onClick={() => setPreviewingAsset(asset)}
-                                                        title="Lihat Pratinjau Penuh"
-                                                        className="p-1.5 text-slate-600 hover:text-teal-700 hover:bg-slate-100 rounded-lg transition-colors"
+                                                        className="group relative w-20 h-12 mx-auto rounded-lg border border-slate-200 bg-[linear-gradient(45deg,#f1f5f9_25%,transparent_25%,transparent_75%,#f1f5f9_75%,#f1f5f9),linear-gradient(45deg,#f1f5f9_25%,transparent_25%,transparent_75%,#f1f5f9_75%,#f1f5f9)] bg-[length:12px_12px] bg-[position:0_0,6px_6px] bg-white p-1 flex items-center justify-center cursor-pointer hover:border-teal-400 hover:shadow-xs transition-all overflow-hidden"
+                                                        title="Klik untuk melihat resolusi penuh"
                                                     >
-                                                        <i className="bi bi-eye"></i>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => downloadAssetImage(asset)}
-                                                        title="Unduh Gambar"
-                                                        className="p-1.5 text-slate-600 hover:text-blue-700 hover:bg-slate-100 rounded-lg transition-colors"
-                                                    >
-                                                        <i className="bi bi-download"></i>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => openEditModal(asset)}
-                                                        title="Edit Aset"
-                                                        className="p-1.5 text-slate-600 hover:text-amber-700 hover:bg-slate-100 rounded-lg transition-colors"
-                                                    >
-                                                        <i className="bi bi-pencil"></i>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleDelete(asset.id, asset.namaPemilik)}
-                                                        title="Hapus Aset"
-                                                        className="p-1.5 text-slate-600 hover:text-rose-700 hover:bg-slate-100 rounded-lg transition-colors"
-                                                    >
-                                                        <i className="bi bi-trash3"></i>
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                                        <img
+                                                            src={asset.base64Image}
+                                                            alt={asset.namaPemilik}
+                                                            className="max-h-full max-w-full object-contain"
+                                                        />
+                                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                                            <i className="bi bi-zoom-in text-xs"></i>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 font-medium">{getTypeLabel(asset.type)}</td>
+                                                <td className="px-4 py-3">
+                                                    <div className="font-semibold text-slate-800 text-sm">{asset.namaPemilik}</div>
+                                                    <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                                                        {isLinkedMaster ? (
+                                                            <span className="text-teal-700 font-medium inline-flex items-center gap-1">
+                                                                <i className="bi bi-link-45deg"></i> Terhubung Data Master
+                                                            </span>
+                                                        ) : asset.systemRole ? (
+                                                            <span className="text-indigo-700 font-medium inline-flex items-center gap-1">
+                                                                <i className="bi bi-building-check"></i> Aset Utama Lembaga
+                                                            </span>
+                                                        ) : (
+                                                            <span>ID: {asset.id.substring(0, 14)}</span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="text-slate-700 font-medium">{asset.jabatan || '-'}</div>
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <div className="inline-flex items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => copyMediaTag(asset)}
+                                                            title="Salin Kode Tag Rapor"
+                                                            className="p-1.5 text-slate-600 hover:text-purple-700 hover:bg-slate-100 rounded-lg transition-colors"
+                                                        >
+                                                            <i className="bi bi-code-slash"></i>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPreviewingAsset(asset)}
+                                                            title="Lihat Pratinjau Penuh"
+                                                            className="p-1.5 text-slate-600 hover:text-teal-700 hover:bg-slate-100 rounded-lg transition-colors"
+                                                        >
+                                                            <i className="bi bi-eye"></i>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => downloadAssetImage(asset)}
+                                                            title="Unduh Gambar"
+                                                            className="p-1.5 text-slate-600 hover:text-blue-700 hover:bg-slate-100 rounded-lg transition-colors"
+                                                        >
+                                                            <i className="bi bi-download"></i>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openEditModal(asset)}
+                                                            title="Edit / Ganti Berkas"
+                                                            className="p-1.5 text-slate-600 hover:text-amber-700 hover:bg-slate-100 rounded-lg transition-colors"
+                                                        >
+                                                            <i className="bi bi-pencil"></i>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDelete(asset)}
+                                                            title="Hapus Aset"
+                                                            className="p-1.5 text-slate-600 hover:text-rose-700 hover:bg-slate-100 rounded-lg transition-colors"
+                                                        >
+                                                            <i className="bi bi-trash3"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 ) : (
-                    /* Grid / Card View */
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {filteredAssets.map(asset => (
-                            <div key={asset.id} className="rounded-xl border border-slate-200 bg-white p-4 hover:shadow-md transition-shadow flex flex-col justify-between">
-                                <div>
-                                    <div className="flex justify-between items-start mb-3">
-                                        {getTypeBadge(asset.type)}
-                                        <div className="flex items-center gap-1">
-                                            <button
-                                                type="button"
-                                                onClick={() => downloadAssetImage(asset)}
-                                                title="Unduh Gambar"
-                                                className="text-slate-500 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition-colors"
-                                            >
-                                                <i className="bi bi-download"></i>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => openEditModal(asset)}
-                                                title="Edit"
-                                                className="text-slate-500 hover:text-amber-600 hover:bg-amber-50 p-1.5 rounded-lg transition-colors"
-                                            >
-                                                <i className="bi bi-pencil"></i>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleDelete(asset.id, asset.namaPemilik)}
-                                                title="Hapus"
-                                                className="text-slate-500 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg transition-colors"
-                                            >
-                                                <i className="bi bi-trash3"></i>
-                                            </button>
+                        {filteredAssets.map((asset) => {
+                            const isLinkedMaster = asset.type === 'ttd' && asset.guruId !== undefined;
+                            return (
+                                <div key={asset.id} className="rounded-xl border border-slate-200 bg-white p-4 hover:shadow-md transition-shadow flex flex-col justify-between">
+                                    <div>
+                                        <div className="flex justify-between items-start mb-3">
+                                            {getTypeLabel(asset.type)}
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => copyMediaTag(asset)}
+                                                    title="Salin Kode Tag Rapor"
+                                                    className="text-slate-500 hover:text-purple-600 hover:bg-purple-50 p-1.5 rounded-lg transition-colors"
+                                                >
+                                                    <i className="bi bi-code-slash"></i>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => downloadAssetImage(asset)}
+                                                    title="Unduh Gambar"
+                                                    className="text-slate-500 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition-colors"
+                                                >
+                                                    <i className="bi bi-download"></i>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openEditModal(asset)}
+                                                    title="Edit"
+                                                    className="text-slate-500 hover:text-amber-600 hover:bg-amber-50 p-1.5 rounded-lg transition-colors"
+                                                >
+                                                    <i className="bi bi-pencil"></i>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDelete(asset)}
+                                                    title="Hapus"
+                                                    className="text-slate-500 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg transition-colors"
+                                                >
+                                                    <i className="bi bi-trash3"></i>
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    {/* Preview Box */}
-                                    <div
-                                        onClick={() => setPreviewingAsset(asset)}
-                                        className="group relative bg-slate-50 border border-slate-100 rounded-xl p-4 mb-3 flex items-center justify-center min-h-[110px] cursor-pointer hover:border-teal-300 transition-all overflow-hidden"
-                                    >
-                                        <img
-                                            src={asset.base64Image}
-                                            alt={asset.namaPemilik}
-                                            className="max-h-[90px] max-w-full object-contain"
-                                        />
-                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold gap-1">
-                                            <i className="bi bi-zoom-in"></i> Perbesar
+                                        <div
+                                            onClick={() => setPreviewingAsset(asset)}
+                                            className="group relative border border-slate-100 rounded-xl p-4 mb-3 flex items-center justify-center min-h-[110px] cursor-pointer hover:border-teal-300 transition-all overflow-hidden bg-[linear-gradient(45deg,#f8fafc_25%,transparent_25%,transparent_75%,#f8fafc_75%,#f8fafc),linear-gradient(45deg,#f8fafc_25%,transparent_25%,transparent_75%,#f8fafc_75%,#f8fafc)] bg-[length:16px_16px] bg-[position:0_0,8px_8px] bg-white"
+                                        >
+                                            <img
+                                                src={asset.base64Image}
+                                                alt={asset.namaPemilik}
+                                                className="max-h-[90px] max-w-full object-contain"
+                                            />
+                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold gap-1">
+                                                <i className="bi bi-zoom-in"></i> Perbesar
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    <div className="text-center px-1">
-                                        <div className="font-bold text-slate-800 text-sm truncate">{asset.namaPemilik}</div>
-                                        <div className="text-xs text-slate-500 mt-0.5 truncate">{asset.jabatan || 'Tidak ada jabatan'}</div>
+                                        <div className="text-center px-1">
+                                            <div className="font-bold text-slate-800 text-sm truncate">{asset.namaPemilik}</div>
+                                            <div className="text-xs text-slate-500 mt-0.5 truncate">{asset.jabatan || '-'}</div>
+                                            {isLinkedMaster && (
+                                                <div className="text-[11px] text-teal-700 font-medium mt-1">
+                                                    <i className="bi bi-link-45deg"></i> Terhubung Data Master
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </SectionCard>
 
-            {/* Modal Zoom Preview Gambar Penuh */}
+            {/* Modal Zoom Preview */}
             {previewingAsset && (
                 <div className="fixed inset-0 z-[160] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" onClick={() => setPreviewingAsset(null)}>
-                    <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200" onClick={(e) => e.stopPropagation()}>
                         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                {getTypeBadge(previewingAsset.type)}
-                                <span className="font-bold text-slate-800 text-sm truncate max-w-[200px]">{previewingAsset.namaPemilik}</span>
+                                {getTypeLabel(previewingAsset.type)}
+                                <span className="text-slate-300">•</span>
+                                <span className="font-bold text-slate-800 text-sm truncate max-w-[220px]">{previewingAsset.namaPemilik}</span>
                             </div>
                             <button
                                 type="button"
@@ -492,7 +734,7 @@ export const TabDigitalAset: React.FC = () => {
                                 <i className="bi bi-x-lg"></i>
                             </button>
                         </div>
-                        <div className="p-6 bg-slate-100/80 flex items-center justify-center min-h-[220px]">
+                        <div className="p-6 flex items-center justify-center min-h-[220px] bg-[linear-gradient(45deg,#f1f5f9_25%,transparent_25%,transparent_75%,#f1f5f9_75%,#f1f5f9),linear-gradient(45deg,#f1f5f9_25%,transparent_25%,transparent_75%,#f1f5f9_75%,#f1f5f9)] bg-[length:20px_20px] bg-[position:0_0,10px_10px] bg-white">
                             <img
                                 src={previewingAsset.base64Image}
                                 alt={previewingAsset.namaPemilik}
@@ -501,7 +743,7 @@ export const TabDigitalAset: React.FC = () => {
                         </div>
                         <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
                             <div className="text-xs text-slate-500">
-                                <div><span className="font-medium text-slate-700">Jabatan:</span> {previewingAsset.jabatan || '-'}</div>
+                                <span className="font-medium text-slate-700">Jabatan / Keterangan:</span> {previewingAsset.jabatan || '-'}
                             </div>
                             <div className="flex gap-2">
                                 <button
@@ -509,7 +751,7 @@ export const TabDigitalAset: React.FC = () => {
                                     onClick={() => downloadAssetImage(previewingAsset)}
                                     className="px-3.5 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 inline-flex items-center gap-1.5"
                                 >
-                                    <i className="bi bi-download"></i> Unduh File
+                                    <i className="bi bi-download"></i> Unduh
                                 </button>
                                 <button
                                     type="button"
@@ -527,20 +769,27 @@ export const TabDigitalAset: React.FC = () => {
             {/* Add / Edit Modal */}
             {showAddModal && (
                 <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200">
                         <div className="flex items-center justify-between border-b border-slate-100 p-4 bg-slate-50/70">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2.5">
                                 <span className="p-2 rounded-xl bg-teal-100 text-teal-700">
                                     <i className="bi bi-image-fill"></i>
                                 </span>
                                 <div>
-                                    <h3 className="text-sm font-bold text-slate-800">{editingAsset ? 'Edit Aset Digital' : 'Tambah Aset Digital Baru'}</h3>
-                                    <p className="text-[11px] text-slate-500">Format PNG transparan sangat disarankan untuk TTD & Stempel</p>
+                                    <h3 className="text-sm font-bold text-slate-800">
+                                        {editingAsset ? 'Edit Aset Digital' : 'Tambah Aset Digital Baru'}
+                                    </h3>
+                                    <p className="text-[11px] text-slate-500">
+                                        Mendukung seret & lepas (drag & drop), tempel (Ctrl+V), dan hapus background putih otomatis
+                                    </p>
                                 </div>
                             </div>
                             <button
                                 type="button"
-                                onClick={() => { setShowAddModal(false); resetForm(); }}
+                                onClick={() => {
+                                    setShowAddModal(false);
+                                    resetForm();
+                                }}
                                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                             >
                                 <i className="bi bi-x-lg"></i>
@@ -548,136 +797,137 @@ export const TabDigitalAset: React.FC = () => {
                         </div>
 
                         <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-                            {/* Tipe Aset */}
                             <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1">Tipe Aset Digital</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData(prev => ({ ...prev, type: 'ttd' }))}
-                                        className={`py-2 px-3 rounded-xl border text-xs font-semibold text-center transition-all ${
-                                            formData.type === 'ttd' ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-2xs' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                                        }`}
-                                    >
-                                        <i className="bi bi-pen block text-base mb-0.5"></i>
-                                        Tanda Tangan
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData(prev => ({ ...prev, type: 'stempel' }))}
-                                        className={`py-2 px-3 rounded-xl border text-xs font-semibold text-center transition-all ${
-                                            formData.type === 'stempel' ? 'border-rose-500 bg-rose-50 text-rose-700 shadow-2xs' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                                        }`}
-                                    >
-                                        <i className="bi bi-patch-check block text-base mb-0.5"></i>
-                                        Stempel Cap
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData(prev => ({ ...prev, type: 'kop' }))}
-                                        className={`py-2 px-3 rounded-xl border text-xs font-semibold text-center transition-all ${
-                                            formData.type === 'kop' ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-2xs' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                                        }`}
-                                    >
-                                        <i className="bi bi-file-earmark-richtext block text-base mb-0.5"></i>
-                                        Kop Surat
-                                    </button>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Tipe Aset Digital</label>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {[
+                                        { key: 'ttd', label: 'Tanda Tangan', icon: 'bi-pen', activeCls: 'border-blue-500 bg-blue-50 text-blue-700' },
+                                        { key: 'stempel', label: 'Stempel Cap', icon: 'bi-patch-check', activeCls: 'border-rose-500 bg-rose-50 text-rose-700' },
+                                        { key: 'kop', label: 'Kop Dokumen', icon: 'bi-file-earmark-richtext', activeCls: 'border-purple-500 bg-purple-50 text-purple-700' },
+                                        { key: 'lainnya', label: 'Logo / Lain', icon: 'bi-shield-check', activeCls: 'border-teal-500 bg-teal-50 text-teal-700' },
+                                    ].map((item) => (
+                                        <button
+                                            key={item.key}
+                                            type="button"
+                                            disabled={Boolean(editingAsset?.systemRole)}
+                                            onClick={() =>
+                                                setFormData((prev) => ({
+                                                    ...prev,
+                                                    type: item.key as DigitalAsset['type'],
+                                                    selectedOwnerKey: item.key === 'ttd' ? prev.selectedOwnerKey : '__custom__',
+                                                    customNama:
+                                                        item.key !== 'ttd' && !prev.customNama
+                                                            ? settings.namaPonpes || ''
+                                                            : prev.customNama,
+                                                }))
+                                            }
+                                            className={`py-2 px-2 rounded-xl border text-[11px] font-semibold text-center transition-all disabled:opacity-60 ${
+                                                formData.type === item.key ? `${item.activeCls} shadow-2xs` : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            <i className={`bi ${item.icon} block text-base mb-0.5`}></i>
+                                            {item.label}
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
 
-                            {/* Nama Pemilik / Instansi */}
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                    {formData.type === 'kop' ? 'Nama Lembaga / Yayasan' : 'Nama Pemilik / Pejabat Penandatangan'}
-                                </label>
-                                <select
-                                    value={formData.namaPemilik}
-                                    onChange={e => {
-                                        const val = e.target.value;
-                                        if (val === '__custom__') {
-                                            setFormData(prev => ({ ...prev, namaPemilik: '__custom__' }));
-                                        } else {
-                                            const selected = activeTeachers.find(t => t.nama === val);
-                                            if (selected) {
-                                                const lastJabatan = selected.riwayatJabatan[selected.riwayatJabatan.length - 1];
-                                                setFormData(prev => ({
-                                                    ...prev,
-                                                    namaPemilik: selected.nama,
-                                                    customNama: '',
-                                                    jabatan: lastJabatan?.jabatan || ''
-                                                }));
-                                            } else {
-                                                setFormData(prev => ({ ...prev, namaPemilik: val }));
-                                            }
-                                        }
-                                    }}
-                                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
-                                >
-                                    <option value="">-- Pilih dari Tenaga Pengajar / Staf --</option>
-                                    {activeTeachers.map(t => {
-                                        const lastJabatan = t.riwayatJabatan[t.riwayatJabatan.length - 1];
-                                        return (
-                                            <option key={t.id} value={t.nama}>{t.nama} {lastJabatan?.jabatan ? `(${lastJabatan.jabatan})` : ''}</option>
-                                        );
-                                    })}
-                                    <option value="__custom__">-- Input Manual (Instansi / Lembaga / Lainnya) --</option>
-                                </select>
+                            {formData.type === 'ttd' ? (
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                        Pilih Pengurus / Pendidik dari Data Master
+                                    </label>
+                                    <select
+                                        value={formData.selectedOwnerKey}
+                                        onChange={(e) => handleOwnerSelectChange(e.target.value)}
+                                        className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                                    >
+                                        <option value="">-- Pilih Pengurus / Guru / Staf --</option>
+                                        {activeTeachers.map((t) => {
+                                            const role = getTeacherPrimaryRoleLabel(t, settings);
+                                            const hasExisting = Boolean(findStrictTeacherTtdAsset(assets, t));
+                                            return (
+                                                <option key={t.id} value={`guru:${t.id}`}>
+                                                    {t.nama} — {role} {hasExisting ? '(Sudah ada TTD - akan diperbarui)' : ''}
+                                                </option>
+                                            );
+                                        })}
+                                        <option value="__custom__">-- Input Nama Manual (Di Luar Data Master) --</option>
+                                    </select>
 
-                                {formData.namaPemilik === '__custom__' && (
+                                    {formData.selectedOwnerKey === '__custom__' && (
+                                        <input
+                                            type="text"
+                                            placeholder="Ketik nama lengkap penandatangan..."
+                                            value={formData.customNama}
+                                            onChange={(e) => setFormData((prev) => ({ ...prev, customNama: e.target.value }))}
+                                            className="w-full mt-2 px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                                        />
+                                    )}
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                        Nama Lembaga / Dokumen Aset
+                                    </label>
                                     <input
                                         type="text"
-                                        placeholder="Ketik nama pemilik / instansi..."
+                                        placeholder="Contoh: Pondok Pesantren Al-Ikhlas"
                                         value={formData.customNama}
-                                        onChange={e => setFormData(prev => ({ ...prev, customNama: e.target.value }))}
-                                        className="w-full mt-2 px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                                        onChange={(e) =>
+                                            setFormData((prev) => ({
+                                                ...prev,
+                                                selectedOwnerKey: '__custom__',
+                                                customNama: e.target.value,
+                                            }))
+                                        }
+                                        className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
                                     />
-                                )}
-                            </div>
+                                </div>
+                            )}
 
-                            {/* Jabatan */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-700 mb-1">Jabatan / Keterangan</label>
                                 <input
                                     type="text"
                                     value={formData.jabatan}
-                                    onChange={e => setFormData(prev => ({ ...prev, jabatan: e.target.value }))}
+                                    onChange={(e) => setFormData((prev) => ({ ...prev, jabatan: e.target.value }))}
                                     className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
-                                    placeholder="Contoh: Pengasuh Pondok / Kepala Madrasah / Bendahara"
+                                    placeholder="Contoh: Mudir Aam / Wali Kelas / Stempel Resmi Pondok"
                                 />
                             </div>
 
-                            {/* Upload File */}
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1">File Gambar Aset</label>
-                                <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-teal-400 bg-slate-50/60 rounded-xl p-4 cursor-pointer transition-colors">
-                                    <i className="bi bi-cloud-arrow-up text-2xl text-slate-400 mb-1"></i>
-                                    <span className="text-xs font-medium text-slate-700">Pilih berkas atau seret ke sini</span>
-                                    <span className="text-[11px] text-slate-400 mt-0.5">PNG transparan, JPG, atau WEBP</span>
+                            {formData.type === 'stempel' && !editingAsset?.systemRole && (
+                                <label className="flex items-center gap-2 text-xs text-slate-700 bg-rose-50/60 border border-rose-200 rounded-xl p-2.5 cursor-pointer">
                                     <input
-                                        type="file"
-                                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                                        onChange={handleFileUpload}
-                                        className="hidden"
+                                        type="checkbox"
+                                        checked={formData.setAsPrimaryStempel}
+                                        onChange={(e) => setFormData((prev) => ({ ...prev, setAsPrimaryStempel: e.target.checked }))}
+                                        className="rounded text-rose-600 focus:ring-rose-500"
                                     />
+                                    <span>Jadikan juga sebagai <strong>Stempel Resmi Utama Pondok</strong> ($STEMPEL_PONPES)</span>
                                 </label>
+                            )}
 
-                                {formData.base64Image && (
-                                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 flex flex-col items-center justify-center">
-                                        <div className="text-[11px] font-medium text-slate-500 mb-2">Pratinjau Hasil Kompresi:</div>
-                                        <img
-                                            src={formData.base64Image}
-                                            alt="Preview"
-                                            className="max-h-[100px] max-w-full object-contain"
-                                        />
-                                    </div>
-                                )}
-                            </div>
+                            <SignatureDropzone
+                                label="Berkas Gambar Aset"
+                                value={formData.base64Image || null}
+                                onChange={(next) => setFormData((prev) => ({ ...prev, base64Image: next || '' }))}
+                                maxWidth={formData.type === 'kop' ? 1400 : 650}
+                                maxHeight={formData.type === 'kop' ? 450 : 360}
+                                showTransparentTool={formData.type !== 'kop'}
+                                helperText="Pilih berkas, seret & lepas (drag & drop) ke kotak ini, atau tempel (Ctrl+V). Gunakan tombol 'Hapus Background Putih' jika gambar difoto di kertas."
+                                onError={(msg) => showToast(msg, 'error')}
+                            />
                         </div>
 
                         <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex justify-end gap-2">
                             <button
                                 type="button"
-                                onClick={() => { setShowAddModal(false); resetForm(); }}
+                                onClick={() => {
+                                    setShowAddModal(false);
+                                    resetForm();
+                                }}
                                 className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl border border-slate-200 bg-white"
                             >
                                 Batal
@@ -685,11 +935,10 @@ export const TabDigitalAset: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={handleSave}
-                                disabled={isUploading}
-                                className="px-5 py-2 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs disabled:opacity-50 inline-flex items-center gap-1.5"
+                                className="px-5 py-2 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs inline-flex items-center gap-1.5"
                             >
                                 <i className="bi bi-check-lg"></i>
-                                <span>{isUploading ? 'Memproses...' : 'Simpan Aset'}</span>
+                                <span>Simpan Aset</span>
                             </button>
                         </div>
                     </div>

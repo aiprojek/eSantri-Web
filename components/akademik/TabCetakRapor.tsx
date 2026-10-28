@@ -20,6 +20,7 @@ import {
 } from '../../utils/formatters';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
+import { reconcileDigitalAssetsWithSettings } from '../../utils/digitalAssetUtils';
 import { buildRombelLegerData, StudentLegerRow } from '../../services/raporCalculationService';
 import { getTemplateSheets } from '../../services/raporExcelService';
 import { RaporTitleEditModal } from './modals/RaporTitleEditModal';
@@ -247,8 +248,14 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                         if (!cell || cell.hidden) continue;
                         if (cell.type === 'formula' && cell.key && cell.value) {
                             const rawExpr = cell.value.trim().startsWith('=') ? cell.value : `=${cell.value.trim()}`;
-                            const val = resolveRaporText(rawExpr, { ...ctx, currentCellCoord: { r: cell.row, c: cell.col } });
-                            extraVars[cell.key] = val;
+                            const val = resolveRaporText(rawExpr, {
+                                ...ctx,
+                                currentCellCoord: { r: cell.row, c: cell.col },
+                                decimalPlaces: cell.decimalPlaces !== undefined ? cell.decimalPlaces : 4
+                            });
+                            extraVars[cell.key] = cell.decimalPlaces !== undefined
+                                ? formatCellNumericDisplay(val, cell.decimalPlaces)
+                                : val;
                         }
                     }
                 }
@@ -427,18 +434,20 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
             if (imgSrc) {
                 const isStempel = upperCellVal.includes('STEMPEL');
                 const isTtd = upperCellVal.includes('TTD');
+                const isKop = upperCellVal.includes('KOP');
                 renderedContent = (
                     <div className="flex items-center justify-center p-0.5 w-full h-full">
                         <img
                             src={imgSrc}
                             alt={cell.value}
                             onLoad={triggerMeasure}
-                            className={`object-contain ${isStempel ? 'max-h-16 max-w-[90px] opacity-90' : isTtd ? 'max-h-14 max-w-[120px]' : 'max-h-12 max-w-[100px]'}`}
+                            className={`object-contain ${isKop ? 'w-full max-h-28' : isStempel ? 'max-h-16 max-w-[90px] opacity-90' : isTtd ? 'max-h-14 max-w-[120px]' : 'max-h-12 max-w-[100px]'}`}
                         />
                     </div>
                 );
             } else {
-                renderedContent = <span className="text-[10px] text-gray-400 italic">[{cell.value.replace('$', '')}]</span>;
+                // Kosongkan sel secara bersih (siap untuk tanda tangan basah) jika pejabat terkait belum memiliki aset TTD digital
+                renderedContent = null;
             }
         } else if (cell.type === 'data') {
             renderedContent = resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC }, decimalPlaces: cell.decimalPlaces });
@@ -931,6 +940,10 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
     }, [isWaliKelas, settings.jenjang, allowedWaliJenjangIds]);
 
     const digitalAssets = useLiveQuery(() => db.digitalAssets.toArray(), []) || [];
+
+    useEffect(() => {
+        reconcileDigitalAssetsWithSettings(settings).catch(() => {});
+    }, [settings]);
     const {
         filterTahun,
         setFilterTahun,
@@ -1121,9 +1134,68 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
     const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
     const [whatsAppTargetSantri, setWhatsAppTargetSantri] = useState<Santri | null>(null);
 
-    // Rapor Approval & Lock Status Key
+    // Rapor Approval & Lock Status Key (mendukung per-rombel maupun rentang multi-rombel secara sinkron)
     const approvalKey = `${filterTahun}_${filterSemester}_${printRombel || 'all'}`;
-    const currentApprovalStatus = (settings.raporApprovalStatus?.[approvalKey]) || 'draft';
+    const globalApprovalKey = `${filterTahun}_${filterSemester}_all`;
+
+    const scopedRombelApprovalStats = useMemo(() => {
+        const statusMap = settings.raporApprovalStatus || {};
+        const globalLocked = statusMap[globalApprovalKey] === 'locked';
+        if (printRombel) {
+            const direct = statusMap[`${filterTahun}_${filterSemester}_${printRombel}`];
+            const effective: 'draft' | 'verified' | 'locked' =
+                direct === 'locked' || globalLocked
+                    ? 'locked'
+                    : (direct || 'draft');
+            return {
+                effectiveStatus: effective,
+                lockedCount: effective === 'locked' ? 1 : 0,
+                totalRombels: 1
+            };
+        }
+
+        const rombelIds = settings.rombel
+            .filter(r => {
+                if (isWaliKelas && !allowedWaliRombelIds.has(r.id)) return false;
+                if (filterJenjang) {
+                    const k = settings.kelas.find(kl => kl.id === r.kelasId);
+                    if (!k || k.jenjangId !== parseInt(filterJenjang)) return false;
+                }
+                return true;
+            })
+            .map(r => r.id);
+
+        if (rombelIds.length === 0) {
+            return {
+                effectiveStatus: (statusMap[approvalKey] || 'draft') as 'draft' | 'verified' | 'locked',
+                lockedCount: 0,
+                totalRombels: 0
+            };
+        }
+
+        let lockedCount = 0;
+        let verifiedCount = 0;
+        rombelIds.forEach(rId => {
+            const st = statusMap[`${filterTahun}_${filterSemester}_${rId}`];
+            if (globalLocked || st === 'locked') lockedCount++;
+            else if (st === 'verified') verifiedCount++;
+        });
+
+        const effectiveStatus: 'draft' | 'verified' | 'locked' =
+            lockedCount === rombelIds.length
+                ? 'locked'
+                : (verifiedCount + lockedCount === rombelIds.length && rombelIds.length > 0)
+                ? 'verified'
+                : (!filterJenjang && !isWaliKelas && statusMap[globalApprovalKey]) || 'draft';
+
+        return {
+            effectiveStatus,
+            lockedCount,
+            totalRombels: rombelIds.length
+        };
+    }, [settings.raporApprovalStatus, settings.rombel, settings.kelas, filterTahun, filterSemester, printRombel, filterJenjang, isWaliKelas, allowedWaliRombelIds, approvalKey, globalApprovalKey]);
+
+    const currentApprovalStatus = scopedRombelApprovalStats.effectiveStatus;
 
     const handleCycleApprovalStatus = async () => {
         if (currentApprovalStatus === 'locked' && !canLockRapor) {
@@ -1139,11 +1211,52 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                 currentApprovalStatus === 'draft' ? 'verified' :
                 currentApprovalStatus === 'verified' ? 'locked' : 'draft';
         }
-        
-        const updatedStatusMap = {
-            ...(settings.raporApprovalStatus || {}),
-            [approvalKey]: nextStatus
+
+        const updatedStatusMap: Record<string, 'draft' | 'verified' | 'locked'> = {
+            ...(settings.raporApprovalStatus || {})
         };
+
+        if (printRombel) {
+            // Jika sebelumnya terkunci secara global (_all) lalu dibuka khusus 1 rombel, pertahankan kunci rombel lainnya
+            if (updatedStatusMap[globalApprovalKey] === 'locked' && nextStatus !== 'locked') {
+                settings.rombel.forEach(r => {
+                    const rk = `${filterTahun}_${filterSemester}_${r.id}`;
+                    if (!updatedStatusMap[rk]) {
+                        updatedStatusMap[rk] = 'locked';
+                    }
+                });
+                updatedStatusMap[globalApprovalKey] = 'verified';
+            }
+            updatedStatusMap[approvalKey] = nextStatus;
+        } else {
+            // Terapkan ke seluruh rombel dalam cakupan filter aktif (misal seluruh Jenjang atau seluruh Pondok)
+            const targetRombels = settings.rombel.filter(r => {
+                if (isWaliKelas && !allowedWaliRombelIds.has(r.id)) return false;
+                if (filterJenjang) {
+                    const k = settings.kelas.find(kl => kl.id === r.kelasId);
+                    if (!k || k.jenjangId !== parseInt(filterJenjang)) return false;
+                }
+                return true;
+            });
+
+            if (updatedStatusMap[globalApprovalKey] === 'locked' && nextStatus !== 'locked' && (filterJenjang || isWaliKelas)) {
+                settings.rombel.forEach(r => {
+                    const rk = `${filterTahun}_${filterSemester}_${r.id}`;
+                    if (!updatedStatusMap[rk]) {
+                        updatedStatusMap[rk] = 'locked';
+                    }
+                });
+                updatedStatusMap[globalApprovalKey] = 'verified';
+            }
+
+            targetRombels.forEach(r => {
+                updatedStatusMap[`${filterTahun}_${filterSemester}_${r.id}`] = nextStatus;
+            });
+
+            if (!filterJenjang && !isWaliKelas) {
+                updatedStatusMap[globalApprovalKey] = nextStatus;
+            }
+        }
 
         await onUpdateSettings({
             ...settings,
@@ -1302,7 +1415,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
         });
     }, [santriList, filterJenjang, printRombel, isWaliKelas, allowedWaliRombelIds]);
 
-    // Compute Leger Calculations per Rombel to get exact ranks, averages, and completeness
+    // Compute Leger Calculations per Rombel + Parallel Cohort Rankings (Tingkat Kelas, Marhalah/Jenjang, Global)
     useEffect(() => {
         const calculateRombelData = () => {
             const newMap = new Map<number, StudentLegerRow>();
@@ -1311,13 +1424,18 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                 classOverallAverage: number;
                 rombelRecords: RaporRecord[];
             }>();
+
+            // Gunakan seluruh santri aktif se-pondok agar rumus =RANK($TOTAL_NILAI, "kelas" | "jenjang") tetap akurat meskipun sedang memfilter 1 rombel
+            const allActiveSantri = santriList.filter(s => !s.deleted && s.status === 'Aktif');
             const studentsByRombel = new Map<number, Santri[]>();
 
-            baseSantriList.forEach(s => {
+            allActiveSantri.forEach(s => {
                 const list = studentsByRombel.get(s.rombelId) || [];
                 list.push(s);
                 studentsByRombel.set(s.rombelId, list);
             });
+
+            const allRows: StudentLegerRow[] = [];
 
             studentsByRombel.forEach((rombelStudents, rId) => {
                 const rombel = settings.rombel.find(r => r.id === rId);
@@ -1326,9 +1444,17 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
 
                 let matchedTemplate: RaporTemplate | null = null;
                 if (selectedTemplateId) {
-                    matchedTemplate = templates.find(t => t.id === selectedTemplateId) || null;
-                } else if (kelas?.jenjangId) {
-                    matchedTemplate = templates.find(t => t.jenjangId === kelas.jenjangId) || null;
+                    const chosen = templates.find(t => t.id === selectedTemplateId) || null;
+                    if (chosen && (!chosen.jenjangId || !kelas?.jenjangId || chosen.jenjangId === kelas.jenjangId)) {
+                        matchedTemplate = chosen;
+                    }
+                }
+                if (!matchedTemplate && kelas?.jenjangId) {
+                    matchedTemplate =
+                        templates.find(t => t.rombelId === rId) ||
+                        templates.find(t => t.kelasId === kelas.id && !t.rombelId) ||
+                        templates.find(t => t.jenjangId === kelas.jenjangId && !t.kelasId && !t.rombelId) ||
+                        null;
                 }
                 if (!matchedTemplate && templates.length > 0) {
                     matchedTemplate = templates[0];
@@ -1351,8 +1477,71 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                 });
 
                 rombelData.students.forEach(row => {
+                    allRows.push(row);
                     newMap.set(row.santri.id, row);
                 });
+            });
+
+            // Hitung peringkat paralel per Tingkat Kelas, per Marhalah/Jenjang, dan Global Pondok
+            const assignGroupRanks = (rows: StudentLegerRow[]): Map<number, number> => {
+                const withScores = rows
+                    .filter(r => r.totalNilai > 0)
+                    .sort((a, b) => b.totalNilai - a.totalNilai || b.rataRata - a.rataRata);
+                const rMap = new Map<number, number>();
+                let curRank = 1;
+                for (let i = 0; i < withScores.length; i++) {
+                    if (i > 0 && withScores[i].totalNilai < withScores[i - 1].totalNilai) {
+                        curRank = i + 1;
+                    }
+                    rMap.set(withScores[i].santri.id, curRank);
+                }
+                return rMap;
+            };
+
+            const rowsByKelas = new Map<number, StudentLegerRow[]>();
+            const rowsByJenjang = new Map<number, StudentLegerRow[]>();
+
+            allRows.forEach(row => {
+                const s = row.santri;
+                const rombel = settings.rombel.find(r => r.id === s.rombelId);
+                const kelasId = s.kelasId || rombel?.kelasId || 0;
+                const kelas = kelasId ? settings.kelas.find(k => k.id === kelasId) : undefined;
+                const jenjangId = s.jenjangId || kelas?.jenjangId || 0;
+
+                if (kelasId) {
+                    const kList = rowsByKelas.get(kelasId) || [];
+                    kList.push(row);
+                    rowsByKelas.set(kelasId, kList);
+                }
+                if (jenjangId) {
+                    const jList = rowsByJenjang.get(jenjangId) || [];
+                    jList.push(row);
+                    rowsByJenjang.set(jenjangId, jList);
+                }
+            });
+
+            const globalRankMap = assignGroupRanks(allRows);
+
+            rowsByKelas.forEach(kRows => {
+                const kRankMap = assignGroupRanks(kRows);
+                const kTotal = kRows.length;
+                kRows.forEach(r => {
+                    r.rankingKelas = kRankMap.get(r.santri.id) || (r.totalNilai > 0 ? 1 : 0);
+                    r.totalSantriKelas = kTotal;
+                });
+            });
+
+            rowsByJenjang.forEach(jRows => {
+                const jRankMap = assignGroupRanks(jRows);
+                const jTotal = jRows.length;
+                jRows.forEach(r => {
+                    r.rankingJenjang = jRankMap.get(r.santri.id) || (r.totalNilai > 0 ? 1 : 0);
+                    r.totalSantriJenjang = jTotal;
+                });
+            });
+
+            allRows.forEach(r => {
+                r.rankingGlobal = globalRankMap.get(r.santri.id) || (r.totalNilai > 0 ? 1 : 0);
             });
 
             setStudentLegerMap(newMap);
@@ -1360,7 +1549,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
         };
 
         calculateRombelData();
-    }, [baseSantriList, periodRecordsMap, selectedTemplateId, settings]);
+    }, [santriList, baseSantriList, periodRecordsMap, selectedTemplateId, settings]);
 
     // Counts for status tabs
     const counts = useMemo(() => {
@@ -1468,11 +1657,19 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
     const currentPreviewRow = currentPreviewSantri ? studentLegerMap.get(currentPreviewSantri.id) : null;
     const currentPreviewCohortMeta = currentPreviewSantri ? rombelCohortMetaMap.get(currentPreviewSantri.rombelId) : undefined;
     const currentPreviewEffectiveRank = getEffectiveRanking(currentPreviewRow?.ranking, rankingDisplayLimit);
+    const currentPreviewEffectiveRankKelas = getEffectiveRanking(currentPreviewRow?.rankingKelas, rankingDisplayLimit);
+    const currentPreviewEffectiveRankJenjang = getEffectiveRanking(currentPreviewRow?.rankingJenjang, rankingDisplayLimit);
+    const currentPreviewEffectiveRankGlobal = getEffectiveRanking(currentPreviewRow?.rankingGlobal, rankingDisplayLimit);
     const currentPreviewCalculation = currentPreviewRow ? {
         totalNilai: currentPreviewRow.totalNilai,
         rataRata: currentPreviewRow.rataRata,
         ranking: currentPreviewEffectiveRank,
+        rankingKelas: currentPreviewEffectiveRankKelas,
+        rankingJenjang: currentPreviewEffectiveRankJenjang,
+        rankingGlobal: currentPreviewEffectiveRankGlobal,
         totalSantri: currentPreviewEffectiveRank ? (baseSantriList.filter(s => s.rombelId === currentPreviewSantri?.rombelId).length || 1) : undefined,
+        totalSantriKelas: currentPreviewEffectiveRankKelas ? currentPreviewRow.totalSantriKelas : undefined,
+        totalSantriJenjang: currentPreviewEffectiveRankJenjang ? currentPreviewRow.totalSantriJenjang : undefined,
         predikat: currentPreviewRow.predikat.predikat,
         classAverages: currentPreviewCohortMeta?.classAverages,
         classOverallAverage: currentPreviewCohortMeta?.classOverallAverage
@@ -1522,11 +1719,19 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
             const cohortMeta = rombelCohortMetaMap.get(santri.rombelId);
             const rombelTotal = baseSantriList.filter(s => s.rombelId === santri.rombelId).length;
             const effectiveRank = getEffectiveRanking(row?.ranking, limit);
+            const effectiveRankKelas = getEffectiveRanking(row?.rankingKelas, limit);
+            const effectiveRankJenjang = getEffectiveRanking(row?.rankingJenjang, limit);
+            const effectiveRankGlobal = getEffectiveRanking(row?.rankingGlobal, limit);
             const calculation = row ? {
                 totalNilai: row.totalNilai,
                 rataRata: row.rataRata,
                 ranking: effectiveRank,
+                rankingKelas: effectiveRankKelas,
+                rankingJenjang: effectiveRankJenjang,
+                rankingGlobal: effectiveRankGlobal,
                 totalSantri: effectiveRank ? rombelTotal : undefined,
+                totalSantriKelas: effectiveRankKelas ? row.totalSantriKelas : undefined,
+                totalSantriJenjang: effectiveRankJenjang ? row.totalSantriJenjang : undefined,
                 predikat: row.predikat.predikat,
                 classAverages: cohortMeta?.classAverages,
                 classOverallAverage: cohortMeta?.classOverallAverage
@@ -1748,12 +1953,12 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                 </div>
 
                 {/* Lock Status Alert Banner */}
-                {currentApprovalStatus === 'locked' && (
+                {currentApprovalStatus === 'locked' ? (
                     <div className="mb-4 p-3 bg-emerald-50/90 border border-emerald-300 rounded-xl text-xs text-emerald-900 flex items-center justify-between gap-3 shadow-2xs animate-fade-in">
                         <div className="flex items-center gap-2">
                             <i className="bi bi-shield-lock-fill text-emerald-600 text-base"></i>
                             <span>
-                                <strong>Rapor Telah Disahkan & Terkunci:</strong> Nilai rapor pada periode dan rombel ini telah diverifikasi dan dikunci untuk menjaga integritas dokumen cetak.
+                                <strong>Rapor Telah Disahkan &amp; Terkunci:</strong> Nilai rapor pada periode dan rombel ini telah diverifikasi dan dikunci untuk menjaga integritas dokumen cetak.
                             </span>
                         </div>
                         {canLockRapor && (
@@ -1766,7 +1971,16 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                             </button>
                         )}
                     </div>
-                )}
+                ) : (!printRombel && scopedRombelApprovalStats.lockedCount > 0 && scopedRombelApprovalStats.totalRombels > 1) ? (
+                    <div className="mb-4 p-3 bg-teal-50/80 border border-teal-200 rounded-xl text-xs text-teal-900 flex items-center justify-between gap-3 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <i className="bi bi-shield-check text-teal-600 text-base"></i>
+                            <span>
+                                <strong>Sebagian Rombel Terkunci:</strong> {scopedRombelApprovalStats.lockedCount} dari {scopedRombelApprovalStats.totalRombels} rombel pada tampilan ini sudah disahkan &amp; dikunci. Pilih rombel terkait jika ingin mengelola kuncinya secara terpisah.
+                            </span>
+                        </div>
+                    </div>
+                ) : null}
 
                 {/* Filter Grid (Desktop) */}
                 <div className={`hidden md:grid grid-cols-2 ${templateSheets.length > 1 ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-3.5 mb-5`}>

@@ -244,8 +244,8 @@ export function getRaporPaperMetrics(
     const padPx = marginMode === 'normal' ? 32 : marginMode === 'narrow' ? 16 : 8;
     const paddingClass = marginMode === 'normal' ? 'p-8' : marginMode === 'narrow' ? 'p-4' : 'p-2';
 
-    // Subtract padding + dedicated bottom credit footer strip so content and borders never collide with footer
-    const availableW = Math.max(300, Math.floor(pxW - padPx * 2 - 2));
+    // Subtract padding + 4px horizontal breathing room (2px per side for collapsed 1px borders) + bottom credit footer strip
+    const availableW = Math.max(300, Math.floor(pxW - padPx * 2 - 4));
     const availableH = Math.max(320, Math.floor(pxH - padPx * 2 - 22));
 
     return {
@@ -634,7 +634,8 @@ export function computePaginatedRaporLayout({
             }
         }
 
-        scale = Math.max(0.2, Math.min(1, Number(Math.min(maxScaleW, maxScaleH).toFixed(4))));
+        const rawMinScale = Math.min(maxScaleW, maxScaleH);
+        scale = Math.max(0.2, Math.min(1, Math.floor(rawMinScale * 10000) / 10000));
     }
 
     // Build final slices using the resolved scale
@@ -862,3 +863,128 @@ export function getRenderableRowCellsForPage(
 
     return result;
 }
+
+/**
+ * Resolves exact integer pixel widths for `<col>` elements so their sum equals `targetTotalWidth`
+ * without subpixel percentage rounding drift (`100.003%` / `99.997%`) under `table-layout: fixed` + CSS `scale()`.
+ */
+export function resolveExactColPixelWidths(
+    colWidths: number[],
+    targetTotalWidth: number,
+    stretch: boolean
+): number[] {
+    if (colWidths.length === 0) return [];
+    if (!stretch) return colWidths.map(w => Math.max(1, Math.round(w || 100)));
+    const rawSum = colWidths.reduce((a, b) => a + (b || 0), 0);
+    if (rawSum <= 0) return colWidths.map(w => Math.max(1, Math.round(w || 100)));
+
+    const roundedTarget = Math.max(colWidths.length, Math.round(targetTotalWidth));
+    const exact = colWidths.map(w => ((w || 0) / rawSum) * roundedTarget);
+    const floored = exact.map(v => Math.max(1, Math.floor(v)));
+    const currentSum = floored.reduce((a, b) => a + b, 0);
+    const remainder = roundedTarget - currentSum;
+
+    if (remainder > 0) {
+        const indicesByFrac = exact
+            .map((v, idx) => ({ idx, frac: v - Math.floor(v) }))
+            .sort((a, b) => b.frac - a.frac);
+        for (let i = 0; i < remainder; i++) {
+            floored[indicesByFrac[i % indicesByFrac.length].idx] += 1;
+        }
+    } else if (remainder < 0) {
+        const indicesByWidth = floored
+            .map((v, idx) => ({ idx, v }))
+            .sort((a, b) => b.v - a.v);
+        let toSub = -remainder;
+        for (let i = 0; i < indicesByWidth.length && toSub > 0; i++) {
+            const targetIdx = indicesByWidth[i].idx;
+            const removable = Math.max(0, floored[targetIdx] - 1);
+            const delta = Math.min(removable, toSub);
+            floored[targetIdx] -= delta;
+            toSub -= delta;
+        }
+    }
+
+    return floored;
+}
+
+export interface RaporFooterTypography {
+    baseBodyFontPx: number;
+    renderedBodyFontPx: number;
+    footerFontPx: number;
+    borderTopWidthPx: number;
+    paddingTopPx: number;
+}
+
+/**
+ * Computes balanced footer & credit typography proportional to the Rapor's dominant body font size
+ * and active page-fit scale so the footer never overpowers or clashes with the Rapor text.
+ */
+export function computeRaporFooterTypography(
+    cells: GridCell[][] | undefined,
+    scale: number = 1
+): RaporFooterTypography {
+    const allSizes: number[] = [];
+    const bodySizes: number[] = [];
+
+    if (cells && cells.length > 0) {
+        for (let r = 0; r < cells.length; r++) {
+            const row = cells[r] || [];
+            for (let c = 0; c < row.length; c++) {
+                const cell = row[c];
+                if (!cell || cell.hidden) continue;
+                const val = (cell.value || '').trim();
+                const hasText = val !== '' && !/^\$(LOGO|KOP|TTD|STEMPEL)/i.test(val);
+                const hasInputKey =
+                    (cell.type === 'input' || cell.type === 'dropdown' || cell.type === 'formula') &&
+                    Boolean(cell.key && cell.key.trim() !== '');
+                if (!hasText && !hasInputKey) continue;
+
+                const fs = typeof cell.fontSize === 'number' && cell.fontSize > 0 ? cell.fontSize : 11;
+                allSizes.push(fs);
+                if (!(r <= 3 && fs >= 14)) {
+                    bodySizes.push(fs);
+                }
+            }
+        }
+    }
+
+    const pool = bodySizes.length > 0 ? bodySizes : allSizes;
+    let baseBodyFontPx = 11;
+    if (pool.length > 0) {
+        const freq = new Map<number, number>();
+        for (const s of pool) {
+            const rounded = Math.round(s * 2) / 2;
+            freq.set(rounded, (freq.get(rounded) || 0) + 1);
+        }
+        const sortedPool = [...pool].sort((a, b) => a - b);
+        const median = sortedPool[Math.floor(sortedPool.length / 2)];
+
+        let bestSize = median;
+        let bestCount = 0;
+        freq.forEach((count, sz) => {
+            if (count > bestCount || (count === bestCount && Math.abs(sz - median) < Math.abs(bestSize - median))) {
+                bestCount = count;
+                bestSize = sz;
+            }
+        });
+        baseBodyFontPx = bestSize;
+    }
+
+    const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+    const renderedBodyFontPx = baseBodyFontPx * safeScale;
+    const rawFooterPx = renderedBodyFontPx * 0.8;
+    const footerFontPx = Number(Math.max(5.5, Math.min(10, rawFooterPx)).toFixed(2));
+    const borderTopWidthPx = safeScale < 0.85 ? 0.75 : 1;
+    const paddingTopPx = Number(Math.max(1.5, Math.min(4, footerFontPx * 0.28)).toFixed(1));
+
+    return {
+        baseBodyFontPx,
+        renderedBodyFontPx,
+        footerFontPx,
+        borderTopWidthPx,
+        paddingTopPx
+    };
+}
+
+

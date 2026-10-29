@@ -3,6 +3,7 @@ import React, { Suspense, lazy, useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../AppContext';
 import { PageHeader } from './common/PageHeader';
 import { HeaderTabs } from './common/HeaderTabs';
+import { RaporCloudPullControl } from './akademik/RaporWaCloudImportModal';
 
 const TabDesainRapor = lazy(() => import('./akademik/TabDesainRapor').then((module) => ({ default: module.TabDesainRapor })));
 const TabGeneratorFormulir = lazy(() => import('./akademik/TabGeneratorFormulir').then((module) => ({ default: module.TabGeneratorFormulir })));
@@ -28,6 +29,7 @@ interface RaporNavigationContext {
     tahunAjaran?: string;
     semester?: 'Ganjil' | 'Genap';
     templateId?: string;
+    generatorMode?: 'ledger' | 'audit_portal';
 }
 
 const Akademik: React.FC = () => {
@@ -120,12 +122,16 @@ const Akademik: React.FC = () => {
 
     const handleNavigateRaporTab = (
         tab: string,
-        rombelId?: number,
+        rombelIdOrPayload?: number | Record<string, any>,
         period?: { tahunAjaran: string; semester: 'Ganjil' | 'Genap' }
     ) => {
         setRaporNavContext(prev => ({
             ...prev,
-            ...(rombelId !== undefined ? { rombelId } : {}),
+            ...(typeof rombelIdOrPayload === 'number'
+                ? { rombelId: rombelIdOrPayload }
+                : rombelIdOrPayload && typeof rombelIdOrPayload === 'object'
+                ? rombelIdOrPayload
+                : {}),
             ...(period?.tahunAjaran ? { tahunAjaran: period.tahunAjaran } : {}),
             ...(period?.semester ? { semester: period.semester } : {})
         }));
@@ -164,6 +170,17 @@ const Akademik: React.FC = () => {
                 eyebrow="Pendidikan"
                 title="Akademik"
                 description="Kelola kurikulum, jurnal mengajar, progres nilai, dan rapor dari workspace akademik yang lebih modern."
+                actions={
+                    activeCategory === 'rapor' ? (
+                        <RaporCloudPullControl
+                            showWaShortcut
+                            defaultTahunAjaran={raporNavContext.tahunAjaran}
+                            defaultSemester={raporNavContext.semester}
+                            defaultRombelId={raporNavContext.rombelId}
+                            defaultTemplateId={raporNavContext.templateId}
+                        />
+                    ) : undefined
+                }
                 tabs={
                     <div className="space-y-3">
                         <HeaderTabs
@@ -183,11 +200,17 @@ const Akademik: React.FC = () => {
                 }
             />
 
-            <div className="app-panel rounded-panel p-6">
+            <div className="app-panel rounded-panel p-3 sm:p-6 min-w-0 overflow-x-hidden">
                 <Suspense fallback={<TabLoadingFallback />}>
                     {activeTab === 'jadwal' && <TabJadwalPelajaran />}
                     {activeTab === 'designer' && <TabDesainRapor onDirtyChange={setIsDesignerDirty} />}
-                    {activeTab === 'generator' && <TabGeneratorFormulir />}
+                    {activeTab === 'generator' && (
+                        <TabGeneratorFormulir
+                            initialMode={raporNavContext.generatorMode}
+                            initialTahunAjaran={raporNavContext.tahunAjaran}
+                            initialSemester={raporNavContext.semester}
+                        />
+                    )}
                     {activeTab === 'monitoring' && <TabMonitoringNilai onNavigateToTab={handleNavigateRaporTab} />}
                     {activeTab === 'leger' && (
                         <TabLegerNilai

@@ -767,6 +767,16 @@ export interface DigitalAsset {
     lastModified?: number;
 }
 
+export interface RaporCloudConfig {
+    googleScriptUrl?: string;
+    submissionMethod?: 'whatsapp' | 'google_sheet' | 'hybrid';
+    waDestination?: string;
+    tabMode?: 'per_rombel' | 'per_jenjang' | 'per_file';
+    updatedAt?: string;
+    lastSyncedAt?: string;
+    lastSyncedStudents?: number;
+}
+
 export interface PondokCustomInfoField {
     id: string;
     label: string;
@@ -823,6 +833,7 @@ export interface PondokSettings {
     waGatewayConfig?: WaGatewayConfig;
     
     raporTemplates?: RaporTemplate[];
+    raporCloudConfig?: RaporCloudConfig;
     
     // Surat Menyurat Redaksi
     suratTagihanPembuka: string;

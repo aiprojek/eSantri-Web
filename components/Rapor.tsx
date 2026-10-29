@@ -2,10 +2,10 @@ import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useAppContext } from '../AppContext';
 import { PageHeader } from './common/PageHeader';
 import { HeaderTabs } from './common/HeaderTabs';
+import { RaporCloudPullControl } from './akademik/RaporWaCloudImportModal';
 
 const TabDesainRapor = lazy(() => import('./akademik/TabDesainRapor').then((module) => ({ default: module.TabDesainRapor })));
 const TabGeneratorFormulir = lazy(() => import('./akademik/TabGeneratorFormulir').then((module) => ({ default: module.TabGeneratorFormulir })));
-const TabImportNilai = lazy(() => import('./akademik/TabImportNilai').then((module) => ({ default: module.TabImportNilai })));
 const TabDataNilai = lazy(() => import('./akademik/TabDataNilai').then((module) => ({ default: module.TabDataNilai })));
 const TabCetakRapor = lazy(() => import('./akademik/TabCetakRapor').then((module) => ({ default: module.TabCetakRapor })));
 const TabMonitoringNilai = lazy(() => import('./akademik/TabMonitoringNilai').then((module) => ({ default: module.TabMonitoringNilai })));
@@ -24,6 +24,7 @@ export interface SharedRaporContext {
     tahunAjaran?: string;
     semester?: 'Ganjil' | 'Genap';
     templateId?: string;
+    generatorMode?: 'ledger' | 'audit_portal';
 }
 
 type RaporTabId = 'designer' | 'generator' | 'import' | 'monitoring' | 'data' | 'print' | 'input_wali' | 'leger';
@@ -53,13 +54,18 @@ const Rapor: React.FC = () => {
 
     const handleNavigateWithContext = (
         tab: string,
-        contextPayload?: number | Partial<SharedRaporContext>
+        contextPayload?: number | Partial<SharedRaporContext>,
+        period?: { tahunAjaran: string; semester: 'Ganjil' | 'Genap' }
     ) => {
         let updatedContext: SharedRaporContext = { ...sharedContext };
         if (typeof contextPayload === 'number') {
             updatedContext.rombelId = contextPayload;
         } else if (contextPayload && typeof contextPayload === 'object') {
             updatedContext = { ...updatedContext, ...contextPayload };
+        }
+        if (period) {
+            updatedContext.tahunAjaran = period.tahunAjaran;
+            updatedContext.semester = period.semester;
         }
         setSharedContext(updatedContext);
         setActiveTab(tab as RaporTabId);
@@ -122,6 +128,15 @@ const Rapor: React.FC = () => {
                 eyebrow="Pendidikan"
                 title="Rapor"
                 description="Kelola template, input, monitoring, review, dan cetak rapor dalam workspace terpisah."
+                actions={
+                    <RaporCloudPullControl
+                        showWaShortcut
+                        defaultTahunAjaran={sharedContext.tahunAjaran}
+                        defaultSemester={sharedContext.semester}
+                        defaultRombelId={sharedContext.rombelId}
+                        defaultTemplateId={sharedContext.templateId}
+                    />
+                }
                 tabs={
                     <HeaderTabs
                         value={activeTab}
@@ -133,16 +148,23 @@ const Rapor: React.FC = () => {
             <div className="app-panel rounded-panel p-2 sm:p-4 lg:p-6 min-w-0 overflow-x-hidden">
                 <Suspense fallback={<TabLoadingFallback />}>
                     {activeTab === 'designer' && <TabDesainRapor />}
-                    {activeTab === 'generator' && <TabGeneratorFormulir />}
-                    {activeTab === 'monitoring' && (
-                        <TabMonitoringNilai 
-                            onNavigateToTab={(tab, payload) => handleNavigateWithContext(tab, payload)} 
+                    {activeTab === 'generator' && (
+                        <TabGeneratorFormulir
+                            initialMode={sharedContext.generatorMode}
+                            initialTahunAjaran={sharedContext.tahunAjaran}
+                            initialSemester={sharedContext.semester}
                         />
                     )}
-                    {activeTab === 'data' && <TabDataNilai />}
+                    {activeTab === 'monitoring' && (
+                        <TabMonitoringNilai 
+                            onNavigateToTab={(tab, payload, period) => handleNavigateWithContext(tab, payload, period)} 
+                        />
+                    )}
+                    {activeTab === 'data' && <TabDataNilai initialContext={sharedContext} />}
                     {activeTab === 'print' && (
                         <TabCetakRapor 
-                            onNavigateToTab={(tab, payload) => handleNavigateWithContext(tab, payload)} 
+                            initialContext={sharedContext}
+                            onNavigateToTab={(tab, payload, period) => handleNavigateWithContext(tab, payload, period)} 
                         />
                     )}
                     {(activeTab === 'input_wali' || activeTab === 'import') && (

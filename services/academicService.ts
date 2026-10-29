@@ -1,9 +1,10 @@
 
 
 
-import { Santri, PondokSettings, RaporRecord, NilaiMapel, RaporTemplate, GridCell } from '../types';
+import { Santri, PondokSettings, RaporRecord, NilaiMapel, RaporTemplate, GridCell, RaporInputMode } from '../types';
 import { db } from '../db';
 import { getTemplateSheets } from './raporExcelService';
+import { classifyRaporInputField } from './raporCalculationService';
 import { parseExcelCellCoord, parseExcelRangeCoord } from '../utils/raporFormulaUtils';
 
 // --- HELPER: RESOLVE MASTER CELL IN MERGED GRID ---
@@ -204,9 +205,10 @@ export interface GeneratorConfig {
     googleScriptUrl?: string;
     waDestination?: string; 
     rankingScope?: 'rombel' | 'kelas' | 'jenjang' | 'global';
+    tabMode?: 'per_rombel' | 'per_jenjang' | 'per_file';
 }
 
-interface RankConfig {
+export interface RankConfig {
     targetKey: string;
     sourceJs: string;
     limit: number;
@@ -217,14 +219,160 @@ export interface FormInteractiveCell {
     key: string;
     label: string;
     type: 'input' | 'formula' | 'dropdown';
+    inputMode?: RaporInputMode;
     options?: string[];
     sheetId: string;
     sheetName: string;
     formulaValue?: string;
+    formulaJs?: string;
     decimalPlaces?: number;
+    kind?: 'score' | 'attendance' | 'note' | 'short_text' | 'dropdown';
+    isNumericScore?: boolean;
+    isLongText?: boolean;
+    isAttendanceCount?: boolean;
+    kkm?: number;
     row: number;
     col: number;
 }
+
+export interface CompiledTemplateSchema {
+    sheets: { id: string; name: string }[];
+    interactiveCells: FormInteractiveCell[];
+    formulaCells: FormInteractiveCell[];
+    rankConfigs: RankConfig[];
+}
+
+export const compileTemplateInteractiveSchema = (
+    template: RaporTemplate,
+    settings: PondokSettings,
+    sheetId: string = 'all',
+    defaultRankingScope: 'rombel' | 'kelas' | 'jenjang' | 'global' = 'rombel'
+): CompiledTemplateSchema => {
+    const allSheets = getTemplateSheets(template);
+    const targetSheets = sheetId && sheetId !== 'all'
+        ? allSheets.filter(s => s.id === sheetId)
+        : allSheets;
+
+    const interactiveCells: FormInteractiveCell[] = [];
+    const formulaCells: FormInteractiveCell[] = [];
+    const rankConfigs: RankConfig[] = [];
+    const seenKeys = new Set<string>();
+
+    targetSheets.forEach(sheet => {
+        if (!sheet.cells || sheet.cells.length === 0) return;
+        const rCount = sheet.rowCount || sheet.cells.length;
+        const cCount = sheet.colCount || (sheet.cells[0]?.length || 0);
+
+        for (let r = 0; r < rCount; r++) {
+            const rowCells = sheet.cells[r] || [];
+            for (let c = 0; c < cCount; c++) {
+                const cell = rowCells[c];
+                if (!cell || cell.hidden || !cell.key) continue;
+                const trimmedKey = cell.key.trim();
+                if (!trimmedKey) continue;
+
+                if (cell.type === 'input' || cell.type === 'formula' || cell.type === 'dropdown') {
+                    if (!seenKeys.has(trimmedKey)) {
+                        seenKeys.add(trimmedKey);
+
+                        let label = trimmedKey;
+                        const labelCellLeft = [...rowCells]
+                            .reverse()
+                            .find(ch => ch && ch.col < cell.col && ch.type === 'label' && ch.value && ch.value.trim() !== '' && !ch.value.startsWith('$'));
+
+                        if (labelCellLeft) {
+                            label = labelCellLeft.value.trim();
+                        } else if (cell.value && cell.value.trim() !== '' && !cell.value.startsWith('$') && cell.type !== 'formula') {
+                            label = cell.value.trim();
+                        }
+
+                        const expandedFormula = cell.type === 'formula' && cell.value
+                            ? expandSheetFormulaCoords(cell.value, sheet.cells)
+                            : cell.value;
+
+                        const classification = cell.type !== 'formula'
+                            ? classifyRaporInputField({
+                                key: trimmedKey,
+                                label: label || trimmedKey,
+                                type: cell.type,
+                                inputMode: cell.inputMode,
+                                mataPelajaran: settings.mataPelajaran || [],
+                                jenjangId: template.jenjangId
+                            })
+                            : undefined;
+
+                        const formCell: FormInteractiveCell = {
+                            key: trimmedKey,
+                            label: label || trimmedKey,
+                            type: cell.type,
+                            inputMode: cell.inputMode,
+                            options: cell.options,
+                            sheetId: sheet.id,
+                            sheetName: sheet.name || 'Lembar 1',
+                            formulaValue: expandedFormula,
+                            formulaJs: cell.type === 'formula' && expandedFormula ? convertFormulaToJs(expandedFormula) : undefined,
+                            decimalPlaces: cell.decimalPlaces,
+                            kind: classification?.kind,
+                            isNumericScore: classification?.isNumericScore,
+                            isLongText: classification?.isLongText,
+                            isAttendanceCount: classification?.isAttendanceCount,
+                            kkm: classification?.kkm,
+                            row: r,
+                            col: c
+                        };
+
+                        interactiveCells.push(formCell);
+
+                        if (cell.type === 'formula' && expandedFormula) {
+                            const topRankMatch = expandedFormula.trim().match(/^(?:RANK|PERINGKAT)\s*\(([\s\S]*)\)$/i);
+                            if (topRankMatch) {
+                                const rankArgs = splitTopLevelArgs(topRankMatch[1]);
+                                const sourceExpr = rankArgs[0] || '0';
+                                let scope: 'rombel' | 'kelas' | 'jenjang' | 'global' = defaultRankingScope;
+                                let limit = 0;
+
+                                const checkParam = (rawParam: string | undefined) => {
+                                    if (!rawParam) return;
+                                    const cleaned = rawParam.trim().replace(/^["']|["']$/g, '').trim().toLowerCase();
+                                    if (!cleaned) return;
+                                    if (/^\d+$/.test(cleaned)) {
+                                        limit = parseInt(cleaned, 10);
+                                    } else if (cleaned === 'rombel') {
+                                        scope = 'rombel';
+                                    } else if (cleaned === 'kelas' || cleaned === 'tingkat' || cleaned === 'paralel') {
+                                        scope = 'kelas';
+                                    } else if (cleaned === 'jenjang' || cleaned === 'marhalah') {
+                                        scope = 'jenjang';
+                                    } else if (cleaned === 'global' || cleaned === 'pondok' || cleaned === 'all') {
+                                        scope = 'global';
+                                    }
+                                };
+                                checkParam(rankArgs[1]);
+                                checkParam(rankArgs[2]);
+
+                                rankConfigs.push({
+                                    targetKey: trimmedKey,
+                                    sourceJs: convertFormulaToJs(sourceExpr),
+                                    limit,
+                                    scope
+                                });
+                            } else {
+                                formulaCells.push(formCell);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    return {
+        sheets: targetSheets.map(s => ({ id: s.id, name: s.name || 'Lembar' })),
+        interactiveCells,
+        formulaCells,
+        rankConfigs
+    };
+};
 
 export const generateRaporFormHtml = (
     santriList: Santri[],
@@ -322,107 +470,17 @@ export const generateRaporFormHtml = (
         throw new Error("Target Rombel, Kelas, Rentang Kelas, atau Jenjang harus dipilih.");
     }
 
-    // 3. Extract sheets and interactive cells
-    const allSheets = getTemplateSheets(config.template);
-    const targetSheets = config.sheetId && config.sheetId !== 'all'
-        ? allSheets.filter(s => s.id === config.sheetId)
-        : allSheets;
-
-    const interactiveCells: FormInteractiveCell[] = [];
-    const formulaCells: FormInteractiveCell[] = [];
-    const rankConfigs: RankConfig[] = [];
-    const seenKeys = new Set<string>();
-
-    targetSheets.forEach(sheet => {
-        if (!sheet.cells || sheet.cells.length === 0) return;
-        const rCount = sheet.rowCount || sheet.cells.length;
-        const cCount = sheet.colCount || (sheet.cells[0]?.length || 0);
-
-        for (let r = 0; r < rCount; r++) {
-            const rowCells = sheet.cells[r] || [];
-            for (let c = 0; c < cCount; c++) {
-                const cell = rowCells[c];
-                if (!cell || cell.hidden || !cell.key) continue;
-                const trimmedKey = cell.key.trim();
-                if (!trimmedKey) continue;
-
-                if (cell.type === 'input' || cell.type === 'formula' || cell.type === 'dropdown') {
-                    if (!seenKeys.has(trimmedKey)) {
-                        seenKeys.add(trimmedKey);
-
-                        // Find descriptive label in row before this cell, or above
-                        let label = trimmedKey;
-                        const labelCellLeft = [...rowCells]
-                            .reverse()
-                            .find(ch => ch && ch.col < cell.col && ch.type === 'label' && ch.value && ch.value.trim() !== '' && !ch.value.startsWith('$'));
-                        
-                        if (labelCellLeft) {
-                            label = labelCellLeft.value.trim();
-                        } else if (cell.value && cell.value.trim() !== '' && !cell.value.startsWith('$') && cell.type !== 'formula') {
-                            label = cell.value.trim();
-                        }
-
-                        const expandedFormula = cell.type === 'formula' && cell.value
-                            ? expandSheetFormulaCoords(cell.value, sheet.cells)
-                            : cell.value;
-
-                        const formCell: FormInteractiveCell = {
-                            key: trimmedKey,
-                            label: label || trimmedKey,
-                            type: cell.type,
-                            options: cell.options,
-                            sheetId: sheet.id,
-                            sheetName: sheet.name || 'Lembar 1',
-                            formulaValue: expandedFormula,
-                            decimalPlaces: cell.decimalPlaces,
-                            row: r,
-                            col: c
-                        };
-
-                        interactiveCells.push(formCell);
-
-                        if (cell.type === 'formula' && expandedFormula) {
-                            const topRankMatch = expandedFormula.trim().match(/^(?:RANK|PERINGKAT)\s*\(([\s\S]*)\)$/i);
-                            if (topRankMatch) {
-                                const rankArgs = splitTopLevelArgs(topRankMatch[1]);
-                                const sourceExpr = rankArgs[0] || '0';
-                                let scope: 'rombel' | 'kelas' | 'jenjang' | 'global' = defaultRankingScope;
-                                let limit = 0;
-
-                                const checkParam = (rawParam: string | undefined) => {
-                                    if (!rawParam) return;
-                                    const cleaned = rawParam.trim().replace(/^["']|["']$/g, '').trim().toLowerCase();
-                                    if (!cleaned) return;
-                                    if (/^\d+$/.test(cleaned)) {
-                                        limit = parseInt(cleaned, 10);
-                                    } else if (cleaned === 'rombel') {
-                                        scope = 'rombel';
-                                    } else if (cleaned === 'kelas' || cleaned === 'tingkat' || cleaned === 'paralel') {
-                                        scope = 'kelas';
-                                    } else if (cleaned === 'jenjang' || cleaned === 'marhalah') {
-                                        scope = 'jenjang';
-                                    } else if (cleaned === 'global' || cleaned === 'pondok' || cleaned === 'all') {
-                                        scope = 'global';
-                                    }
-                                };
-                                checkParam(rankArgs[1]);
-                                checkParam(rankArgs[2]);
-
-                                rankConfigs.push({
-                                    targetKey: trimmedKey,
-                                    sourceJs: convertFormulaToJs(sourceExpr),
-                                    limit,
-                                    scope
-                                });
-                            } else {
-                                formulaCells.push(formCell);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    });
+    // 3. Extract sheets and interactive cells via shared compiler
+    const compiledSchema = compileTemplateInteractiveSchema(
+        config.template,
+        settings,
+        config.sheetId || 'all',
+        defaultRankingScope
+    );
+    const targetSheets = compiledSchema.sheets;
+    const interactiveCells = compiledSchema.interactiveCells;
+    const formulaCells = compiledSchema.formulaCells;
+    const rankConfigs = compiledSchema.rankConfigs;
 
     const formulaScripts = formulaCells.map(c => {
         const jsExpression = convertFormulaToJs(c.formulaValue || '');
@@ -601,11 +659,19 @@ export const generateRaporFormHtml = (
     });
 
     const inputKeysToSave = interactiveCells.map(c => c.key);
-    const scriptUrl = config.googleScriptUrl || '';
+    const inputOnlyKeys = interactiveCells.filter(c => c.type !== 'formula').map(c => c.key);
+    const columnLabelsMap: Record<string, string> = {};
+    interactiveCells.forEach(c => {
+        columnLabelsMap[c.key] = c.label || c.key;
+    });
+    const effectiveTabMode = config.tabMode || 'per_rombel';
+    const scriptUrl = (config.googleScriptUrl || '').trim();
     const waDest = config.waDestination ? config.waDestination.replace(/^0/, '62').replace(/[^0-9]/g, '') : '';
     const santriMetaArray = targetSantri.map(s => {
         const rombelObj = settings.rombel.find(r => Number(r.id) === Number(s.rombelId));
         const kelasObj = settings.kelas.find(k => Number(k.id) === Number(s.kelasId)) || (rombelObj ? settings.kelas.find(k => Number(k.id) === Number(rombelObj.kelasId)) : null);
+        const jenjangIdResolved = s.jenjangId || (kelasObj ? kelasObj.jenjangId : 0);
+        const jenjangObj = settings.jenjang.find(j => Number(j.id) === Number(jenjangIdResolved));
         return {
             id: s.id,
             nama: s.namaLengkap,
@@ -614,7 +680,8 @@ export const generateRaporFormHtml = (
             rombelName: rombelObj?.nama || 'Tanpa Rombel',
             kelasId: s.kelasId || (kelasObj ? kelasObj.id : 0),
             kelasName: kelasObj?.nama || 'Tanpa Kelas',
-            jenjangId: s.jenjangId || 0
+            jenjangId: jenjangIdResolved,
+            jenjangName: jenjangObj?.nama || ''
         };
     });
     const rankConfigsScript = `[${rankConfigs.map(rc => `{
@@ -733,8 +800,24 @@ export const generateRaporFormHtml = (
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify(payload) 
             })
-            .then((res) => {
+            .then(async (res) => {
                  if (!res.ok) throw new Error('HTTP ' + res.status);
+                 let respJson = null;
+                 try {
+                     const rawText = await res.text();
+                     if (rawText) respJson = JSON.parse(rawText);
+                 } catch (_) {}
+                 if (respJson && respJson.result === 'error') {
+                     throw new Error(respJson.error || 'Terjadi kendala pada Google Apps Script');
+                 }
+                 records.forEach(r => {
+                     if (Array.isArray(r.clearedKeys) && loadedBaselineBySantri[r.santriId]) {
+                         r.clearedKeys.forEach(ck => { delete loadedBaselineBySantri[r.santriId][ck]; });
+                     }
+                     Object.entries(r.data || {}).forEach(([dk, dv]) => {
+                         if (inputOnlySet.has(dk)) markLoadedBaseline(r.santriId, dk, dv);
+                     });
+                 });
                  ${config.submissionMethod === 'google_sheet' ? `showFormToast('Data nilai berhasil dikirim ke Cloud Spreadsheet!', 'success'); btn.disabled = false; btn.innerHTML = originalText;` : `
                     const jsonString = JSON.stringify(payload);
                     const encoded = btoa(unescape(encodeURIComponent(jsonString)));
@@ -851,6 +934,13 @@ export const generateRaporFormHtml = (
         let currentCardIndex = 0;
         let currentActiveSheet = 'all';
         let toastTimer = null;
+        const loadedBaselineBySantri = {};
+        function markLoadedBaseline(sid, key, val) {
+            if (val !== '' && val !== null && val !== undefined) {
+                if (!loadedBaselineBySantri[sid]) loadedBaselineBySantri[sid] = {};
+                loadedBaselineBySantri[sid][key] = true;
+            }
+        }
 
         function showFormToast(msg, type = 'success', actionUrl = '') {
             const box = document.getElementById('form-toast');
@@ -1248,8 +1338,10 @@ export const generateRaporFormHtml = (
                     Object.entries(row || {}).forEach(([key, val]) => { 
                         const el = document.getElementById('val_' + sid + '_' + key); 
                         const cardEl = document.getElementById('card_val_' + sid + '_' + key); 
-                        if (el) el.value = String(val ?? ''); 
-                        if (cardEl) cardEl.value = String(val ?? ''); 
+                        const strVal = String(val ?? '');
+                        if (el) el.value = strVal; 
+                        if (cardEl) cardEl.value = strVal; 
+                        markLoadedBaseline(sid, key, strVal);
                     }); 
                 }); 
                 santriIds.forEach(id => calculateRow(id)); 
@@ -1303,6 +1395,67 @@ export const generateRaporFormHtml = (
             hint.innerHTML = '<span class="opacity-75">Mapel:</span> <b>' + mapel + '</b> <span class="opacity-75 ml-2">Santri:</span> <b>' + santri + '</b>'; 
         }
 
+        async function loadFromCloudGas() {
+            const url = ${JSON.stringify(scriptUrl)};
+            if (!url) return;
+            const btn = document.getElementById('cloud-pull-btn');
+            const origHtml = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="inline-block animate-spin mr-1">↻</span>Memuat...';
+            }
+            try {
+                const res = await fetch(url, { method: 'GET' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const raw = await res.json();
+                const rows = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : []);
+                const inputOnlySet = new Set(${JSON.stringify(inputOnlyKeys)});
+                const targetTahun = ${JSON.stringify(config.tahunAjaran)};
+                const targetSemester = ${JSON.stringify(config.semester)};
+                const targetTemplateId = ${JSON.stringify(config.template.id)};
+                let appliedCount = 0;
+
+                rows.forEach(item => {
+                    if (item.TahunAjaran && String(item.TahunAjaran) !== targetTahun) return;
+                    if (item.Semester && String(item.Semester) !== targetSemester) return;
+                    if (item.TemplateID && String(item.TemplateID) !== targetTemplateId) return;
+                    const sid = Number(item.SantriID);
+                    if (!sid || !santriIds.includes(sid)) return;
+                    let parsed = {};
+                    try {
+                        parsed = typeof item.DataJSON === 'string' ? JSON.parse(item.DataJSON) : (item.DataJSON || {});
+                    } catch(err) { parsed = {}; }
+                    let touched = false;
+                    Object.entries(parsed).forEach(([k, val]) => {
+                        if (!inputOnlySet.has(k)) return;
+                        if (val === '' || val === null || val === undefined) return;
+                        const el = document.getElementById('val_' + sid + '_' + k);
+                        const cardEl = document.getElementById('card_val_' + sid + '_' + k);
+                        const strVal = String(val);
+                        if (el) el.value = strVal;
+                        if (cardEl) cardEl.value = strVal;
+                        markLoadedBaseline(sid, k, strVal);
+                        touched = true;
+                    });
+                    if (touched) appliedCount++;
+                });
+
+                santriIds.forEach(id => calculateRow(id));
+                if (appliedCount > 0) {
+                    showFormToast('Berhasil memuat nilai terbaru dari Cloud untuk ' + appliedCount + ' santri.', 'success');
+                } else {
+                    showFormToast('Belum ada nilai tersimpan di Cloud untuk periode & template ini.', 'info');
+                }
+            } catch (err) {
+                showFormToast('Gagal memuat dari Cloud: ' + err.message, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
+                }
+            }
+        }
+
         function submitData() { 
             santriIds.forEach(id => calculateRow(id)); 
             const btn = document.getElementById('submit-btn'); 
@@ -1311,26 +1464,69 @@ export const generateRaporFormHtml = (
             btn.innerHTML = '<span class="inline-block animate-spin mr-2">↻</span>Memproses...'; 
             try { 
                 const inputKeys = ${JSON.stringify(inputKeysToSave)}; 
+                const inputOnlySet = new Set(${JSON.stringify(inputOnlyKeys)});
+                const columnLabels = ${JSON.stringify(columnLabelsMap)};
                 const records = []; 
                 santriList.forEach(s => { 
-                    const santriRecord = { santriId: s.id, santriName: s.nama, data: {} }; 
-                    inputKeys.forEach(key => { 
-                        const el = document.getElementById('val_' + s.id + '_' + key) || document.getElementById('card_val_' + s.id + '_' + key); 
-                        if(el) { 
-                            const val = el.value; 
-                            if (val !== "" && val !== null) santriRecord.data[key] = val; 
-                        } 
-                    }); 
-                    records.push(santriRecord); 
+                    const baselineForSantri = loadedBaselineBySantri[s.id] || {};
+                    const clearedKeys = [];
+                    Array.from(inputOnlySet).forEach(key => {
+                        const el = document.getElementById('val_' + s.id + '_' + key) || document.getElementById('card_val_' + s.id + '_' + key);
+                        const val = el ? String(el.value ?? '').trim() : '';
+                        if (val === '' && baselineForSantri[key]) {
+                            clearedKeys.push(key);
+                        }
+                    });
+
+                    const hasUserScore = Array.from(inputOnlySet).some(key => {
+                        const el = document.getElementById('val_' + s.id + '_' + key) || document.getElementById('card_val_' + s.id + '_' + key);
+                        return el && String(el.value ?? '').trim() !== '';
+                    });
+                    if (!hasUserScore && clearedKeys.length === 0) return;
+
+                    const santriRecord = {
+                        santriId: s.id,
+                        nis: s.nis || '',
+                        santriName: s.nama,
+                        rombelId: s.rombelId || 0,
+                        rombelName: s.rombelName || '',
+                        kelasId: s.kelasId || 0,
+                        kelasName: s.kelasName || '',
+                        jenjangId: s.jenjangId || 0,
+                        jenjangName: s.jenjangName || '',
+                        data: {},
+                        ...(clearedKeys.length > 0 ? { clearedKeys } : {})
+                    }; 
+                    if (hasUserScore) {
+                        inputKeys.forEach(key => { 
+                            const el = document.getElementById('val_' + s.id + '_' + key) || document.getElementById('card_val_' + s.id + '_' + key); 
+                            if(el) { 
+                                const val = String(el.value ?? '').trim(); 
+                                if (!inputOnlySet.has(key) && val === '-') return;
+                                if (val !== "" && val !== null) santriRecord.data[key] = val; 
+                            } 
+                        }); 
+                    }
+                    if (Object.keys(santriRecord.data).length > 0 || clearedKeys.length > 0) {
+                        records.push(santriRecord);
+                    }
                 }); 
+                if (records.length === 0) {
+                    showFormToast("Belum ada nilai santri yang diisi untuk dikirim.", "error");
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    return;
+                }
                 const payload = { 
                     meta: { 
                         rombelId: ${config.rombelId}, 
-                        rombelName: "${contextName}", 
-                        templateName: "${config.template.name}", 
-                        tahunAjaran: "${config.tahunAjaran}", 
-                        semester: "${config.semester}", 
-                        templateId: "${config.template.id}", 
+                        rombelName: ${JSON.stringify(contextName)}, 
+                        templateName: ${JSON.stringify(config.template.name)}, 
+                        tahunAjaran: ${JSON.stringify(config.tahunAjaran)}, 
+                        semester: ${JSON.stringify(config.semester)}, 
+                        templateId: ${JSON.stringify(config.template.id)}, 
+                        tabMode: ${JSON.stringify(effectiveTabMode)},
+                        columnLabels: columnLabels,
                         timestamp: new Date().toISOString() 
                     }, 
                     records: records 
@@ -1385,6 +1581,12 @@ export const generateRaporFormHtml = (
                             <i class="bi bi-card-text mr-1"></i> Form Kartu
                         </button>
                     </div>
+
+                    ${scriptUrl && config.submissionMethod !== 'whatsapp' ? `
+                    <button id="cloud-pull-btn" onclick="loadFromCloudGas()" class="bg-white/15 border border-white/30 text-white px-3 py-2 rounded-xl font-bold text-xs hover:bg-white/25 transition-all flex items-center gap-1.5" title="Tarik data nilai terakhir yang sudah masuk di Cloud Spreadsheet">
+                        <i class="bi bi-cloud-arrow-down"></i> Muat Cloud
+                    </button>
+                    ` : ''}
 
                     <!-- Draft & Action Buttons -->
                     <button onclick="saveDraft()" class="bg-white/15 border border-white/30 text-white px-3 py-2 rounded-xl font-bold text-xs hover:bg-white/25 transition-all flex items-center gap-1.5">
@@ -1472,13 +1674,29 @@ export const generateRaporFormHtml = (
 </html>`;
 };
 
-export const fetchRaporFromCloud = async (scriptUrl: string): Promise<any[]> => {
+export const fetchRaporFromCloud = async (
+    scriptUrl: string,
+    filterOptions?: ParseRaporFilterOptions
+): Promise<any[]> => {
     try {
-        const response = await fetch(scriptUrl);
-        if (!response.ok) throw new Error("Gagal mengambil data dari Google Sheet");
+        let targetUrl = scriptUrl.trim();
+        if (filterOptions) {
+            const params = new URLSearchParams();
+            if (filterOptions.tahunAjaran) params.set('tahunAjaran', filterOptions.tahunAjaran);
+            if (filterOptions.semester) params.set('semester', filterOptions.semester);
+            if (filterOptions.templateId) params.set('templateId', filterOptions.templateId);
+            if (filterOptions.rombelId) params.set('rombelId', String(filterOptions.rombelId));
+            const qs = params.toString();
+            if (qs) {
+                targetUrl += (targetUrl.includes('?') ? '&' : '?') + qs;
+            }
+        }
+        const response = await fetch(targetUrl, { method: 'GET' });
+        if (!response.ok) throw new Error("Gagal mengambil data dari Google Sheet (HTTP " + response.status + ")");
         const rawData = await response.json();
-        if (!Array.isArray(rawData)) throw new Error("Format data tidak valid");
-        return rawData;
+        if (Array.isArray(rawData)) return rawData;
+        if (rawData && Array.isArray(rawData.records)) return rawData.records;
+        throw new Error("Format respons Google Script tidak valid.");
     } catch (e) { console.error("Fetch Cloud Error:", e); throw e; }
 };
 
@@ -1496,152 +1714,684 @@ const decodeBase64Utf8 = (b64: string): string => {
     }
 };
 
-export const parseRaporDataV2 = async (encryptedString: string, settings: PondokSettings): Promise<{ successCount: number; errors: string[] }> => {
+export interface ParseRaporFilterOptions {
+    tahunAjaran?: string;
+    semester?: 'Ganjil' | 'Genap';
+    templateId?: string;
+    rombelId?: number;
+    allowedRombelIds?: number[];
+}
+
+export interface RaporSyncStats {
+    uniqueStudentsUpdated: number;
+    newRecordsCount: number;
+    mergedRecordsCount: number;
+    fieldsMergedCount: number;
+    tabsDetected: string[];
+    skippedLockedCount: number;
+    skippedOutOfScopeCount: number;
+}
+
+export interface RaporCloudInspectionSummary {
+    totalRows: number;
+    uniqueStudents: number;
+    tabs: Array<{ name: string; rowCount: number }>;
+    periods: string[];
+    rombels: Array<{ id: number; name: string; studentCount: number }>;
+    templates: Array<{ id: string; name: string; rowCount: number }>;
+    latestTimestamp: string | null;
+}
+
+const RESERVED_CLOUD_ROW_KEYS = new Set([
+    'Timestamp',
+    'RombelID',
+    'RombelNama',
+    'TemplateID',
+    'TahunAjaran',
+    'Semester',
+    'SantriID',
+    'NIS',
+    'NamaSantri',
+    'SheetName',
+    'DataJSON'
+]);
+
+export const inspectRaporCloudSummary = (
+    rows: any[],
+    settings: PondokSettings
+): RaporCloudInspectionSummary => {
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const studentSet = new Set<number>();
+    const tabMap = new Map<string, number>();
+    const periodSet = new Set<string>();
+    const rombelStudentMap = new Map<number, { name: string; students: Set<number> }>();
+    const tplMap = new Map<string, number>();
+    let latestTsMs = 0;
+    let latestTsIso: string | null = null;
+
+    for (const row of safeRows) {
+        if (!row) continue;
+        const sid = parseInt(String(row.SantriID || ''), 10);
+        if (sid > 0) studentSet.add(sid);
+
+        const sheetName = String(row.SheetName || 'Sheet Utama').trim();
+        tabMap.set(sheetName, (tabMap.get(sheetName) || 0) + 1);
+
+        const ta = String(row.TahunAjaran || '').trim();
+        const sem = String(row.Semester || '').trim();
+        if (ta || sem) periodSet.add([ta, sem].filter(Boolean).join(' • '));
+
+        const rId = parseInt(String(row.RombelID || '0'), 10) || 0;
+        const rombelMaster = settings.rombel.find(r => Number(r.id) === rId);
+        const rName = rombelMaster?.nama || String(row.RombelNama || (rId ? `Rombel #${rId}` : 'Tanpa Rombel'));
+        if (!rombelStudentMap.has(rId)) {
+            rombelStudentMap.set(rId, { name: rName, students: new Set() });
+        }
+        if (sid > 0) rombelStudentMap.get(rId)!.students.add(sid);
+
+        const tplId = String(row.TemplateID || '').trim();
+        if (tplId) {
+            tplMap.set(tplId, (tplMap.get(tplId) || 0) + 1);
+        }
+
+        if (row.Timestamp) {
+            const parsedTime = new Date(row.Timestamp).getTime();
+            if (!isNaN(parsedTime) && parsedTime > latestTsMs) {
+                latestTsMs = parsedTime;
+                latestTsIso = new Date(parsedTime).toISOString();
+            }
+        }
+    }
+
+    return {
+        totalRows: safeRows.length,
+        uniqueStudents: studentSet.size,
+        tabs: Array.from(tabMap.entries()).map(([name, rowCount]) => ({ name, rowCount })),
+        periods: Array.from(periodSet),
+        rombels: Array.from(rombelStudentMap.entries()).map(([id, info]) => ({
+            id,
+            name: info.name,
+            studentCount: info.students.size
+        })),
+        templates: Array.from(tplMap.entries()).map(([id, rowCount]) => {
+            const tplObj = settings.raporTemplates?.find(t => t.id === id);
+            return { id, name: tplObj?.name || id, rowCount };
+        }),
+        latestTimestamp: latestTsIso
+    };
+};
+
+export const syncRaporStructuredData = async (
+    data: any,
+    settings: PondokSettings,
+    filterOptions?: ParseRaporFilterOptions
+): Promise<{ successCount: number; errors: string[]; stats: RaporSyncStats }> => {
+    const errors: string[] = [];
+    const uniqueStudentSet = new Set<number>();
+    const tabsDetectedSet = new Set<string>();
+    let newRecordsCount = 0;
+    let mergedRecordsCount = 0;
+    let fieldsMergedCount = 0;
+    let skippedLockedCount = 0;
+    let skippedOutOfScopeCount = 0;
+
+    const allowedRombelSet =
+        filterOptions?.allowedRombelIds && filterOptions.allowedRombelIds.length > 0
+            ? new Set(filterOptions.allowedRombelIds.map(id => Number(id)))
+            : null;
+
+    // Preload seluruh santri sekali saja untuk kecepatan tinggi pada ratusan baris GAS
+    const allSantri = await db.santri.toArray();
+    const santriLookup = new Map<number, Santri>();
+    allSantri.forEach(s => santriLookup.set(Number(s.id), s));
+
+    // Cache raporRecords per periode agar multi-template di periode sama selalu menggabungkan ke record terbaru
+    const periodRecordCache = new Map<string, Map<number, RaporRecord>>();
+    const getPeriodMap = async (tahunAjaran: string, semester: string): Promise<Map<number, RaporRecord>> => {
+        const pKey = `${tahunAjaran}__${semester}`;
+        if (periodRecordCache.has(pKey)) return periodRecordCache.get(pKey)!;
+        const recs = await db.raporRecords
+            .where('[tahunAjaran+semester]')
+            .equals([tahunAjaran, semester])
+            .toArray();
+        const rMap = new Map<number, RaporRecord>();
+        recs.forEach(r => {
+            const existingInMap = rMap.get(Number(r.santriId));
+            if (!existingInMap || (existingInMap.deleted && !r.deleted)) {
+                rMap.set(Number(r.santriId), r);
+            }
+        });
+        periodRecordCache.set(pKey, rMap);
+        return rMap;
+    };
+
+    const normalizeSem = (raw: string): 'Ganjil' | 'Genap' => {
+        return String(raw || '').trim().toLowerCase() === 'genap' ? 'Genap' : 'Ganjil';
+    };
+
+    const processPayload = async (payload: any) => {
+        const metaTahun = String(payload.meta?.tahunAjaran || '').trim();
+        const metaSemester = normalizeSem(payload.meta?.semester || 'Ganjil');
+        const metaTemplateId = String(payload.meta?.templateId || '').trim();
+
+        if (!metaTahun) return;
+
+        if (filterOptions?.tahunAjaran && metaTahun !== String(filterOptions.tahunAjaran).trim()) {
+            return;
+        }
+        if (filterOptions?.semester && metaSemester.toLowerCase() !== String(filterOptions.semester).trim().toLowerCase()) {
+            return;
+        }
+        if (filterOptions?.templateId && metaTemplateId && metaTemplateId !== String(filterOptions.templateId).trim()) {
+            return;
+        }
+
+        const approvalMap = settings.raporApprovalStatus || {};
+        const globalLockKey = `${metaTahun}_${metaSemester}_all`;
+        const periodMap = await getPeriodMap(metaTahun, metaSemester);
+
+        for (const rec of payload.records || []) {
+            const santriIdNum = Number(rec.santriId);
+            if (!santriIdNum) continue;
+
+            const santriObj = santriLookup.get(santriIdNum);
+            const existing = periodMap.get(santriIdNum);
+
+            const recRombelId = Number(rec.rombelId) || Number(payload.meta?.rombelId) || 0;
+            // Utamakan rombel aktif santri di DB lokal jika ada, atau fallback ke RombelID kiriman
+            const targetRombelId =
+                (santriObj && !santriObj.deleted && santriObj.rombelId ? Number(santriObj.rombelId) : 0) ||
+                recRombelId ||
+                existing?.rombelId ||
+                0;
+
+            if (filterOptions?.rombelId && filterOptions.rombelId > 0 && Number(targetRombelId) !== Number(filterOptions.rombelId)) {
+                continue;
+            }
+
+            if (allowedRombelSet && !allowedRombelSet.has(Number(targetRombelId))) {
+                skippedOutOfScopeCount++;
+                continue;
+            }
+
+            const rombelLockKey = targetRombelId > 0
+                ? `${metaTahun}_${metaSemester}_${targetRombelId}`
+                : '';
+
+            if (approvalMap[globalLockKey] === 'locked' || (rombelLockKey && approvalMap[rombelLockKey] === 'locked')) {
+                skippedLockedCount++;
+                const sName = rec.santriName || santriObj?.namaLengkap || `ID ${santriIdNum}`;
+                errors.push(`Rapor terkunci: Nilai ${sName} dilewati karena rapor rombel telah disahkan/dikunci.`);
+                continue;
+            }
+
+            const rombelObj = settings.rombel.find(r => Number(r.id) === Number(targetRombelId));
+            const targetKelasId = santriObj?.kelasId || rombelObj?.kelasId || existing?.kelasId || 0;
+            const kelasObj = settings.kelas.find(k => Number(k.id) === Number(targetKelasId));
+            const targetJenjangId = santriObj?.jenjangId || kelasObj?.jenjangId || existing?.jenjangId || 0;
+
+            let customData: Record<string, any> = {};
+            if (existing && !existing.deleted && existing.customData) {
+                try {
+                    customData = JSON.parse(existing.customData);
+                } catch {
+                    customData = {};
+                }
+            }
+
+            let mergedInThisRecord = 0;
+            if (Array.isArray(rec.clearedKeys) && rec.clearedKeys.length > 0) {
+                rec.clearedKeys.forEach((ck: string) => {
+                    const cleanCk = String(ck || '').trim();
+                    if (cleanCk && Object.prototype.hasOwnProperty.call(customData, cleanCk)) {
+                        delete customData[cleanCk];
+                        mergedInThisRecord++;
+                    }
+                });
+            }
+            if (rec.data && typeof rec.data === 'object') {
+                Object.keys(rec.data).forEach(key => {
+                    if (key === '__cleared') return;
+                    const val = rec.data[key];
+                    if (val !== '' && val !== null && val !== undefined) {
+                        customData[key] = String(val);
+                        mergedInThisRecord++;
+                    }
+                });
+            }
+
+            if (mergedInThisRecord === 0 && existing && !existing.deleted) {
+                continue;
+            }
+
+            // Lookup case-insensitive untuk presensi, catatan, dan keputusan
+            const upperMap: Record<string, any> = {};
+            Object.keys(customData).forEach(k => {
+                upperMap[k.trim().toUpperCase()] = customData[k];
+            });
+
+            const parseNumField = (keys: string[], fallback: number): number => {
+                for (const k of keys) {
+                    const candidate = customData[k] !== undefined ? customData[k] : upperMap[k.toUpperCase()];
+                    if (candidate !== undefined && candidate !== null && String(candidate).trim() !== '') {
+                        const parsed = Math.round(Number(String(candidate).replace(',', '.')));
+                        if (!isNaN(parsed) && parsed >= 0) return parsed;
+                    }
+                }
+                return fallback;
+            };
+
+            const parseStrField = (keys: string[], fallback: string): string => {
+                for (const k of keys) {
+                    const candidate = customData[k] !== undefined ? customData[k] : upperMap[k.toUpperCase()];
+                    if (candidate !== undefined && candidate !== null && String(candidate).trim() !== '') {
+                        return String(candidate);
+                    }
+                }
+                return fallback;
+            };
+
+            const baseExisting = existing && !existing.deleted ? existing : null;
+
+            const recordToSave: Omit<RaporRecord, 'id'> = {
+                santriId: santriIdNum,
+                tahunAjaran: metaTahun,
+                semester: metaSemester,
+                rombelId: targetRombelId,
+                jenjangId: targetJenjangId,
+                kelasId: targetKelasId,
+                nilai: baseExisting?.nilai || [],
+                sakit: parseNumField(['SAKIT', 'JML_SAKIT', 'ABSENSI_SAKIT', 'S'], baseExisting?.sakit || 0),
+                izin: parseNumField(['IZIN', 'JML_IZIN', 'ABSENSI_IZIN', 'I'], baseExisting?.izin || 0),
+                alpha: parseNumField(['ALPHA', 'ALPA', 'JML_ALPHA', 'ABSENSI_ALPHA', 'TANPA_KETERANGAN', 'A'], baseExisting?.alpha || 0),
+                kepribadian: baseExisting?.kepribadian || [],
+                ekstrakurikuler: baseExisting?.ekstrakurikuler || [],
+                catatanWaliKelas: parseStrField(['CATATAN_WALI_KELAS', 'CATATAN_WALI', 'CATATAN'], baseExisting?.catatanWaliKelas || ''),
+                keputusan: parseStrField(['KEPUTUSAN', 'STATUS_NAIK'], baseExisting?.keputusan || ''),
+                tahfizhGanjil: baseExisting?.tahfizhGanjil,
+                tahfizhGenap: baseExisting?.tahfizhGenap,
+                tanggalRapor: baseExisting?.tanggalRapor || new Date().toISOString(),
+                customData: JSON.stringify(customData),
+                deleted: false,
+                lastModified: Date.now()
+            };
+
+            if (existing) {
+                const updatedRec = { ...recordToSave, id: existing.id } as RaporRecord;
+                await db.raporRecords.put(updatedRec);
+                periodMap.set(santriIdNum, updatedRec);
+                if (existing.deleted) newRecordsCount++;
+                else mergedRecordsCount++;
+            } else {
+                const newId = await db.raporRecords.add(recordToSave as RaporRecord);
+                periodMap.set(santriIdNum, { ...recordToSave, id: Number(newId) } as RaporRecord);
+                newRecordsCount++;
+            }
+
+            fieldsMergedCount += mergedInThisRecord;
+            uniqueStudentSet.add(santriIdNum);
+        }
+    };
+
+    if (data && data.meta && Array.isArray(data.records)) {
+        await processPayload(data);
+    } else if (Array.isArray(data)) {
+        // Gabungkan seluruh baris GAS berdasarkan (TahunAjaran + Semester + SantriID) secara kronologis
+        const groupedBatches = new Map<string, { meta: any; santriMap: Map<number, any> }>();
+
+        // Urutkan berdasarkan Timestamp jika tersedia agar setoran terbaru selalu menang
+        const sortedRows = [...data].sort((a, b) => {
+            const ta = a?.Timestamp ? new Date(a.Timestamp).getTime() : 0;
+            const tb = b?.Timestamp ? new Date(b.Timestamp).getTime() : 0;
+            if (isNaN(ta) || isNaN(tb)) return 0;
+            return ta - tb;
+        });
+
+        for (const row of sortedRows) {
+            if (!row) continue;
+            const santriIdNum = parseInt(String(row.SantriID || ''), 10);
+            if (!santriIdNum) continue;
+            const tahunAjaran = String(row.TahunAjaran || '').trim();
+            const semester = String(row.Semester || '').trim();
+            const templateId = String(row.TemplateID || '').trim();
+            if (!tahunAjaran || !semester) continue;
+
+            if (filterOptions?.templateId && templateId && templateId !== String(filterOptions.templateId).trim()) {
+                continue;
+            }
+
+            if (row.SheetName) {
+                tabsDetectedSet.add(String(row.SheetName));
+            }
+
+            let parsedRowData: Record<string, any> = {};
+            if (row.DataJSON) {
+                try {
+                    parsedRowData = typeof row.DataJSON === 'string' ? JSON.parse(row.DataJSON) : row.DataJSON;
+                } catch {
+                    parsedRowData = {};
+                }
+            }
+
+            // Fallback two-way: jika ada kolom ekstra langsung pada objek row (misal [KEY]), ikut gabungkan
+            Object.keys(row).forEach(colName => {
+                if (RESERVED_CLOUD_ROW_KEYS.has(colName)) return;
+                const val = row[colName];
+                if (val === '' || val === null || val === undefined) return;
+                const bracketMatch = colName.match(/\[([^\]]+)\]\s*$/);
+                const extractedKey = bracketMatch ? bracketMatch[1].trim() : colName.trim();
+                if (extractedKey) {
+                    parsedRowData[extractedKey] = val;
+                }
+            });
+
+            const batchKey = `${tahunAjaran}__${normalizeSem(semester)}`;
+            if (!groupedBatches.has(batchKey)) {
+                groupedBatches.set(batchKey, {
+                    meta: {
+                        rombelId: parseInt(String(row.RombelID || '0'), 10) || 0,
+                        tahunAjaran,
+                        semester: normalizeSem(semester),
+                        templateId: filterOptions?.templateId || ''
+                    },
+                    santriMap: new Map()
+                });
+            }
+
+            const batch = groupedBatches.get(batchKey)!;
+            const existingEntry = batch.santriMap.get(santriIdNum) || {
+                santriId: santriIdNum,
+                santriName: row.NamaSantri || '',
+                rombelId: parseInt(String(row.RombelID || '0'), 10) || 0,
+                data: {} as Record<string, any>,
+                clearedSet: new Set<string>()
+            };
+
+            if (row.RombelID && parseInt(String(row.RombelID), 10) > 0) {
+                existingEntry.rombelId = parseInt(String(row.RombelID), 10);
+            }
+
+            if (parsedRowData && typeof parsedRowData === 'object') {
+                if (parsedRowData.__cleared && typeof parsedRowData.__cleared === 'object') {
+                    Object.keys(parsedRowData.__cleared).forEach(ck => {
+                        if (parsedRowData.__cleared[ck]) {
+                            existingEntry.clearedSet.add(ck);
+                            delete existingEntry.data[ck];
+                        }
+                    });
+                }
+                Object.keys(parsedRowData).forEach(k => {
+                    if (k === '__cleared') return;
+                    const v = parsedRowData[k];
+                    if (v !== '' && v !== null && v !== undefined) {
+                        existingEntry.data[k] = v;
+                        existingEntry.clearedSet.delete(k);
+                    }
+                });
+            }
+
+            batch.santriMap.set(santriIdNum, existingEntry);
+        }
+
+        for (const batch of groupedBatches.values()) {
+            try {
+                const normalizedRecords = Array.from(batch.santriMap.values()).map(entry => ({
+                    santriId: entry.santriId,
+                    santriName: entry.santriName,
+                    rombelId: entry.rombelId,
+                    data: entry.data,
+                    ...(entry.clearedSet && entry.clearedSet.size > 0
+                        ? { clearedKeys: Array.from(entry.clearedSet) }
+                        : {})
+                }));
+                await processPayload({
+                    meta: batch.meta,
+                    records: normalizedRecords
+                });
+            } catch (err: any) {
+                errors.push(err.message);
+            }
+        }
+    } else {
+        throw new Error('Format data tidak dikenali.');
+    }
+
+    const stats: RaporSyncStats = {
+        uniqueStudentsUpdated: uniqueStudentSet.size,
+        newRecordsCount,
+        mergedRecordsCount,
+        fieldsMergedCount,
+        tabsDetected: Array.from(tabsDetectedSet),
+        skippedLockedCount,
+        skippedOutOfScopeCount
+    };
+
+    return {
+        successCount: uniqueStudentSet.size,
+        errors,
+        stats
+    };
+};
+
+export const parseRaporDataV2 = async (
+    encryptedString: string,
+    settings: PondokSettings,
+    filterOptions?: ParseRaporFilterOptions
+): Promise<{ successCount: number; errors: string[]; stats?: RaporSyncStats }> => {
     try {
         const decoded = decodeBase64Utf8(encryptedString);
         const data = JSON.parse(decoded);
-        let successCount = 0;
-        const errors: string[] = [];
+        return await syncRaporStructuredData(data, settings, filterOptions);
+    } catch (e) {
+        throw new Error('Gagal memproses data: ' + (e as Error).message);
+    }
+};
 
-        const processPayload = async (payload: any) => {
-            const template = settings.raporTemplates?.find(t => t.id === payload.meta.templateId);
-            if (!template) {
-                errors.push(`Template ID ${payload.meta.templateId} tidak ditemukan.`);
-                return;
+export interface PushRaporCloudParams {
+    scriptUrl?: string;
+    settings: PondokSettings;
+    template: RaporTemplate;
+    tahunAjaran: string;
+    semester: 'Ganjil' | 'Genap';
+    santriList: Santri[];
+    currentGrades: Record<number, Record<string, string>>;
+    previousGrades?: Record<number, Record<string, string>>;
+    rombelId?: number;
+    rombelName?: string;
+}
+
+/**
+ * Mengirimkan (Push) nilai terbaru & koreksi/penghapusan nilai dari Leger Aplikasi kembali ke Google Apps Script (GAS),
+ * sehingga Google Sheet & Portal Audit Tanpa Login selalu sinkron dua arah dengan Aplikasi.
+ */
+export const pushRaporGradesToCloud = async (
+    params: PushRaporCloudParams
+): Promise<{ pushedStudents: number; sheets: string[] }> => {
+    const cleanUrl = (params.scriptUrl || params.settings.raporCloudConfig?.googleScriptUrl || '').trim();
+    if (!cleanUrl) {
+        return { pushedStudents: 0, sheets: [] };
+    }
+
+    const schema = compileTemplateInteractiveSchema(params.template, params.settings, 'all');
+    const columnLabels: Record<string, string> = {};
+    const templateKeySet = new Set<string>();
+
+    schema.interactiveCells.forEach(cell => {
+        columnLabels[cell.key] = cell.label || cell.key;
+        if (cell.type !== 'formula') {
+            templateKeySet.add(cell.key);
+        }
+    });
+
+    // Sertakan juga atribut standar wali kelas agar ikut tersinkron
+    const standardWaliLabels: Record<string, string> = {
+        SAKIT: 'Sakit',
+        IZIN: 'Izin',
+        ALPHA: 'Alpha',
+        CATATAN_WALI_KELAS: 'Catatan Wali Kelas',
+        KEPUTUSAN: 'Keputusan'
+    };
+    Object.entries(standardWaliLabels).forEach(([k, lbl]) => {
+        if (!columnLabels[k]) columnLabels[k] = lbl;
+        templateKeySet.add(k);
+    });
+
+    const records: Array<{
+        santriId: number;
+        nis: string;
+        santriName: string;
+        rombelId: number;
+        rombelName: string;
+        kelasId: number;
+        kelasName: string;
+        jenjangId: number;
+        jenjangName: string;
+        data: Record<string, string>;
+        clearedKeys?: string[];
+    }> = [];
+
+    for (const s of params.santriList) {
+        const cur = params.currentGrades[s.id] || {};
+        const prev = params.previousGrades?.[s.id] || {};
+
+        const dataObj: Record<string, string> = {};
+        const clearedKeys: string[] = [];
+
+        templateKeySet.forEach(key => {
+            const rawCur = cur[key] !== undefined && cur[key] !== null ? String(cur[key]).trim() : '';
+            const rawPrev = prev[key] !== undefined && prev[key] !== null ? String(prev[key]).trim() : '';
+            if (rawCur !== '' && rawCur !== '-') {
+                dataObj[key] = rawCur;
+            } else if (rawPrev !== '' && rawPrev !== '-' && rawCur === '') {
+                clearedKeys.push(key);
             }
+        });
 
-            const approvalMap = settings.raporApprovalStatus || {};
-            const globalLockKey = `${payload.meta.tahunAjaran}_${payload.meta.semester}_all`;
+        if (Object.keys(dataObj).length === 0 && clearedKeys.length === 0) continue;
 
-            for (const rec of payload.records || []) {
-                const santriIdNum = Number(rec.santriId);
-                if (!santriIdNum) continue;
+        const rObj = params.settings.rombel.find(r => Number(r.id) === Number(s.rombelId));
+        const kObj =
+            params.settings.kelas.find(k => Number(k.id) === Number(s.kelasId)) ||
+            (rObj ? params.settings.kelas.find(k => Number(k.id) === Number(rObj.kelasId)) : undefined);
+        const jId = s.jenjangId || kObj?.jenjangId || 0;
+        const jObj = params.settings.jenjang.find(j => Number(j.id) === Number(jId));
 
-                const santriObj = await db.santri.get(santriIdNum);
-                const existing = await db.raporRecords
-                    .where({
-                        santriId: santriIdNum,
-                        tahunAjaran: payload.meta.tahunAjaran,
-                        semester: payload.meta.semester
-                    })
-                    .first();
+        records.push({
+            santriId: s.id,
+            nis: s.nis || '',
+            santriName: s.namaLengkap,
+            rombelId: s.rombelId || params.rombelId || 0,
+            rombelName: rObj?.nama || params.rombelName || 'Rombel',
+            kelasId: s.kelasId || kObj?.id || 0,
+            kelasName: kObj?.nama || '',
+            jenjangId: jId,
+            jenjangName: jObj?.nama || '',
+            data: dataObj,
+            ...(clearedKeys.length > 0 ? { clearedKeys } : {})
+        });
+    }
 
-                const metaRombelId = Number(payload.meta.rombelId) || 0;
-                const targetRombelId = metaRombelId > 0
-                    ? metaRombelId
-                    : (santriObj?.rombelId || existing?.rombelId || 0);
+    if (records.length === 0) {
+        return { pushedStudents: 0, sheets: [] };
+    }
 
-                const rombelLockKey = targetRombelId > 0
-                    ? `${payload.meta.tahunAjaran}_${payload.meta.semester}_${targetRombelId}`
-                    : '';
+    const payload = {
+        meta: {
+            rombelId: params.rombelId || 0,
+            rombelName: params.rombelName || 'Rombel',
+            templateId: params.template.id,
+            templateName: params.template.name,
+            tahunAjaran: params.tahunAjaran,
+            semester: params.semester,
+            tabMode: params.settings.raporCloudConfig?.tabMode || 'per_rombel',
+            columnLabels,
+            timestamp: new Date().toISOString()
+        },
+        records
+    };
 
-                if (approvalMap[globalLockKey] === 'locked' || (rombelLockKey && approvalMap[rombelLockKey] === 'locked')) {
-                    const sName = rec.santriName || santriObj?.namaLengkap || `ID ${santriIdNum}`;
-                    errors.push(`Rapor terkunci: Nilai ${sName} ditolak karena rapor rombel telah disahkan/dikunci.`);
-                    continue;
+    const res = await fetch(cleanUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+    }
+
+    let respJson: any = null;
+    try {
+        const rawText = await res.text();
+        if (rawText) respJson = JSON.parse(rawText);
+    } catch {
+        // non-json response fallback
+    }
+
+    if (respJson && respJson.result === 'error') {
+        throw new Error(respJson.error || 'Terjadi kendala saat memperbarui Google Sheet');
+    }
+
+    return {
+        pushedStudents: Number(respJson?.mergedStudents ?? records.length),
+        sheets: Array.isArray(respJson?.sheets) ? respJson.sheets : []
+    };
+};
+
+/**
+ * Menghapus baris rapor santri pada Google Sheet (GAS) ketika arsip rapor santri dihapus di aplikasi.
+ */
+export const deleteRaporRecordFromCloud = async (params: {
+    settings: PondokSettings;
+    rec: RaporRecord;
+    santri?: Santri;
+    templates?: RaporTemplate[];
+}): Promise<void> => {
+    const cleanUrl = (params.settings.raporCloudConfig?.googleScriptUrl || '').trim();
+    if (!cleanUrl) return;
+
+    const rObj = params.settings.rombel.find(
+        r => Number(r.id) === Number(params.rec.rombelId || params.santri?.rombelId || 0)
+    );
+    const kObj = rObj ? params.settings.kelas.find(k => Number(k.id) === Number(rObj.kelasId)) : undefined;
+    const jObj = kObj ? params.settings.jenjang.find(j => Number(j.id) === Number(kObj.jenjangId)) : undefined;
+
+    const candidateTemplates =
+        params.templates && params.templates.length > 0
+            ? params.templates
+            : (params.settings.raporTemplates || []).filter(
+                  t => !t.jenjangId || !jObj || Number(t.jenjangId) === Number(jObj.id)
+              );
+
+    for (const tpl of candidateTemplates) {
+        const payload = {
+            meta: {
+                rombelId: rObj?.id || params.rec.rombelId || 0,
+                rombelName: rObj?.nama || 'Rombel',
+                templateId: tpl.id,
+                templateName: tpl.name,
+                tahunAjaran: params.rec.tahunAjaran,
+                semester: params.rec.semester,
+                tabMode: params.settings.raporCloudConfig?.tabMode || 'per_rombel',
+                timestamp: new Date().toISOString()
+            },
+            records: [
+                {
+                    santriId: params.rec.santriId,
+                    nis: params.santri?.nis || '',
+                    santriName: params.santri?.namaLengkap || '',
+                    rombelId: rObj?.id || params.rec.rombelId || 0,
+                    rombelName: rObj?.nama || 'Rombel',
+                    jenjangName: jObj?.nama || '',
+                    deleteRecord: true
                 }
-
-                const rombelObj = settings.rombel.find(r => Number(r.id) === Number(targetRombelId));
-                const targetKelasId = santriObj?.kelasId || rombelObj?.kelasId || existing?.kelasId || 0;
-                const kelasObj = settings.kelas.find(k => Number(k.id) === Number(targetKelasId));
-                const targetJenjangId = santriObj?.jenjangId || kelasObj?.jenjangId || existing?.jenjangId || 0;
-
-                let customData: Record<string, any> = {};
-                if (existing && !existing.deleted && existing.customData) {
-                    try {
-                        customData = JSON.parse(existing.customData);
-                    } catch {
-                        customData = {};
-                    }
-                }
-
-                // Smart Merge: Only update if incoming value is non-empty
-                if (rec.data && typeof rec.data === 'object') {
-                    Object.keys(rec.data).forEach(key => {
-                        const val = rec.data[key];
-                        if (val !== '' && val !== null && val !== undefined) {
-                            customData[key] = val;
-                        }
-                    });
-                }
-
-                const parseNumField = (keys: string[], fallback: number): number => {
-                    for (const k of keys) {
-                        if (customData[k] !== undefined && customData[k] !== null && String(customData[k]).trim() !== '') {
-                            const parsed = parseInt(String(customData[k]), 10);
-                            if (!isNaN(parsed)) return parsed;
-                        }
-                    }
-                    return fallback;
-                };
-
-                const parseStrField = (keys: string[], fallback: string): string => {
-                    for (const k of keys) {
-                        if (customData[k] !== undefined && customData[k] !== null && String(customData[k]).trim() !== '') {
-                            return String(customData[k]);
-                        }
-                    }
-                    return fallback;
-                };
-
-                const baseExisting = existing && !existing.deleted ? existing : null;
-
-                const recordToSave: Omit<RaporRecord, 'id'> = {
-                    santriId: santriIdNum,
-                    tahunAjaran: payload.meta.tahunAjaran,
-                    semester: payload.meta.semester,
-                    rombelId: targetRombelId,
-                    jenjangId: targetJenjangId,
-                    kelasId: targetKelasId,
-                    nilai: baseExisting?.nilai || [],
-                    sakit: parseNumField(['SAKIT', 'JML_SAKIT'], baseExisting?.sakit || 0),
-                    izin: parseNumField(['IZIN', 'JML_IZIN'], baseExisting?.izin || 0),
-                    alpha: parseNumField(['ALPHA', 'ALPA', 'TANPA_KETERANGAN'], baseExisting?.alpha || 0),
-                    kepribadian: baseExisting?.kepribadian || [],
-                    ekstrakurikuler: baseExisting?.ekstrakurikuler || [],
-                    catatanWaliKelas: parseStrField(['CATATAN_WALI_KELAS', 'CATATAN_WALI', 'CATATAN'], baseExisting?.catatanWaliKelas || ''),
-                    keputusan: parseStrField(['KEPUTUSAN', 'STATUS_NAIK'], baseExisting?.keputusan || ''),
-                    tahfizhGanjil: baseExisting?.tahfizhGanjil,
-                    tahfizhGenap: baseExisting?.tahfizhGenap,
-                    tanggalRapor: new Date().toISOString(),
-                    customData: JSON.stringify(customData),
-                    deleted: false,
-                    lastModified: Date.now()
-                };
-
-                if (existing) {
-                    await db.raporRecords.put({ ...recordToSave, id: existing.id } as RaporRecord);
-                } else {
-                    await db.raporRecords.add(recordToSave as RaporRecord);
-                }
-                successCount++;
-            }
+            ]
         };
 
-        if (data.meta && data.records) {
-            await processPayload(data);
-        } else if (Array.isArray(data)) {
-            for (const row of data) {
-                if (!row.DataJSON) continue;
-                try {
-                    await processPayload({
-                        meta: {
-                            rombelId: parseInt(row.RombelID, 10) || 0,
-                            tahunAjaran: row.TahunAjaran,
-                            semester: row.Semester,
-                            templateId: row.TemplateID
-                        },
-                        records: [{ santriId: parseInt(row.SantriID, 10), santriName: row.NamaSantri, data: JSON.parse(row.DataJSON) }]
-                    });
-                } catch (err: any) {
-                    errors.push(err.message);
-                }
-            }
-        } else {
-            throw new Error("Format data tidak dikenali.");
-        }
-        return { successCount, errors };
-    } catch (e) {
-        throw new Error("Gagal memproses data: " + (e as Error).message);
+        await fetch(cleanUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+        });
     }
 };

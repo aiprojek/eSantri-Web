@@ -2,11 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporRecord, RaporTemplate } from '../../types';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { formatAcademicYearDisplay } from '../../utils/academicYear';
 import { getTemplateSheets, extractTemplateKeys } from '../../services/raporExcelService';
+import { RaporCloudPullControl } from './RaporWaCloudImportModal';
+import { deleteRaporRecordFromCloud } from '../../services/academicService';
 
 export interface TabDataNilaiProps {
     initialContext?: {
@@ -40,7 +43,6 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
     const [sortBy, setSortBy] = useState<'name_asc' | 'name_desc' | 'nis' | 'completion_desc' | 'completion_asc' | 'date_desc'>('name_asc');
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
     const [selectedSheetId, setSelectedSheetId] = useState<string>('all');
-    const [archiveRecords, setArchiveRecords] = useState<RaporRecord[]>([]);
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     
     // Modal review detail
@@ -65,17 +67,19 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
         }
     }, [initialContext, settings.rombel, settings.kelas, setFilterTahun, setFilterSemester]);
 
-    useEffect(() => {
-        const fetchRecords = async () => {
-            const currentYearFilter = filterTahun || availableYears[0] || defaultAcademicYear;
+    const currentYearFilter = filterTahun || availableYears[0] || defaultAcademicYear;
+    const liveArchiveRecords = useLiveQuery(
+        async () => {
+            if (!currentYearFilter || !filterSemester) return [];
             const records = await db.raporRecords
                 .where('[tahunAjaran+semester]')
                 .equals([currentYearFilter, filterSemester])
                 .toArray();
-            setArchiveRecords(records.filter(r => !r.deleted));
-        };
-        fetchRecords();
-    }, [filterTahun, filterSemester, defaultAcademicYear, availableYears]);
+            return records.filter(r => !r.deleted);
+        },
+        [currentYearFilter, filterSemester]
+    );
+    const archiveRecords = liveArchiveRecords || [];
 
     // Available classes based on selected Jenjang
     const availableKelas = useMemo(() => {
@@ -190,9 +194,15 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
             showToast('Data nilai tidak dapat dihapus karena rapor pada rombel ini sedang dikunci. Buka kunci terlebih dahulu di menu Cetak Rapor.', 'error');
             return;
         }
-        showConfirmation('Hapus Data Rapor?', 'Data nilai santri ini akan dihapus dari arsip.', async () => {
+        showConfirmation('Hapus Data Rapor?', 'Data nilai santri ini akan dihapus dari arsip aplikasi (serta dibersihkan dari Google Sheet GAS jika terhubung).', async () => {
             await db.raporRecords.update(rec.id, { deleted: true, lastModified: Date.now() });
-            setArchiveRecords(prev => prev.filter(p => p.id !== rec.id));
+            const targetSantri = santriList.find(s => s.id === rec.santriId);
+            deleteRaporRecordFromCloud({
+                settings,
+                rec,
+                santri: targetSantri,
+                templates: activeTemplate ? [activeTemplate] : undefined
+            }).catch(() => {});
             showToast('Data rapor berhasil dihapus.', 'success');
         }, { confirmColor: 'red' });
     };
@@ -417,11 +427,20 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
         <div className="space-y-6">
             <div className="bg-amber-50/80 p-4 border-l-4 border-amber-500 text-amber-900 rounded-r-2xl text-sm flex items-start gap-3 shadow-sm">
                 <i className="bi bi-info-circle-fill text-lg text-amber-600 mt-0.5 shrink-0"></i>
-                <div>
-                    <strong className="block font-bold">Review Data & Arsip Rapor</strong>
+                <div className="flex-1 min-w-0">
+                    <strong className="block font-bold">Review Data &amp; Arsip Rapor</strong>
                     <p className="text-xs text-amber-800/90 mt-0.5">
                         Tinjau kelengkapan nilai, rincian per lembar format rapor, dan arsip data santri sebelum pencetakan rapor.
                     </p>
+                </div>
+                <div className="shrink-0">
+                    <RaporCloudPullControl
+                        compact
+                        defaultTahunAjaran={currentYearFilter}
+                        defaultSemester={filterSemester}
+                        defaultRombelId={filterRombel ? parseInt(filterRombel) : undefined}
+                        defaultTemplateId={selectedTemplateId || undefined}
+                    />
                 </div>
             </div>
 

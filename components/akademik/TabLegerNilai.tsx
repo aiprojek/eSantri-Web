@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { RaporTemplate, RaporRecord } from '../../types';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
@@ -12,6 +13,7 @@ import {
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { PrintHeader } from '../common/PrintHeader';
 import { formatDate } from '../../utils/formatters';
+import { RaporCloudPullControl } from './RaporWaCloudImportModal';
 
 interface TabLegerNilaiProps {
     onNavigateToInputWali?: (rombelId?: number) => void;
@@ -61,16 +63,13 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
     }, [initialTahunAjaran, initialSemester, initialRombelId]);
 
     // Data state
-    const [template, setTemplate] = useState<RaporTemplate | null>(null);
-    const [records, setRecords] = useState<RaporRecord[]>([]);
-    const [isLoading, setIsLoading] = useState<boolean>(false);
     const [isExporting, setIsExporting] = useState<boolean>(false);
     const [activeLegerSheetId, setActiveLegerSheetId] = useState<string>('all');
 
     // Reset active sheet filter when rombel or template changes
     useEffect(() => {
         setActiveLegerSheetId('all');
-    }, [selectedRombelId, template?.id]);
+    }, [selectedRombelId, selectedTemplateId]);
 
     // View & Display Toggles
     const [searchQuery, setSearchQuery] = useState<string>('');
@@ -222,43 +221,30 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
             .sort((a, b) => a.namaLengkap.localeCompare(b.namaLengkap));
     }, [selectedRombelId, santriList]);
 
-    // Fetch Template & Records for this Rombel & Period
-    useEffect(() => {
-        const fetchData = async () => {
-            if (!selectedRombelId) return;
-            setIsLoading(true);
+    // Reactive Template & Records for this Rombel & Period
+    const template = useMemo<RaporTemplate | null>(() => {
+        if (selectedTemplateId) {
+            const chosen = availableTemplates.find(t => t.id === selectedTemplateId);
+            if (chosen) return chosen;
+        }
+        return availableTemplates.length > 0 ? availableTemplates[0] : null;
+    }, [selectedTemplateId, availableTemplates]);
 
-            try {
-                const rId = parseInt(selectedRombelId);
-
-                // 1. Fetch matching template
-                let matchedTemplate: RaporTemplate | null = null;
-                if (selectedTemplateId) {
-                    matchedTemplate = availableTemplates.find(t => t.id === selectedTemplateId) || null;
-                }
-                if (!matchedTemplate && availableTemplates.length > 0) {
-                    matchedTemplate = availableTemplates[0];
-                }
-                setTemplate(matchedTemplate);
-
-                // 2. Fetch records
-                const currentYear = filterTahun || availableYears[0] || defaultAcademicYear;
-                const recs = await db.raporRecords
-                    .where('[tahunAjaran+semester]')
-                    .equals([currentYear, filterSemester])
-                    .toArray();
-
-                const filtered = recs.filter(r => !r.deleted && r.rombelId === rId);
-                setRecords(filtered);
-            } catch (err) {
-                console.error('Error fetching leger data:', err);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchData();
-    }, [selectedRombelId, selectedTemplateId, availableTemplates, filterTahun, filterSemester, settings, defaultAcademicYear, availableYears]);
+    const currentYear = filterTahun || availableYears[0] || defaultAcademicYear;
+    const liveRecords = useLiveQuery(
+        async () => {
+            if (!selectedRombelId || !currentYear || !filterSemester) return [];
+            const rId = parseInt(selectedRombelId);
+            const recs = await db.raporRecords
+                .where('[tahunAjaran+semester]')
+                .equals([currentYear, filterSemester])
+                .toArray();
+            return recs.filter(r => !r.deleted && r.rombelId === rId);
+        },
+        [selectedRombelId, currentYear, filterSemester]
+    );
+    const isLoading = Boolean(selectedRombelId) && liveRecords === undefined;
+    const records = liveRecords || [];
 
     // Build consolidated Leger Data with full calculations
     const legerData = useMemo(() => {
@@ -595,6 +581,14 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
 
                     {/* Right: Actions */}
                     <div className="flex flex-wrap items-center gap-2">
+                        <RaporCloudPullControl
+                            compact
+                            defaultTahunAjaran={currentYear}
+                            defaultSemester={filterSemester}
+                            defaultRombelId={selectedRombelId ? parseInt(selectedRombelId) : undefined}
+                            defaultTemplateId={selectedTemplateId || undefined}
+                        />
+
                         <button
                             onClick={() => setIsPrintModalOpen(true)}
                             className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"

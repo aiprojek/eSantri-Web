@@ -43,6 +43,8 @@ import {
     getEffectivePopulatedColCount,
     computePaginatedRaporLayout,
     getRenderableRowCellsForPage,
+    resolveExactColPixelWidths,
+    computeRaporFooterTypography,
     PaginatedRaporPage,
     PaginatedSliceCell,
     RaporPageScalePreset,
@@ -429,6 +431,10 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
     );
 
     const badgeText = formatPageSetupBadgeLabel(pageSetup, paginatedLayout.scale);
+    const footerTypo = useMemo(
+        () => computeRaporFooterTypography(sheet.cells, paginatedLayout.scale),
+        [sheet.cells, paginatedLayout.scale]
+    );
 
     const renderSliceCellTd = (sliceItem: PaginatedSliceCell, rIdx: number, keyPrefix: string) => {
         const { cell, masterC, colSpan, rowSpan, borders } = sliceItem;
@@ -656,17 +662,14 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                 }}
             >
                 <div ref={measureHeaderRef}>{renderDocumentHeader()}</div>
-                <table className="w-full border-collapse table-fixed">
+                <table className="border-collapse table-fixed" style={{ width: `${measureWidth}px` }}>
                     <colgroup>
-                        {activeColWidths.map((w, cIdx) => (
-                            <col
-                                key={cIdx}
-                                style={{
-                                    width: totalColWidth > paperMetrics.availableW
-                                        ? `${w}px`
-                                        : `${((w / Math.max(1, totalColWidth)) * 100).toFixed(3)}%`
-                                }}
-                            />
+                        {resolveExactColPixelWidths(
+                            activeColWidths,
+                            measureWidth,
+                            totalColWidth <= paperMetrics.availableW
+                        ).map((pxW, cIdx) => (
+                            <col key={cIdx} style={{ width: `${pxW}px` }} />
                         ))}
                     </colgroup>
                     <tbody>
@@ -686,11 +689,15 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
             {/* Discrete Physical Paper Pages */}
             {paginatedLayout.pages.map((page, pageIdx) => {
                 const isVeryLastOutputPage = isLastDocument && isLastSheet && pageIdx === paginatedLayout.pages.length - 1;
-                const scaledSliceW = Math.floor(page.sliceNaturalWidth * paginatedLayout.scale);
+                const scaledSliceW = Math.ceil(page.sliceNaturalWidth * paginatedLayout.scale);
                 const viewportMaxH = paperMetrics.availableH;
                 const footerBottomPx = Math.max(4, Math.min(10, Math.floor(paperMetrics.padPx * 0.35)));
                 const isScaled = paginatedLayout.scale !== 1;
-                const sliceSumCols = page.sliceColWidths.reduce((a, b) => a + b, 0) || 1;
+                const exactSliceColPx = resolveExactColPixelWidths(
+                    page.sliceColWidths,
+                    page.sliceNaturalWidth,
+                    page.stretchColsToFillWidth
+                );
                 const rowIndices: number[] = [];
                 if (page.endRow >= page.startRow) {
                     for (let r = page.startRow; r <= page.endRow; r++) {
@@ -708,6 +715,7 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                             height: paperMetrics.heightCss,
                             minHeight: paperMetrics.heightCss,
                             maxHeight: paperMetrics.heightCss,
+                            padding: `${paperMetrics.padPx}px`,
                             overflow: 'hidden',
                             pageBreakAfter: isVeryLastOutputPage ? 'auto' : 'always',
                             breakAfter: isVeryLastOutputPage ? 'auto' : 'page',
@@ -733,7 +741,7 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                                 width: `${scaledSliceW}px`,
                                 height: isScaled ? `${viewportMaxH}px` : undefined,
                                 maxHeight: `${viewportMaxH}px`,
-                                overflow: 'hidden',
+                                overflow: 'visible',
                                 margin: '0 auto',
                                 position: 'relative'
                             }}
@@ -751,17 +759,13 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                             >
                                 {page.includeDocHeader && renderDocumentHeader()}
 
-                                <table className="w-full border-collapse table-fixed">
+                                <table
+                                    className="border-collapse table-fixed"
+                                    style={{ width: `${page.sliceNaturalWidth}px` }}
+                                >
                                     <colgroup>
-                                        {page.sliceColWidths.map((w, cIdx) => (
-                                            <col
-                                                key={cIdx}
-                                                style={{
-                                                    width: page.stretchColsToFillWidth
-                                                        ? `${((w / sliceSumCols) * 100).toFixed(3)}%`
-                                                        : `${w}px`
-                                                }}
-                                            />
+                                        {exactSliceColPx.map((pxW, cIdx) => (
+                                            <col key={cIdx} style={{ width: `${pxW}px` }} />
                                         ))}
                                     </colgroup>
                                     <tbody>
@@ -789,19 +793,27 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                         </div>
 
                         <div
-                            className={`border-t border-slate-300 pt-0.5 text-[8pt] text-slate-500 italic leading-tight select-none flex items-center ${
+                            className={`rapor-credit-footer italic select-none flex items-center ${
                                 page.totalPages > 1 ? 'justify-between gap-2' : 'justify-center text-center'
                             }`}
                             style={{
                                 position: 'absolute',
                                 bottom: `${footerBottomPx}px`,
                                 left: `${paperMetrics.padPx}px`,
-                                right: `${paperMetrics.padPx}px`
+                                right: `${paperMetrics.padPx}px`,
+                                borderTop: `${footerTypo.borderTopWidthPx}px solid #bfbfbf`,
+                                paddingTop: `${footerTypo.paddingTopPx}px`,
+                                fontSize: `${footerTypo.footerFontPx}px`,
+                                lineHeight: 1.2,
+                                color: '#666666'
                             }}
                         >
-                            <span>{RAPOR_CREDIT_FOOTER_TEXT}</span>
+                            <span style={{ color: '#666666' }}>{RAPOR_CREDIT_FOOTER_TEXT}</span>
                             {page.totalPages > 1 && (
-                                <span className="not-italic text-[9px] tabular-nums shrink-0">
+                                <span
+                                    className="not-italic tabular-nums shrink-0"
+                                    style={{ color: '#666666', fontSize: `${footerTypo.footerFontPx}px` }}
+                                >
                                     {santri.namaLengkap} · Halaman {page.pageNumber} dari {page.totalPages}
                                 </span>
                             )}
@@ -1159,7 +1171,6 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
     }, [tanggalRapor, settings.hijriAdjustment]);
 
     // Records and Leger Calculations Map
-    const [periodRecordsMap, setPeriodRecordsMap] = useState<Map<number, RaporRecord>>(new Map());
     const [studentLegerMap, setStudentLegerMap] = useState<Map<number, StudentLegerRow>>(new Map());
     const [rombelCohortMetaMap, setRombelCohortMetaMap] = useState<Map<number, {
         classAverages: Record<string, number>;
@@ -1432,26 +1443,25 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
         }
     }, [availableYears, defaultAcademicYear, filterTahun, setFilterTahun]);
 
-    // Load Period Records
-    useEffect(() => {
-        const loadPeriodRecords = async () => {
-            if (!filterTahun || !filterSemester) {
-                setPeriodRecordsMap(new Map());
-                return;
-            }
-
+    // Reactive Period Records via useLiveQuery
+    const livePeriodRecords = useLiveQuery(
+        async () => {
+            if (!filterTahun || !filterSemester) return [];
             const records = await getRaporRecordsByPeriod(filterTahun, filterSemester);
-            const map = new Map<number, RaporRecord>();
-            records.forEach((record) => {
-                if (!record.deleted) {
-                    map.set(record.santriId, record);
-                }
-            });
-            setPeriodRecordsMap(map);
-        };
+            return records.filter(r => !r.deleted);
+        },
+        [filterTahun, filterSemester]
+    );
 
-        loadPeriodRecords();
-    }, [filterTahun, filterSemester]);
+    const periodRecordsMap = useMemo(() => {
+        const map = new Map<number, RaporRecord>();
+        (livePeriodRecords || []).forEach(record => {
+            if (!record.deleted) {
+                map.set(record.santriId, record);
+            }
+        });
+        return map;
+    }, [livePeriodRecords]);
 
     // Derived Available Rombels based on Jenjang & RBAC
     const availableRombels = useMemo(() => {

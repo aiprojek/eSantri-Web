@@ -106,13 +106,17 @@ export const BreakAvoidSection: React.FC<{ children: React.ReactNode; className?
 
 export const ReportFooter: React.FC<{ text?: string }> = ({ text }) => (
     <div
-        className="report-signature-footer print-meta border-t border-gray-400 text-center text-[8pt] text-gray-500 italic w-full"
+        className="report-signature-footer rapor-credit-footer print-meta text-center italic w-full"
         style={{
             breakInside: 'avoid',
             position: 'relative',
             marginTop: 'auto',
-            paddingTop: '0.25cm',
+            paddingTop: '0.2cm',
             paddingBottom: '0.05cm',
+            borderTop: '1px solid #bfbfbf',
+            color: '#666666',
+            fontSize: '0.8em',
+            lineHeight: 1.25,
             background: 'white',
         }}
     >
@@ -122,6 +126,8 @@ export const ReportFooter: React.FC<{ text?: string }> = ({ text }) => (
                 .report-signature-footer {
                     position: relative !important;
                     margin-top: auto !important;
+                    color: #666666 !important;
+                    border-top-color: #bfbfbf !important;
                 }
             }
         `}</style>

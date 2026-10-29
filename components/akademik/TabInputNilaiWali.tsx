@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporRecord } from '../../types';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
@@ -19,6 +20,7 @@ import { RaporWaCloudImportModal } from './RaporWaCloudImportModal';
 import { RaporTahfizhSyncModal, TahfizhSyncPayload, StudentTahfizhAggregate } from './RaporTahfizhSyncModal';
 import { RaporBulkHelperModal } from './modals/RaporBulkHelperModal';
 import { classifyRaporInputField, RaporInputClassification } from '../../services/raporCalculationService';
+import { pushRaporGradesToCloud } from '../../services/academicService';
 
 export interface TabInputNilaiWaliProps {
     initialContext?: {
@@ -37,7 +39,7 @@ export interface TabInputNilaiWaliProps {
 }
 
 export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialContext, onContextChange }) => {
-    const { settings, onUpdateSettings, showToast, currentUser } = useAppContext();
+    const { settings, onUpdateSettings, showToast, showConfirmation, currentUser } = useAppContext();
     const { santriList } = useSantriContext();
     const defaultAcademicYear = useMemo(() => getDefaultAcademicYear(settings), [settings]);
     const archiveYears = useAcademicRaporYears();
@@ -63,10 +65,12 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
     // Modal states for Excel, Attendance Sync, Tahfizh Sync, Bulk Helper, and WA/Cloud Import
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isWaCloudModalOpen, setIsWaCloudModalOpen] = useState(false);
+    const [waCloudInitialSource, setWaCloudInitialSource] = useState<'cloud' | 'wa'>('cloud');
     const [isPresensiModalOpen, setIsPresensiModalOpen] = useState(false);
     const [isTahfizhModalOpen, setIsTahfizhModalOpen] = useState(false);
     const [isBulkHelperOpen, setIsBulkHelperOpen] = useState(false);
     const [isExportingExcel, setIsExportingExcel] = useState(false);
+    const [isPushingGas, setIsPushingGas] = useState(false);
     const [refreshCounter, setRefreshCounter] = useState(0);
 
     // Admin Filters
@@ -386,6 +390,59 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
     }, [isDirty, isSaving, isRaporLocked, selectedTemplateId, studentsInRombel.length]);
 
+    // Pantau perubahan DB dari luar komponen (misal tombol Tarik Nilai GAS di PageHeader)
+    const externalDbStamp = useLiveQuery(
+        async () => {
+            if (!tahunAjaran || !semester) return '0';
+            const recs = await db.raporRecords
+                .where('[tahunAjaran+semester]')
+                .equals([tahunAjaran, semester])
+                .toArray();
+            let maxMod = 0;
+            let activeCount = 0;
+            for (const r of recs) {
+                if (r.deleted) continue;
+                activeCount++;
+                const t = Number(r.lastModified || 0);
+                if (t > maxMod) maxMod = t;
+            }
+            return `${activeCount}_${maxMod}`;
+        },
+        [tahunAjaran, semester]
+    );
+
+    const lastAppliedExternalStampRef = useRef<string | undefined>(undefined);
+    useEffect(() => {
+        if (externalDbStamp === undefined) return;
+        if (lastAppliedExternalStampRef.current === undefined) {
+            lastAppliedExternalStampRef.current = externalDbStamp;
+            return;
+        }
+        if (externalDbStamp !== lastAppliedExternalStampRef.current) {
+            lastAppliedExternalStampRef.current = externalDbStamp;
+            if (!isDirty) {
+                setRefreshCounter(c => c + 1);
+            }
+        }
+    }, [externalDbStamp, isDirty]);
+
+    const openExternalImportModal = (source: 'cloud' | 'wa') => {
+        if (isDirty) {
+            showConfirmation(
+                'Ketikan Lokal Belum Disimpan',
+                'Anda memiliki ketikan nilai yang belum disimpan di tabel ini. Menarik/mengimpor nilai eksternal akan memuat ulang data terbaru dari database. Lanjutkan?',
+                () => {
+                    setWaCloudInitialSource(source);
+                    setIsWaCloudModalOpen(true);
+                },
+                { confirmColor: 'amber', confirmText: 'Lanjutkan Impor' }
+            );
+            return;
+        }
+        setWaCloudInitialSource(source);
+        setIsWaCloudModalOpen(true);
+    };
+
     // Load existing records from DB + check unsaved local draft
     useEffect(() => {
         const loadExisting = async () => {
@@ -666,6 +723,12 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
             .toArray();
 
         const existingBySantri = new Map(existingPeriod.map(rec => [rec.santriId, rec]));
+        let previousBaselineGrades: Record<number, Record<string, string>> = {};
+        try {
+            previousBaselineGrades = JSON.parse(savedBaselineJson || '{}');
+        } catch {
+            previousBaselineGrades = {};
+        }
         const mergedGradesSnapshot: Record<number, Record<string, string>> = { ...grades };
         const effectiveTahfizhMap = customTahfizhAggregates || syncedTahfizhMap;
 
@@ -763,6 +826,40 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                 localStorage.removeItem(draftStorageKey);
             } catch {}
         }
+
+        return { mergedGradesSnapshot, previousBaselineGrades };
+    };
+
+    const syncSnapshotToCloudGas = async (
+        currentSnapshot: Record<number, Record<string, string>>,
+        previousSnapshot?: Record<number, Record<string, string>>
+    ): Promise<{ synced: boolean; pushedStudents: number; sheets: string[]; error?: string }> => {
+        const gasUrl = (settings.raporCloudConfig?.googleScriptUrl || '').trim();
+        if (!gasUrl || !template || studentsInRombel.length === 0) {
+            return { synced: false, pushedStudents: 0, sheets: [] };
+        }
+        try {
+            const res = await pushRaporGradesToCloud({
+                scriptUrl: gasUrl,
+                settings,
+                template,
+                tahunAjaran,
+                semester,
+                santriList: studentsInRombel,
+                currentGrades: currentSnapshot,
+                previousGrades: previousSnapshot,
+                rombelId: activeRombelId || myRombel?.id || 0,
+                rombelName: activeRombelName
+            });
+            return { synced: res.pushedStudents > 0, pushedStudents: res.pushedStudents, sheets: res.sheets };
+        } catch (err) {
+            return {
+                synced: false,
+                pushedStudents: 0,
+                sheets: [],
+                error: (err as Error).message
+            };
+        }
     };
 
     const handleSave = async () => {
@@ -774,12 +871,81 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
 
         setIsSaving(true);
         try {
-            await saveGradesToDb();
-            showToast('Data nilai berhasil disimpan ke database lokal.', 'success');
+            const { mergedGradesSnapshot, previousBaselineGrades } = await saveGradesToDb();
+            const hasGasUrl = Boolean((settings.raporCloudConfig?.googleScriptUrl || '').trim());
+            if (hasGasUrl) {
+                const cloudRes = await syncSnapshotToCloudGas(mergedGradesSnapshot, previousBaselineGrades);
+                if (cloudRes.error) {
+                    showToast(
+                        'Nilai tersimpan aman di aplikasi (sinkron otomatis ke Cloud GAS tertunda, cek koneksi/URL GAS).',
+                        'info'
+                    );
+                } else if (cloudRes.synced) {
+                    showToast(
+                        `Nilai berhasil disimpan & otomatis diperbarui ke Cloud GAS (${cloudRes.pushedStudents} santri).`,
+                        'success'
+                    );
+                } else {
+                    showToast('Data nilai berhasil disimpan.', 'success');
+                }
+            } else {
+                showToast('Data nilai berhasil disimpan ke database aplikasi.', 'success');
+            }
         } catch (e) {
             showToast('Gagal menyimpan data: ' + (e as Error).message, 'error');
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleManualPushToGas = async () => {
+        const gasUrl = (settings.raporCloudConfig?.googleScriptUrl || '').trim();
+        if (!gasUrl) {
+            openExternalImportModal('cloud');
+            return;
+        }
+        if (isRaporLocked) {
+            showToast('Rapor rombel ini sedang dikunci.', 'error');
+            return;
+        }
+        if (!template || studentsInRombel.length === 0) {
+            showToast('Pilih rombel dan template rapor terlebih dahulu.', 'info');
+            return;
+        }
+
+        setIsPushingGas(true);
+        try {
+            let currentSnapshot = grades;
+            let previousSnapshot: Record<number, Record<string, string>> | undefined = undefined;
+            if (isDirty) {
+                const saved = await saveGradesToDb();
+                currentSnapshot = saved.mergedGradesSnapshot;
+                previousSnapshot = saved.previousBaselineGrades;
+            }
+            const res = await pushRaporGradesToCloud({
+                scriptUrl: gasUrl,
+                settings,
+                template,
+                tahunAjaran,
+                semester,
+                santriList: studentsInRombel,
+                currentGrades: currentSnapshot,
+                previousGrades: previousSnapshot,
+                rombelId: activeRombelId || myRombel?.id || 0,
+                rombelName: activeRombelName
+            });
+            if (res.pushedStudents > 0) {
+                showToast(
+                    `Berhasil memperbarui nilai ${res.pushedStudents} santri ke Google Sheet & Portal Audit.`,
+                    'success'
+                );
+            } else {
+                showToast('Belum ada nilai terisi pada tabel ini untuk dikirim ke Google Sheet.', 'info');
+            }
+        } catch (err) {
+            showToast('Gagal mengirim ke Cloud GAS: ' + (err as Error).message, 'error');
+        } finally {
+            setIsPushingGas(false);
         }
     };
 
@@ -831,7 +997,8 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         });
 
         if (shouldSaveToDb) {
-            await saveGradesToDb(syncResult.aggregates, incoming);
+            const saved = await saveGradesToDb(syncResult.aggregates, incoming);
+            await syncSnapshotToCloudGas(saved.mergedGradesSnapshot, saved.previousBaselineGrades);
         }
     };
 
@@ -850,7 +1017,8 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         });
 
         if (shouldSaveToDb) {
-            await saveGradesToDb(undefined, payload.mappedGrades, payload.aggregates);
+            const saved = await saveGradesToDb(undefined, payload.mappedGrades, payload.aggregates);
+            await syncSnapshotToCloudGas(saved.mergedGradesSnapshot, saved.previousBaselineGrades);
         }
     };
 
@@ -889,7 +1057,8 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         });
 
         if (shouldSaveToDb) {
-            await saveGradesToDb(undefined, importedGrades);
+            const saved = await saveGradesToDb(undefined, importedGrades);
+            await syncSnapshotToCloudGas(saved.mergedGradesSnapshot, saved.previousBaselineGrades);
         }
     };
 
@@ -984,6 +1153,14 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                         className="w-[42px] h-[42px] flex items-center justify-center bg-amber-50 text-amber-700 border border-amber-200 rounded-xl disabled:opacity-50"
                     >
                         <i className="bi bi-stars text-lg"></i>
+                    </button>
+                    <button
+                        onClick={() => openExternalImportModal('cloud')}
+                        disabled={isRaporLocked}
+                        title="Tarik Nilai dari Cloud GAS / Sheet"
+                        className="w-[42px] h-[42px] flex items-center justify-center bg-blue-50 text-blue-700 border border-blue-200 rounded-xl disabled:opacity-50"
+                    >
+                        <i className="bi bi-cloud-arrow-down-fill text-lg"></i>
                     </button>
                     <button
                         onClick={() => setIsImportModalOpen(true)}
@@ -1234,13 +1411,43 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                             <span>Import Excel</span>
                         </button>
 
-                        {/* Import WA / Cloud */}
+                        {/* Tarik Nilai Cloud GAS */}
                         <button
                             type="button"
-                            onClick={() => setIsWaCloudModalOpen(true)}
+                            onClick={() => openExternalImportModal('cloud')}
+                            disabled={isRaporLocked}
+                            className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50"
+                            title="Tarik & gabungkan nilai dari 1 Link Google Apps Script / Spreadsheet"
+                        >
+                            <i className="bi bi-cloud-arrow-down-fill text-blue-600"></i>
+                            <span>Tarik GAS</span>
+                        </button>
+
+                        {/* Kirim / Sinkron ke Cloud GAS */}
+                        {Boolean((settings.raporCloudConfig?.googleScriptUrl || '').trim()) && (
+                            <button
+                                type="button"
+                                onClick={handleManualPushToGas}
+                                disabled={isPushingGas || isSaving || studentsInRombel.length === 0 || !selectedTemplateId || isRaporLocked}
+                                className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50"
+                                title="Dorong (Push) nilai di tabel ini ke Google Sheet & Portal Audit (otomatis juga berjalan saat Simpan Nilai)"
+                            >
+                                {isPushingGas ? (
+                                    <span className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
+                                ) : (
+                                    <i className="bi bi-cloud-arrow-up-fill text-indigo-600"></i>
+                                )}
+                                <span>Kirim GAS</span>
+                            </button>
+                        )}
+
+                        {/* Import WA */}
+                        <button
+                            type="button"
+                            onClick={() => openExternalImportModal('wa')}
                             disabled={isRaporLocked}
                             className="px-3 py-2 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50"
-                            title="Import nilai via WhatsApp text atau Google Cloud Web App"
+                            title="Import kode nilai setoran guru dari pesan WhatsApp"
                         >
                             <i className="bi bi-whatsapp text-emerald-600"></i>
                             <span>Import WA</span>
@@ -1489,13 +1696,39 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                 type="button"
                                 onClick={() => {
                                     setIsFilterDrawerOpen(false);
-                                    setIsWaCloudModalOpen(true);
+                                    openExternalImportModal('cloud');
+                                }}
+                                disabled={isRaporLocked}
+                                className="w-full py-2.5 px-4 bg-blue-50 text-blue-800 border border-blue-200 rounded-xl font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                <i className="bi bi-cloud-arrow-down-fill text-blue-600"></i>
+                                <span>Tarik Nilai Cloud GAS (Sheet)</span>
+                            </button>
+                            {Boolean((settings.raporCloudConfig?.googleScriptUrl || '').trim()) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsFilterDrawerOpen(false);
+                                        handleManualPushToGas();
+                                    }}
+                                    disabled={isPushingGas || isSaving || studentsInRombel.length === 0 || !selectedTemplateId || isRaporLocked}
+                                    className="w-full py-2.5 px-4 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-xl font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    <i className="bi bi-cloud-arrow-up-fill text-indigo-600"></i>
+                                    <span>Kirim Nilai ke Cloud GAS (Sheet)</span>
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsFilterDrawerOpen(false);
+                                    openExternalImportModal('wa');
                                 }}
                                 disabled={isRaporLocked}
                                 className="w-full py-2.5 px-4 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50"
                             >
                                 <i className="bi bi-whatsapp text-emerald-600"></i>
-                                <span>Import WA / Cloud</span>
+                                <span>Import Kode WhatsApp</span>
                             </button>
                             <button
                                 type="button"
@@ -2249,9 +2482,21 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
             <RaporWaCloudImportModal
                 isOpen={isWaCloudModalOpen}
                 onClose={() => setIsWaCloudModalOpen(false)}
+                initialSource={waCloudInitialSource}
+                defaultTahunAjaran={tahunAjaran}
+                defaultSemester={semester}
+                defaultRombelId={activeRombelId || undefined}
+                defaultTemplateId={selectedTemplateId || undefined}
                 onSuccess={() => {
+                    if (draftStorageKey) {
+                        try {
+                            localStorage.removeItem(draftStorageKey);
+                        } catch {
+                            // ignore storage errors
+                        }
+                    }
+                    setPendingDraft(null);
                     setRefreshCounter(c => c + 1);
-                    showToast('Data rapor berhasil diperbarui.', 'success');
                 }}
             />
 

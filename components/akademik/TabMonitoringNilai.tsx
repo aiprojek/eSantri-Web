@@ -2,22 +2,25 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { formatAcademicYearDisplay } from '../../utils/academicYear';
 import { extractTemplateKeys } from '../../services/raporExcelService';
+import { RaporCloudPullControl } from './RaporWaCloudImportModal';
 
 export interface TabMonitoringNilaiProps {
     onNavigateToTab?: (
         tab: string,
-        rombelId?: number,
+        rombelIdOrPayload?: number | Record<string, any>,
         period?: { tahunAjaran: string; semester: 'Ganjil' | 'Genap' }
     ) => void;
 }
 
 export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNavigateToTab }) => {
-    const { settings } = useAppContext();
+    const { settings, currentUser } = useAppContext();
+    const canWriteAkademik = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
     const { santriList } = useSantriContext();
     const {
         filterTahun,
@@ -30,213 +33,177 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
     
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     const [selectedAuditRombel, setSelectedAuditRombel] = useState<any | null>(null);
-    const [auditStudents, setAuditStudents] = useState<any[]>([]);
-    const [isAuditLoading, setIsAuditLoading] = useState(false);
-    
-    // Stats State
-    const [stats, setStats] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
+    const currentYear = filterTahun || availableYears[0] || defaultAcademicYear;
+    const livePeriodRecords = useLiveQuery(
+        async () => {
+            if (!currentYear || !filterSemester) return [];
+            const raw = await db.raporRecords
+                .where('[tahunAjaran+semester]')
+                .equals([currentYear, filterSemester])
+                .toArray();
+            return raw.filter(r => !r.deleted);
+        },
+        [currentYear, filterSemester]
+    );
+    const isLoading = livePeriodRecords === undefined;
 
-    // Calculate Stats when filter changes
-    useEffect(() => {
-        const calculateStats = async () => {
-            setIsLoading(true);
-            try {
-                const currentYear = filterTahun || availableYears[0] || defaultAcademicYear;
-                // 1. Get all non-deleted records for current period
-                const rawRecords = await db.raporRecords
-                    .where('[tahunAjaran+semester]')
-                    .equals([currentYear, filterSemester])
-                    .toArray();
-                const records = rawRecords.filter(r => !r.deleted);
-                
-                // Map records by Santri ID for fast lookup
-                const recMap = new Map<number, any>();
-                records.forEach(r => recMap.set(r.santriId, r));
+    // Calculate Stats reactively whenever livePeriodRecords, settings, or santriList changes
+    const stats = useMemo(() => {
+        const records = livePeriodRecords || [];
+        const recMap = new Map<number, any>();
+        records.forEach(r => recMap.set(r.santriId, r));
 
-                const templates = settings.raporTemplates || [];
+        const templates = settings.raporTemplates || [];
 
-                // 2. Iterate Rombels to build stats
-                const rombelStats = settings.rombel.map(rombel => {
-                    const kelas = settings.kelas.find(k => k.id === rombel.kelasId);
-                    const jenjang = settings.jenjang.find(j => j.id === kelas?.jenjangId);
-                    const wali = settings.tenagaPengajar.find(
-                        t => t.id === rombel.waliKelasId || t.id === rombel.waliKelasUserId
-                    );
+        return settings.rombel.map(rombel => {
+            const kelas = settings.kelas.find(k => k.id === rombel.kelasId);
+            const jenjang = settings.jenjang.find(j => j.id === kelas?.jenjangId);
+            const wali = settings.tenagaPengajar.find(
+                t => t.id === rombel.waliKelasId || t.id === rombel.waliKelasUserId
+            );
 
-                    // Find template to know expected keys
-                    const matchedTemplate =
-                        templates.find(t => t.rombelId === rombel.id) ||
-                        templates.find(t => t.jenjangId === kelas?.jenjangId && t.kelasId === kelas?.id && !t.rombelId) ||
-                        templates.find(t => t.jenjangId === kelas?.jenjangId && !t.kelasId && !t.rombelId) ||
-                        templates.find(t => !t.jenjangId) ||
-                        (templates.length > 0 ? templates[0] : null);
+            const matchedTemplate =
+                templates.find(t => t.rombelId === rombel.id) ||
+                templates.find(t => t.jenjangId === kelas?.jenjangId && t.kelasId === kelas?.id && !t.rombelId) ||
+                templates.find(t => t.jenjangId === kelas?.jenjangId && !t.kelasId && !t.rombelId) ||
+                templates.find(t => !t.jenjangId) ||
+                (templates.length > 0 ? templates[0] : null);
 
-                    const templateKeys = matchedTemplate ? extractTemplateKeys(matchedTemplate, 'all') : [];
-                    const expectedCount = templateKeys.length;
+            const templateKeys = matchedTemplate ? extractTemplateKeys(matchedTemplate, 'all') : [];
+            const expectedCount = templateKeys.length;
 
-                    // Get Active Non-Deleted Santri in this Rombel
-                    const santriInRombel = santriList.filter(
-                        s => !s.deleted && s.rombelId === rombel.id && s.status === 'Aktif'
-                    );
-                    const totalSantri = santriInRombel.length;
+            const santriInRombel = santriList.filter(
+                s => !s.deleted && s.rombelId === rombel.id && s.status === 'Aktif'
+            );
+            const totalSantri = santriInRombel.length;
 
-                    let completeCount = 0;
-                    let partialCount = 0;
-                    let emptyCount = 0;
+            let completeCount = 0;
+            let partialCount = 0;
+            let emptyCount = 0;
 
-                    santriInRombel.forEach(s => {
-                        const rec = recMap.get(s.id);
-                        if (!rec || !rec.customData) {
-                            emptyCount++;
-                            return;
-                        }
-                        let filled = 0;
-                        try {
-                            const parsed = JSON.parse(rec.customData);
-                            if (expectedCount > 0) {
-                                filled = templateKeys.filter(
-                                    tk => parsed[tk.key] !== undefined && parsed[tk.key] !== null && String(parsed[tk.key]).trim() !== ''
-                                ).length;
-                            } else {
-                                filled = Object.keys(parsed).filter(
-                                    k => parsed[k] !== undefined && parsed[k] !== null && String(parsed[k]).trim() !== ''
-                                ).length;
-                            }
-                        } catch {
-                            filled = 0;
-                        }
-
-                        if (filled === 0) {
-                            emptyCount++;
-                        } else if (expectedCount > 0 ? filled >= expectedCount : filled >= 3) {
-                            completeCount++;
-                        } else {
-                            partialCount++;
-                        }
-                    });
-
-                    // Percent calculation: weighted complete (1.0) and partial (0.5)
-                    const percent =
-                        totalSantri > 0
-                            ? Math.min(100, Math.round(((completeCount + partialCount * 0.5) / totalSantri) * 100))
-                            : 0;
-
-                    let status: 'Lengkap' | 'Sebagian' | 'Kosong' = 'Kosong';
-                    if (totalSantri > 0) {
-                        if (completeCount === totalSantri) status = 'Lengkap';
-                        else if (completeCount > 0 || partialCount > 0) status = 'Sebagian';
+            santriInRombel.forEach(s => {
+                const rec = recMap.get(s.id);
+                if (!rec || !rec.customData) {
+                    emptyCount++;
+                    return;
+                }
+                let filled = 0;
+                try {
+                    const parsed = JSON.parse(rec.customData);
+                    if (expectedCount > 0) {
+                        filled = templateKeys.filter(
+                            tk => parsed[tk.key] !== undefined && parsed[tk.key] !== null && String(parsed[tk.key]).trim() !== ''
+                        ).length;
+                    } else {
+                        filled = Object.keys(parsed).filter(
+                            k => parsed[k] !== undefined && parsed[k] !== null && String(parsed[k]).trim() !== ''
+                        ).length;
                     }
+                } catch {
+                    filled = 0;
+                }
 
-                    // Last update in this rombel
-                    const rombelRecords = records.filter(r => r.rombelId === rombel.id);
-                    const lastUpdate =
-                        rombelRecords.length > 0
-                            ? new Date(
-                                  Math.max(
-                                      ...rombelRecords.map(r =>
-                                          new Date(r.lastModified || r.tanggalRapor).getTime()
-                                      )
-                                  )
+                if (filled === 0) {
+                    emptyCount++;
+                } else if (expectedCount > 0 ? filled >= expectedCount : filled >= 3) {
+                    completeCount++;
+                } else {
+                    partialCount++;
+                }
+            });
+
+            const percent =
+                totalSantri > 0
+                    ? Math.min(100, Math.round(((completeCount + partialCount * 0.5) / totalSantri) * 100))
+                    : 0;
+
+            let status: 'Lengkap' | 'Sebagian' | 'Kosong' = 'Kosong';
+            if (totalSantri > 0) {
+                if (completeCount === totalSantri) status = 'Lengkap';
+                else if (completeCount > 0 || partialCount > 0) status = 'Sebagian';
+            }
+
+            const rombelRecords = records.filter(r => r.rombelId === rombel.id);
+            const lastUpdate =
+                rombelRecords.length > 0
+                    ? new Date(
+                          Math.max(
+                              ...rombelRecords.map(r =>
+                                  new Date(r.lastModified || r.tanggalRapor).getTime()
                               )
-                            : null;
+                          )
+                      )
+                    : null;
 
-                    return {
-                        id: rombel.id,
-                        nama: rombel.nama,
-                        jenjang: jenjang?.nama,
-                        kelas: kelas?.nama,
-                        wali: wali?.nama || 'Belum Ditentukan',
-                        totalSantri,
-                        submittedCount: completeCount,
-                        completeCount,
-                        partialCount,
-                        emptyCount,
-                        expectedCount,
-                        percent,
-                        status,
-                        lastUpdate
-                    };
-                });
-                
-                setStats(rombelStats);
-            } finally {
-                setIsLoading(false);
-            }
-        };
+            return {
+                id: rombel.id,
+                nama: rombel.nama,
+                jenjang: jenjang?.nama,
+                kelas: kelas?.nama,
+                wali: wali?.nama || 'Belum Ditentukan',
+                totalSantri,
+                submittedCount: completeCount,
+                completeCount,
+                partialCount,
+                emptyCount,
+                expectedCount,
+                percent,
+                status,
+                lastUpdate
+            };
+        });
+    }, [livePeriodRecords, settings, santriList]);
 
-        calculateStats();
-    }, [filterTahun, filterSemester, settings, santriList, availableYears, defaultAcademicYear]);
+    // Audit specific rombel students (reactive to livePeriodRecords)
+    const isAuditLoading = selectedAuditRombel !== null && livePeriodRecords === undefined;
+    const auditStudents = useMemo(() => {
+        if (!selectedAuditRombel) return [];
+        const records = livePeriodRecords || [];
+        const rombelRecs = records.filter(r => !r.deleted && r.rombelId === selectedAuditRombel.id);
+        const recMap = new Map<number, any>();
+        rombelRecs.forEach(r => recMap.set(r.santriId, r));
 
-    // Audit specific rombel students
-    useEffect(() => {
-        const loadRombelAudit = async () => {
-            if (!selectedAuditRombel) {
-                setAuditStudents([]);
-                return;
-            }
-            setIsAuditLoading(true);
-            try {
-                const currentYear = filterTahun || availableYears[0] || defaultAcademicYear;
-                const recs = await db.raporRecords
-                    .where('[tahunAjaran+semester]')
-                    .equals([currentYear, filterSemester])
-                    .toArray();
+        const rombelObj = settings.rombel.find(r => r.id === selectedAuditRombel.id);
+        const kelasObj = settings.kelas.find(k => k.id === rombelObj?.kelasId);
+        const templates = settings.raporTemplates || [];
+        const matchedTemplate =
+            templates.find(t => t.rombelId === selectedAuditRombel.id) ||
+            templates.find(t => t.jenjangId === kelasObj?.jenjangId && t.kelasId === kelasObj?.id && !t.rombelId) ||
+            templates.find(t => t.jenjangId === kelasObj?.jenjangId && !t.kelasId && !t.rombelId) ||
+            templates.find(t => !t.jenjangId) ||
+            (templates.length > 0 ? templates[0] : null);
+        const templateKeys = matchedTemplate ? extractTemplateKeys(matchedTemplate, 'all') : [];
 
-                const rombelRecs = recs.filter(r => !r.deleted && r.rombelId === selectedAuditRombel.id);
-                const recMap = new Map<number, any>();
-                rombelRecs.forEach(r => recMap.set(r.santriId, r));
-
-                const rombelObj = settings.rombel.find(r => r.id === selectedAuditRombel.id);
-                const kelasObj = settings.kelas.find(k => k.id === rombelObj?.kelasId);
-                const templates = settings.raporTemplates || [];
-                const matchedTemplate =
-                    templates.find(t => t.rombelId === selectedAuditRombel.id) ||
-                    templates.find(t => t.jenjangId === kelasObj?.jenjangId && t.kelasId === kelasObj?.id && !t.rombelId) ||
-                    templates.find(t => t.jenjangId === kelasObj?.jenjangId && !t.kelasId && !t.rombelId) ||
-                    templates.find(t => !t.jenjangId) ||
-                    (templates.length > 0 ? templates[0] : null);
-                const templateKeys = matchedTemplate ? extractTemplateKeys(matchedTemplate, 'all') : [];
-
-                const students = santriList
-                    .filter(s => !s.deleted && s.rombelId === selectedAuditRombel.id && s.status === 'Aktif')
-                    .sort((a, b) => a.namaLengkap.localeCompare(b.namaLengkap))
-                    .map(s => {
-                        const rec = recMap.get(s.id);
-                        let filledCount = 0;
-                        let customData: Record<string, any> = {};
-                        if (rec?.customData) {
-                            try {
-                                customData = JSON.parse(rec.customData);
-                                if (templateKeys.length > 0) {
-                                    filledCount = templateKeys.filter(
-                                        tk => customData[tk.key] !== undefined && customData[tk.key] !== null && String(customData[tk.key]).trim() !== ''
-                                    ).length;
-                                } else {
-                                    filledCount = Object.keys(customData).filter(
-                                        k => customData[k] !== undefined && customData[k] !== null && String(customData[k]).trim() !== ''
-                                    ).length;
-                                }
-                            } catch {}
+        return santriList
+            .filter(s => !s.deleted && s.rombelId === selectedAuditRombel.id && s.status === 'Aktif')
+            .sort((a, b) => a.namaLengkap.localeCompare(b.namaLengkap))
+            .map(s => {
+                const rec = recMap.get(s.id);
+                let filledCount = 0;
+                if (rec?.customData) {
+                    try {
+                        const customData = JSON.parse(rec.customData);
+                        if (templateKeys.length > 0) {
+                            filledCount = templateKeys.filter(
+                                tk => customData[tk.key] !== undefined && customData[tk.key] !== null && String(customData[tk.key]).trim() !== ''
+                            ).length;
+                        } else {
+                            filledCount = Object.keys(customData).filter(
+                                k => customData[k] !== undefined && customData[k] !== null && String(customData[k]).trim() !== ''
+                            ).length;
                         }
-                        return {
-                            santri: s,
-                            record: rec || null,
-                            isSubmitted: !!rec,
-                            filledCount,
-                            expectedCount: templateKeys.length,
-                            lastModified: rec?.lastModified || rec?.tanggalRapor || null
-                        };
-                    });
-
-                setAuditStudents(students);
-            } finally {
-                setIsAuditLoading(false);
-            }
-        };
-
-        loadRombelAudit();
-    }, [selectedAuditRombel, filterTahun, filterSemester, santriList, defaultAcademicYear, availableYears]);
+                    } catch {}
+                }
+                return {
+                    santri: s,
+                    record: rec || null,
+                    isSubmitted: !!rec,
+                    filledCount,
+                    expectedCount: templateKeys.length,
+                    lastModified: rec?.lastModified || rec?.tanggalRapor || null
+                };
+            });
+    }, [selectedAuditRombel, livePeriodRecords, settings, santriList]);
 
     // Summary Totals
     const summary = useMemo(() => {
@@ -254,22 +221,45 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
                         <h2 className="text-xl font-black text-gray-800">Monitoring Pengumpulan</h2>
-                        <p className="text-sm text-gray-500 font-medium">Pantau progres pengisian rapor oleh wali kelas.</p>
+                        <p className="text-sm text-gray-500 font-medium">
+                            Pantau progres pengisian rapor oleh wali kelas &amp; guru mapel, atau bagikan Portal Audit Tanpa Login ke pengurus.
+                        </p>
                     </div>
 
-                    {/* Mobile Filter */}
-                    <div className="md:hidden w-full">
+                    {/* Mobile Filter, GAS Pull & Portal Button */}
+                    <div className="md:hidden w-full flex flex-wrap gap-2">
                         <button 
                             onClick={() => setIsFilterDrawerOpen(true)}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-sm shadow-sm"
+                            className="flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-xs shadow-sm whitespace-nowrap"
                         >
                             <i className="bi bi-funnel-fill"></i>
-                            <span>Filter</span>
+                            <span>Filter Periode</span>
                         </button>
+                        <RaporCloudPullControl
+                            compact
+                            defaultTahunAjaran={currentYear}
+                            defaultSemester={filterSemester}
+                        />
+                        {onNavigateToTab && canWriteAkademik && (
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    onNavigateToTab('generator', {
+                                        generatorMode: 'audit_portal',
+                                        tahunAjaran: currentYear,
+                                        semester: filterSemester
+                                    })
+                                }
+                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-xs shadow-sm whitespace-nowrap"
+                            >
+                                <i className="bi bi-file-earmark-bar-graph-fill text-teal-400"></i>
+                                <span>Portal Audit (.html)</span>
+                            </button>
+                        )}
                     </div>
 
-                    {/* Desktop Filter */}
-                    <div className="hidden md:flex gap-4">
+                    {/* Desktop Filter, GAS Pull & Portal Button */}
+                    <div className="hidden md:flex flex-wrap items-end gap-3">
                         <div className="min-w-[140px]">
                             <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Tahun Ajaran</label>
                             {availableYears.length > 0 ? (
@@ -289,6 +279,27 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                                 <option value="Genap">Genap</option>
                             </select>
                         </div>
+                        <RaporCloudPullControl
+                            defaultTahunAjaran={currentYear}
+                            defaultSemester={filterSemester}
+                        />
+                        {onNavigateToTab && canWriteAkademik && (
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    onNavigateToTab('generator', {
+                                        generatorMode: 'audit_portal',
+                                        tahunAjaran: currentYear,
+                                        semester: filterSemester
+                                    })
+                                }
+                                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 shadow-xs"
+                                title="Buat file HTML Portal Audit & Rekap Leger Tanpa Login untuk Pengurus / Kepala Madrasah"
+                            >
+                                <i className="bi bi-file-earmark-bar-graph-fill text-teal-400"></i>
+                                <span>Portal Audit Tanpa Login (.html)</span>
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>

@@ -18,18 +18,18 @@ export const raporPanduan: PanduanSectionData = {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                         <div className="bg-blue-50/80 p-3 rounded-xl border border-blue-200 space-y-1.5">
                             <h5 className="font-bold text-blue-900 flex items-center gap-1.5 text-xs">
-                                <i className="bi bi-diagram-3-fill text-blue-600"></i> Model A: Desentralisasi Tanpa Login (Form HTML Mandiri)
+                                <i className="bi bi-diagram-3-fill text-blue-600"></i> Model A: Desentralisasi Tanpa Login (1 Link GAS Multi-Tab &amp; Form HTML)
                             </h5>
                             <p className="text-gray-600 leading-relaxed">
-                                Guru mata pelajaran <strong>tidak perlu akun login</strong> ke aplikasi. Bagian Kurikulum membuat formulir HTML per rombel/mapel, dikirim lewat WhatsApp/Email, diisi guru secara offline di HP atau laptop, lalu kode hasilnya diimpor admin sekali klik.
+                                Guru mata pelajaran <strong>tidak perlu akun login</strong> ke aplikasi. Bagian Kurikulum membuat formulir HTML (per rombel atau 1 file se-Jenjang), diisi guru di HP/laptop lalu dikirim ke <strong>1 Link Google Sheet Terpadu</strong> atau kode WhatsApp, kemudian ditarik ke aplikasi cukup <strong>1 klik lewat tombol Tarik Nilai GAS</strong>—lengkap dengan <strong>Portal Audit Tanpa Login (.html)</strong> untuk pengecekan pimpinan.
                             </p>
                         </div>
                         <div className="bg-teal-50/80 p-3 rounded-xl border border-teal-200 space-y-1.5">
                             <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
-                                <i className="bi bi-people-fill text-teal-600"></i> Model B: Multi-Admin & Kolaborasi Staf / Wali Kelas
+                                <i className="bi bi-people-fill text-teal-600"></i> Model B: Multi-Admin &amp; Kolaborasi Staf / Wali Kelas
                             </h5>
                             <p className="text-gray-600 leading-relaxed">
-                                Wali kelas dan staf akademik login menggunakan akun mandiri masing-masing. Mereka langsung mengisi nilai santri, mengecek Leger Nilai kelasnya, dan mencetak lembar rapor santri dengan sinkronisasi realtime/cloud.
+                                Wali kelas dan staf akademik login menggunakan akun mandiri masing-masing. Mereka dapat menginput nilai langsung, menarik setoran guru mapel khusus rombel binaannya dari GAS/WA, mengecek Leger Nilai, dan mencetak rapor santri secara reaktif.
                             </p>
                         </div>
                     </div>
@@ -143,12 +143,12 @@ export const raporPanduan: PanduanSectionData = {
                                 <span className="inline-block px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold text-[10px] uppercase">
                                     Super Admin / Kurikulum
                                 </span>
-                                <strong className="block text-gray-800 font-semibold text-xs mt-1">Otoritas Master &amp; Template</strong>
+                                <strong className="block text-gray-800 font-semibold text-xs mt-1">Otoritas Master, GAS &amp; Template</strong>
                                 <ul className="list-disc pl-4 text-gray-600 space-y-1 text-[11px]">
-                                    <li>Menetapkan Tahun Ajaran &amp; Semester aktif.</li>
-                                    <li>Mendesain template lembar kerja &amp; rumus bobot.</li>
-                                    <li>Mengunci template sebelum masa input dimulai.</li>
-                                    <li>Eksekusi *Merge* dan *Publish* master data.</li>
+                                    <li>Menetapkan Tahun Ajaran, Semester &amp; 1 Link GAS Pondok.</li>
+                                    <li>Mendesain template rapor, rumus &amp; menerbitkan Form/Portal HTML.</li>
+                                    <li>Menarik nilai seluruh rombel via <strong>Tarik Nilai GAS</strong>.</li>
+                                    <li>Mengunci nilai rombel, *Merge* &amp; *Publish* master data.</li>
                                 </ul>
                             </div>
 
@@ -156,25 +156,24 @@ export const raporPanduan: PanduanSectionData = {
                                 <span className="inline-block px-2 py-0.5 rounded bg-teal-100 text-teal-800 font-bold text-[10px] uppercase">
                                     Wali Kelas (Staf Akademik)
                                 </span>
-                                <strong className="block text-gray-800 font-semibold text-xs mt-1">Input Nilai &amp; Leger Kelas</strong>
+                                <strong className="block text-gray-800 font-semibold text-xs mt-1">Input, Tarik Rombel &amp; Cetak</strong>
                                 <ul className="list-disc pl-4 text-gray-600 space-y-1 text-[11px]">
-                                    <li>Fokus pada rombel binaannya masing-masing.</li>
-                                    <li>Mengisi catatan sikap, spiritual &amp; ekstrakurikuler.</li>
-                                    <li>Review ketuntasan KKM pada Leger Nilai.</li>
-                                    <li>Mencetak buku rapor santri kelasnya.</li>
+                                    <li>Fokus otomatis hanya pada rombel binaannya masing-masing.</li>
+                                    <li>Bisa klik <strong>Tarik Nilai GAS / Import WA</strong> (otomatis terfilter khusus rombel ampuannya).</li>
+                                    <li>Tarik presensi &amp; tahfizh, isi catatan sikap, serta review Leger.</li>
+                                    <li>Memverifikasi nilai &amp; mencetak buku rapor santri kelasnya.</li>
                                 </ul>
                             </div>
 
                             <div className="bg-white p-3 rounded-xl border border-indigo-200 shadow-2xs space-y-1">
                                 <span className="inline-block px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 font-bold text-[10px] uppercase">
-                                    Guru Mata Pelajaran
+                                    Guru Mapel &amp; Tim Audit
                                 </span>
-                                <strong className="block text-gray-800 font-semibold text-xs mt-1">Pengisian Nilai Spesifik</strong>
+                                <strong className="block text-gray-800 font-semibold text-xs mt-1">Setor Nilai &amp; Cek Tanpa Login</strong>
                                 <ul className="list-disc pl-4 text-gray-600 space-y-1 text-[11px]">
-                                    <li>Menerima form HTML per rombel/mapel.</li>
-                                    <li>Mengisi nilai dari HP tanpa perlu akun sistem.</li>
-                                    <li>Mengirimkan kode string hasil isian ke kurikulum.</li>
-                                    <li>Tidak mengubah susunan santri atau master kelas.</li>
+                                    <li>Guru membuka file HTML Ledger di HP/laptop tanpa akun login.</li>
+                                    <li>Kirim nilai ke Google Sheet (1 klik) atau salin blok kode WA.</li>
+                                    <li>Kepala Madrasah / Pengurus memantau rekap &amp; mapel kosong lewat file <strong>Portal Audit (.html)</strong> tanpa login.</li>
                                 </ul>
                             </div>
                         </div>
@@ -681,31 +680,96 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '6. Generate Formulir Guru & Input Desentralisasi',
+            title: '6. Ekosistem 1 Link GAS Multi-Tab, Portal Audit Tanpa Login & SOP Tarik Nilai GAS ke Aplikasi',
             color: 'teal',
             content: (
-                <div className="space-y-3 text-sm">
+                <div className="space-y-4 text-sm">
                     <p className="text-gray-700 leading-relaxed">
-                        Jika memilih jalur pengisian mandiri oleh guru mata pelajaran tanpa perlu membuat akun login:
+                        Ekosistem formulir eksternal Rapor kini terintegrasi penuh dari hulu ke hilir: mulai dari <strong>1 Link Google Apps Script (GAS) Terpadu v3.0</strong> untuk seluruh rombel &amp; template, <strong>Portal Audit Tanpa Login (.html)</strong>, hingga penarikan kembali nilai ke dalam aplikasi cukup <strong>1 klik</strong>.
                     </p>
-                    <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-600">
-                        <li>Buka tab <strong>Generate Form</strong> pada menu Rapor.</li>
-                        <li>Pilih <strong>Jenjang</strong>, <strong>Tingkat Kelas</strong>, <strong>Rombel</strong>, dan <strong>Template Rapor</strong> yang akan diisi.</li>
-                        <li>Pilih integrasi pengiriman: <strong>WhatsApp Web</strong>, <strong>Google Sheets</strong>, atau <strong>Standar HTML Offline</strong>.</li>
-                        <li>Klik <strong>Download Formulir Guru</strong> (.html) lalu bagikan file tersebut ke grup pengajar atau guru bersangkutan.</li>
-                    </ol>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
-                        <div className="bg-white p-2.5 rounded-lg border shadow-2xs">
-                            <h6 className="font-bold text-teal-800 flex items-center gap-1 mb-1">
-                                <i className="bi bi-phone text-teal-600"></i> Tampilan Form Kartu (Mobile)
-                            </h6>
-                            <p className="text-gray-600">Bagus untuk HP. Menampilkan 1 santri per kartu dengan tombol navigasi mudah dan pencarian instan.</p>
+
+                    {/* 1. Setup 1x GAS Terpadu v3.0 */}
+                    <div className="p-3.5 bg-teal-50/80 border border-teal-200 rounded-xl space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between border-b border-teal-200/80 pb-1.5">
+                            <strong className="text-teal-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-hdd-network-fill text-teal-600"></i> 1. Konfigurasi 1 Link GAS Terpadu v3.0 untuk Semua Rombel (Cukup Setup 1x)
+                            </strong>
+                            <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold uppercase">
+                                Auto Multi-Tab
+                            </span>
                         </div>
-                        <div className="bg-white p-2.5 rounded-lg border shadow-2xs">
-                            <h6 className="font-bold text-indigo-800 flex items-center gap-1 mb-1">
-                                <i className="bi bi-display text-indigo-600"></i> Tampilan Tabel Leger (Desktop)
+                        <ol className="list-decimal pl-4 space-y-1 text-gray-700 text-[11px]">
+                            <li><strong>Pasang Kode Skrip v3.0:</strong> Buat 1 Google Spreadsheet kosong &rarr; klik <em>Extensions &gt; Apps Script</em> &rarr; salin kode dari tombol <strong>Salin Kode GAS Terpadu v3.0</strong> (tersedia di tab <em>Generate Form</em> maupun di ikon pengaturan <code>⚙</code> sebelah tombol <em>Tarik Nilai GAS</em>). <em>Catatan: Jika sebelumnya memakai skrip versi lama, perbarui dan buat New Deployment agar fitur baca koreksi sel manual ikut aktif.</em></li>
+                            <li><strong>Deploy Web App:</strong> Klik <em>Deploy &gt; New deployment</em> &rarr; pilih jenis <strong>Web app</strong> &rarr; atur <em>Execute as: Me</em> dan <em>Who has access: Anyone</em> &rarr; salin <strong>Web App URL</strong> (berakhiran <code>/exec</code>).</li>
+                            <li><strong>Simpan Default Pondok:</strong> Tempel URL tersebut lalu klik <strong>Simpan Default Pondok</strong>. URL otomatis tersimpan dan dipakai bersama oleh generator <strong>Formulir Ledger Guru</strong>, generator <strong>Portal Audit</strong>, serta tombol <strong>Tarik Nilai GAS</strong> di seluruh tab Rapor.</li>
+                            <li><strong>Otomatis Buat Tab Baru per Rombel &amp; Template:</strong> Setiap kali guru mengirim nilai dari file HTML, GAS otomatis mengarahkannya ke tab (worksheet) masing-masing, misalnya <code>(25-26 Ganjil) VII-A - Rapor Diniyah</code>, dan menggabungkan kiriman beberapa guru mapel pada baris santri yang sama (<em>Smart Merge</em>).</li>
+                        </ol>
+                    </div>
+
+                    {/* 2. Dua Jenis File HTML Mandiri */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
+                            <h6 className="font-bold text-teal-900 flex items-center gap-1.5">
+                                <i className="bi bi-pencil-square text-teal-600"></i> Mode A: Formulir Input / Ledger Guru (.html)
                             </h6>
-                            <p className="text-gray-600">Bagus untuk laptop. Menampilkan tabel matriks dengan freeze-header & kolom santri terkunci saat discroll.</p>
+                            <p className="text-gray-600 text-[11px] leading-relaxed">
+                                Dibagikan ke guru mapel/penguji (bisa per rombel, rentang tingkat kelas, atau 1 file gabungan se-Marhalah). Guru mengisi secara nyaman di HP (<strong>Form Kartu</strong>) atau laptop (<strong>Tabel Leger</strong>) lengkap dengan rumus otomatis, lalu menekan <strong>Kirim ke Cloud G-Sheet</strong> atau menyalin blok kode WhatsApp.
+                            </p>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-indigo-200 shadow-2xs space-y-1.5">
+                            <h6 className="font-bold text-indigo-900 flex items-center gap-1.5">
+                                <i className="bi bi-clipboard2-data-fill text-indigo-600"></i> Mode B: Portal Audit &amp; Rekap Leger Tanpa Login (.html)
+                            </h6>
+                            <p className="text-gray-600 text-[11px] leading-relaxed">
+                                Dibagikan kepada Pimpinan Pondok, Mudir Marhalah, atau Panitia Ujian yang tidak memegang login aplikasi. Cukup dibuka di browser HP/laptop untuk memantau <strong>Progres Setoran per Rombel</strong>, <strong>Audit Mapel Kosong</strong>, hingga <strong>Tabel Leger Lengkap (Rumus, KKM, Ranking &amp; Ekspor Excel/Cetak)</strong> secara langsung dari Google Sheet yang sama.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* 3. SOP Tarik Nilai GAS & Import WA ke Aplikasi */}
+                    <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between border-b border-blue-200/80 pb-1.5">
+                            <strong className="text-blue-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-cloud-arrow-down-fill text-blue-600"></i> 2. Cara Menarik Nilai dari GAS &amp; WhatsApp Masuk ke Aplikasi (Tombol Split Cepat)
+                            </strong>
+                            <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold uppercase">
+                                Sinkron Reaktif
+                            </span>
+                        </div>
+                        <p className="text-gray-700 text-[11px] leading-relaxed">
+                            Nilai yang masuk ke Google Sheet tidak berhenti di Spreadsheet saja—tarik kapan pun ke dalam database aplikasi menggunakan tombol <strong><code>[Tarik Nilai GAS | ⚙]</code></strong> dan <strong><code>Import WA</code></strong> yang tersedia di header halaman <strong>Rapor / Akademik</strong> maupun di toolbar tab <em>Progres Nilai</em>, <em>Input Nilai</em>, <em>Leger Nilai</em>, dan <em>Review Data</em>:
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-[11px]">
+                            <div className="p-2.5 bg-white rounded-lg border border-blue-200 space-y-1">
+                                <strong className="text-blue-900 block">A. Klik Tombol Utama &quot;Tarik Nilai GAS&quot; (1-Klik Instan)</strong>
+                                <ul className="list-disc pl-4 space-y-0.5 text-gray-600">
+                                    <li>Langsung menarik dan menggabungkan nilai terbaru dari seluruh tab Google Sheet sesuai Tahun Ajaran &amp; Semester aktif tanpa membuka dialog rumit.</li>
+                                    <li><strong>Khusus Wali Kelas:</strong> Sistem otomatis membatasi penarikan hanya untuk santri pada rombel binaan Wali Kelas yang sedang login.</li>
+                                    <li><strong>Baca Koreksi Manual di Sheet:</strong> Jika Admin mengedit angka nilai langsung pada sel kolom <code>[KODE_MAPEL]</code> di Google Sheet, perubahan angka tersebut otomatis ikut terserap ke aplikasi.</li>
+                                </ul>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-blue-200 space-y-1">
+                                <strong className="text-blue-900 block">B. Klik Ikon Pengaturan (⚙) atau &quot;Import WA&quot;</strong>
+                                <ul className="list-disc pl-4 space-y-0.5 text-gray-600">
+                                    <li><strong>Tombol &quot;Cek Isi Sheet&quot;:</strong> Mengintip daftar tab worksheet, jumlah baris kiriman, dan jumlah santri unik di Google Sheet sebelum data ditarik.</li>
+                                    <li><strong>Filter Selektif:</strong> Tarik khusus untuk 1 Rombel tertentu, 1 Template tertentu (misal hanya Rapor Mutun), atau lintas seluruh periode.</li>
+                                    <li><strong>Multi-Paste Kode WA:</strong> Tempel beberapa chat setoran guru (<code>RAPOR_V2_START...RAPOR_V2_END</code>) sekaligus dalam satu kotak—sistem merajutnya otomatis tanpa menimpa mapel guru lain.</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div className="bg-white/90 border border-blue-200 rounded-lg p-2.5 text-[11px] text-gray-700 space-y-1.5">
+                            <div>
+                                <i className="bi bi-lightning-charge-fill text-amber-500 mr-1"></i>
+                                <strong>Pembaruan Layar Otomatis &amp; Proteksi Draf:</strong> Begitu penarikan selesai, persentase di <em>Progres Nilai</em>, angka di <em>Input Nilai</em>, rekap <em>Leger Nilai</em>, hingga daftar <em>Cetak Rapor</em> langsung diperbarui seketika tanpa perlu me-<em>refresh</em> browser. Jika Anda sedang mengetik nilai yang belum disimpan di tab Input Nilai, sistem akan memunculkan konfirmasi pengaman terlebih dahulu.
+                            </div>
+                            <div className="pt-1 border-t border-blue-100">
+                                <i className="bi bi-arrow-left-right text-teal-600 mr-1"></i>
+                                <strong>Sinkronisasi Dua Arah Saat Revisi Salah Input (Aplikasi &harr; GAS &harr; HTML):</strong>
+                                <ul className="list-disc pl-4 mt-0.5 space-y-0.5 text-gray-600">
+                                    <li><strong>Revisi dari Leger Input Aplikasi:</strong> Setiap kali Wali Kelas/Admin memperbaiki atau mengosongkan angka yang keliru di tab <em>Input Nilai</em> lalu klik <strong>Simpan Nilai</strong>, perubahan tersebut <strong>otomatis dikirim balik (Auto-Push) ke Google Sheet GAS</strong> sehingga data di <em>Portal Audit Tanpa Login</em> ikut ter-update (tersedia juga tombol manual <strong>Kirim GAS</strong> jika sebelumnya menginput saat <em>offline</em>).</li>
+                                    <li><strong>Revisi dari File HTML Ledger:</strong> Buka file HTML &rarr; klik <strong>Muat Cloud</strong> &rarr; perbaiki atau kosongkan nilai yang keliru &rarr; klik <strong>Kirim ke Cloud G-Sheet</strong> (baris di GAS otomatis diperbarui), lalu klik <strong>Tarik Nilai GAS</strong> di aplikasi untuk menyelaraskan ke aplikasi (selama rapor rombel belum berstatus <em>Disahkan &amp; Terkunci</em>).</li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -727,8 +791,8 @@ export const raporPanduan: PanduanSectionData = {
                             </strong>
                             <ul className="list-disc pl-4 space-y-1 text-gray-600 text-[11px]">
                                 <li><strong>2 Mode Input:</strong> Pilih <strong>Tabel Leger</strong> di laptop (mendukung tombol panah/Enter &amp; <em>paste</em> langsung blok sel dari Excel/Sheets) atau <strong>Form Kartu (Mobile)</strong> untuk pengisian nyaman di layar HP.</li>
-                                <li><strong>Tarik Data Otomatis:</strong> Gunakan <strong>Tarik Presensi Otomatis</strong> (rekap Sakit/Izin/Alfa), <strong>Tarik Data Tahfizh</strong>, serta <strong>Isi Cepat Catatan &amp; Keputusan</strong> secara massal.</li>
-                                <li><strong>Auto-Draft &amp; Validasi:</strong> Dilengkapi pemulihan draf lokal otomatis jika tab tertutup serta penanda khusus untuk nilai di bawah KKM atau di luar rentang <code>0–100</code>.</li>
+                                <li><strong>Tarik Eksternal &amp; Internal Terpadu:</strong> Tersedia tombol langsung <strong>Tarik Nilai GAS</strong> &amp; <strong>Import WA</strong> untuk mengambil setoran guru mapel, ditambah <strong>Tarik Presensi Otomatis</strong> (Sakit/Izin/Alfa), <strong>Tarik Data Tahfizh</strong>, serta <strong>Isi Cepat Catatan &amp; Keputusan</strong>.</li>
+                                <li><strong>Auto-Draft &amp; Pelindung Ketikan:</strong> Dilengkapi pemulihan draf lokal otomatis jika tab tertutup, proteksi konfirmasi sebelum menarik data cloud saat masih ada ketikan belum disimpan, serta penanda nilai di bawah KKM atau di luar <code>0–100</code>.</li>
                             </ul>
                         </div>
 
@@ -739,7 +803,7 @@ export const raporPanduan: PanduanSectionData = {
                             <ul className="list-disc pl-4 space-y-1 text-gray-600 text-[11px]">
                                 <li><strong>Mode Tabel vs Kartu Santri:</strong> Di layar HP, alihkan tampilan ke <strong>Kartu Santri</strong> untuk melihat daftar nilai, rata-rata, dan peringkat secara vertikal tanpa geser ke samping.</li>
                                 <li><strong>Tombol Kunci Kolom (Freeze):</strong> Saat memakai mode <strong>Tabel</strong> di HP, kolom nama otomatis dilepas agar ruang nilai tetap lega, dan dapat dikunci/dilepas kapan saja lewat tombol <strong>Kunci Kolom</strong>.</li>
-                                <li><strong>Multi-Sheet, Rincian &amp; Ekspor:</strong> Pindah lembar kerja rapor dengan mudah, klik <strong>Rincian</strong> untuk mengecek kolom mapel yang masih kosong, atau unduh Leger ke Excel/Cetak.</li>
+                                <li><strong>Multi-Sheet, Rincian &amp; Ekspor:</strong> Pindah lembar kerja rapor dengan mudah, klik <strong>Rincian</strong> untuk mengecek kolom mapel yang masih kosong, tarik pembaruan nilai dari GAS secara langsung, atau unduh Leger ke Excel/Cetak.</li>
                             </ul>
                         </div>
                     </div>
@@ -825,8 +889,8 @@ export const raporPanduan: PanduanSectionData = {
                                 <p className="text-gray-600">Atur kota &amp; tanggal rapor lalu klik <strong>Set Default</strong>. Jika template memakai tag <code>$..._PENGAMPU</code>, bilah status <strong>Pengampu Khusus</strong> otomatis tampil lengkap dengan indikator kesiapan TTD dan tombol <strong>Atur Pengampu</strong> langsung dari halaman cetak.</p>
                             </div>
                             <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
-                                <strong className="text-slate-800 block">Fit Halaman ala Excel (A4/F4 &amp; Multi-Halaman)</strong>
-                                <p className="text-gray-600">Pilih kertas <strong>A4/F4</strong> (Tegak/Mendatar), lalu atur <strong>Fit Dokumen 1 Halaman</strong>, <strong>Fit Lebar ke X Halaman</strong>, <strong>Fit Tinggi ke Y Halaman</strong>, atau <strong>Skala Manual (%)</strong>. Baris berlebih otomatis di-oper ke halaman berikutnya tanpa menggantung.</p>
+                                <strong className="text-slate-800 block">Fit Halaman Presisi (A4/F4 &amp; Multi-Halaman)</strong>
+                                <p className="text-gray-600">Pilih kertas <strong>A4/F4</strong> (Tegak/Mendatar), lalu atur <strong>Fit Dokumen 1 Halaman</strong>, <strong>Fit Lebar ke X Halaman</strong>, <strong>Fit Tinggi ke Y Halaman</strong>, atau <strong>Skala Manual (%)</strong>. Garis border paling kanan tabel dijamin tetap utuh saat mode Fit 1 Halaman, dan ukuran serta warna huruf footer otomatis proporsional mengikuti ukuran font rapor.</p>
                             </div>
                             <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
                                 <strong className="text-slate-800 block">Panel Atur Lanjutan &amp; Ulangi Header</strong>

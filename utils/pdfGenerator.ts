@@ -611,7 +611,7 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 ${hasMixedRaporOrientations ? 'page: rapor-landscape;' : ''}
             }
             .rapor-scaled-viewport {
-                overflow: hidden !important;
+                overflow: visible !important;
                 position: relative !important;
             }
             .rapor-fit-1-page.page-break-after,
@@ -619,13 +619,21 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 page-break-after: always !important;
                 break-after: page !important;
             }
+            .rapor-credit-footer,
+            .rapor-credit-footer * {
+                color: #666666 !important;
+                border-top-color: #bfbfbf !important;
+                text-decoration: none !important;
+            }
             .report-signature-footer {
                 position: relative !important;
                 left: auto !important;
                 right: auto !important;
                 bottom: auto !important;
                 margin-top: auto !important;
-                padding-top: 0.25cm !important;
+                padding-top: 0.2cm !important;
+                color: #666666 !important;
+                border-top-color: #bfbfbf !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
             }
@@ -881,6 +889,8 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
         <!DOCTYPE html>
         <html>
         <head>
+            <meta charset="UTF-8" />
+            <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
             <title>${fileName}</title>
             ${styles}
         </head>

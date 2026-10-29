@@ -27,7 +27,7 @@ export const akademikPanduan: PanduanSectionData = {
                             <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold text-[10px] uppercase">Modul 2</span>
                             <h5 className="font-bold text-blue-900 text-sm">Rapor Digital &amp; Penilaian Santri</h5>
                             <p className="text-gray-600 leading-relaxed">
-                                Panduan desentralisasi penilaian tanpa login guru, form kartu santri mobile, tabel leger desktop, generate formulir, import kode nilai aman, dan pencetakan rapor PDF.
+                                Panduan lengkap 1 Link Cloud GAS Multi-Tab, tombol Tarik Nilai GAS 1-klik, Portal Audit Leger tanpa login, form kartu HP &amp; leger desktop, skema TTD Pengampu khusus &amp; stempel tumpuk di atas TTD, serta cetak rapor PDF presisi.
                             </p>
                         </div>
                     </div>

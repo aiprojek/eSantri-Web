@@ -474,5 +474,15 @@
     page-break-after: auto !important;
     break-after: auto !important;
   }
+
+  .rapor-credit-footer,
+  .rapor-credit-footer *,
+  .report-signature-footer,
+  .report-signature-footer * {
+    color: #666666 !important;
+    border-top-color: #bfbfbf !important;
+    text-decoration: none !important;
+  }
 }
+
 

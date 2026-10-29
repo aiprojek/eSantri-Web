@@ -494,60 +494,67 @@ export const raporPanduan: PanduanSectionData = {
                         </div>
                     </div>
 
-                    {/* E. Kode Pemanggil Pejabat, TTD, Santri & Pondok */}
+                    {/* E. Kode Pemanggil Pejabat, Pengampu Khusus, TTD, Stempel & Biodata */}
                     <div className="p-3.5 bg-purple-50/70 rounded-xl border border-purple-200 space-y-2.5 text-xs">
                         <strong className="text-purple-950 flex items-center gap-1.5 font-bold">
-                            <i className="bi bi-person-check-fill text-purple-600"></i> E. Kode Pemanggil Pejabat (Wali Kelas, Mudir Marhalah, Mudir Aam), TTD &amp; Biodata
+                            <i className="bi bi-person-check-fill text-purple-600"></i> E. Kode Pemanggil Pejabat, Pengampu Khusus, TTD + Stempel &amp; Biodata
                         </strong>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
                             <div className="p-2.5 bg-white rounded-lg border border-purple-200 space-y-1">
                                 <strong className="text-purple-900 block">1. Wali Kelas Rombel</strong>
                                 <div className="font-mono text-[10px] text-purple-800 space-y-0.5">
                                     <div>$NAMA_WALI_KELAS</div>
                                     <div>$NIP_WALI_KELAS</div>
                                     <div>$TTD_WALI_KELAS</div>
+                                    <div>$TTD_STEMPEL_WALI_KELAS</div>
                                 </div>
-                                <p className="text-gray-500 text-[10px]">Diambil otomatis dari Wali Kelas yang dipilih pada <strong>Data Master &gt; Struktur Pendidikan &gt; Rombel</strong>.</p>
+                                <p className="text-gray-500 text-[10px]">Otomatis dari Wali Kelas rombel santri pada <strong>Data Master &gt; Struktur Pendidikan &gt; Rombel</strong>.</p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-indigo-200 space-y-1">
+                                <strong className="text-indigo-900 block">2. Pengampu / Guru Khusus</strong>
+                                <div className="font-mono text-[10px] text-indigo-800 space-y-0.5">
+                                    <div>$JABATAN_PENGAMPU</div>
+                                    <div>$NAMA_PENGAMPU</div>
+                                    <div>$NIP_PENGAMPU</div>
+                                    <div>$TTD_PENGAMPU</div>
+                                    <div>$TTD_STEMPEL_PENGAMPU</div>
+                                </div>
+                                <p className="text-gray-500 text-[10px]">Fleksibel per template (1 guru semua rombel, beda tiap rombel, atau ikut Muhaffizh halaqah; mendukung slot <code>_2</code>, <code>_3</code>).</p>
                             </div>
                             <div className="p-2.5 bg-white rounded-lg border border-purple-200 space-y-1">
-                                <strong className="text-purple-900 block">2. Mudir Marhalah (Jenjang)</strong>
+                                <strong className="text-purple-900 block">3. Mudir Marhalah (Jenjang)</strong>
                                 <div className="font-mono text-[10px] text-purple-800 space-y-0.5">
                                     <div>$NAMA_MUDIR_MARHALAH</div>
                                     <div>$NIP_MUDIR_MARHALAH</div>
                                     <div>$TTD_MUDIR_MARHALAH</div>
+                                    <div>$TTD_STEMPEL_MUDIR_MARHALAH</div>
                                 </div>
-                                <p className="text-gray-500 text-[10px]">Diambil otomatis dari Mudir Marhalah pada <strong>Data Master &gt; Struktur Pendidikan &gt; Jenjang</strong>.</p>
+                                <p className="text-gray-500 text-[10px]">Otomatis dari Mudir Marhalah &amp; Stempel Marhalah (<code>$STEMPEL_MARHALAH</code>) pada <strong>Data Master &gt; Jenjang</strong>.</p>
                             </div>
                             <div className="p-2.5 bg-white rounded-lg border border-purple-200 space-y-1">
-                                <strong className="text-purple-900 block">3. Mudir Aam / Pimpinan</strong>
+                                <strong className="text-purple-900 block">4. Mudir Aam / Pimpinan</strong>
                                 <div className="font-mono text-[10px] text-purple-800 space-y-0.5">
                                     <div>$NAMA_MUDIR</div>
                                     <div>$NIP_MUDIR</div>
                                     <div>$TTD_MUDIR</div>
+                                    <div>$TTD_STEMPEL_MUDIR</div>
                                 </div>
-                                <p className="text-gray-500 text-[10px]">Diambil dari Pimpinan Pondok pada <strong>Pengaturan &gt; Umum</strong> beserta Stempel <code>$STEMPEL_PONPES</code>.</p>
+                                <p className="text-gray-500 text-[10px]">Otomatis dari Pimpinan Pondok pada <strong>Pengaturan &gt; Umum</strong> beserta Stempel <code>$STEMPEL_PONPES</code>.</p>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
                             <div className="p-2.5 bg-white rounded-lg border border-gray-200">
-                                <strong className="text-gray-800 block mb-0.5">Biodata Santri, Kelas &amp; Kehadiran</strong>
+                                <strong className="text-gray-800 block mb-0.5">Biodata Santri, Halaqah &amp; Kehadiran</strong>
                                 <p className="text-gray-600 leading-relaxed">
-                                    <code>$NAMA</code>, <code>$NIS</code>, <code>$NISN</code>, <code>$TTL</code>, <code>$JENIS_KELAMIN</code>, <code>$NAMA_AYAH</code>, <code>$NAMA_IBU</code>, <code>$NAMA_WALI</code>, <code>$JENJANG</code>, <code>$KELAS</code>, <code>$ROMBEL</code>, <code>$HALAQAH</code>, <code>$SAKIT</code>, <code>$IZIN</code>, <code>$ALPHA</code>, <code>$TOTAL_ABSEN</code>, <code>$CATATAN_WALI_KELAS</code>, <code>$KEPUTUSAN</code>.
+                                    <code>$NAMA</code>, <code>$NIS</code>, <code>$NISN</code>, <code>$TTL</code>, <code>$JENIS_KELAMIN</code>, <code>$NAMA_AYAH</code>, <code>$NAMA_IBU</code>, <code>$NAMA_WALI</code>, <code>$JENJANG</code>, <code>$KELAS</code>, <code>$ROMBEL</code>, <code>$HALAQAH</code>, <code>$NAMA_MUHAFFIZH</code>, <code>$NIP_MUHAFFIZH</code>, <code>$TTD_MUHAFFIZH</code>, <code>$SAKIT</code>, <code>$IZIN</code>, <code>$ALPHA</code>, <code>$TOTAL_ABSEN</code>, <code>$CATATAN_WALI_KELAS</code>, <code>$KEPUTUSAN</code>.
                                 </p>
                             </div>
                             <div className="p-2.5 bg-white rounded-lg border border-gray-200">
-                                <strong className="text-gray-800 block mb-0.5">Identitas Lembaga, Logo &amp; Tag Titimangsa</strong>
+                                <strong className="text-gray-800 block mb-0.5">Identitas Lembaga, Logo, Stempel &amp; Titimangsa</strong>
                                 <p className="text-gray-600 leading-relaxed">
-                                    <code>$NAMA_PONPES</code>, <code>$NAMA_YAYASAN</code>, <code>$ALAMAT_PONPES</code>, <code>$NSPP</code>, <code>$NPSN</code>, <code>$LOGO_PONPES</code>, <code>$LOGO_YAYASAN</code>, <code>$TITIMANGSA</code>, <code>$TITIMANGSA_GABUNGAN</code>, <code>$TEMPAT_RAPOR</code>, <code>$TANGGAL_RAPOR</code>.
+                                    <code>$NAMA_PONPES</code>, <code>$NAMA_YAYASAN</code>, <code>$ALAMAT_PONPES</code>, <code>$NSPP</code>, <code>$NPSN</code>, <code>$LOGO_PONPES</code>, <code>$LOGO_YAYASAN</code>, <code>$STEMPEL_PONPES</code>, <code>$STEMPEL_MARHALAH</code>, <code>$TITIMANGSA</code>, <code>$TITIMANGSA_GABUNGAN</code>, <code>$TEMPAT_RAPOR</code>, <code>$TANGGAL_RAPOR</code>.
                                 </p>
-                            </div>
-                        </div>
-
-                        <div className="bg-white/90 border border-purple-200 rounded-lg p-2.5 text-[11px] text-gray-700 flex items-start gap-2">
-                            <i className="bi bi-lightbulb-fill text-amber-500 text-sm shrink-0 mt-0.5"></i>
-                            <div>
-                                <strong>Tips Mengisi NIP/NIY &amp; TTD Digital:</strong> Buka <strong>Data Master &gt; Tenaga Pendidik</strong> untuk mengisi kolom <strong>NIP / NIY</strong> masing-masing ustadz/pejabat. Untuk menampilkan gambar tanda tangan otomatis (<code>$TTD_WALI_KELAS</code>, <code>$TTD_MUDIR_MARHALAH</code>, <code>$TTD_MUDIR</code>), unggah scan tanda tangan PNG transparan di menu <strong>Pengaturan &gt; Aset Digital</strong> dengan <em>Nama Pemilik</em> yang sama persis dengan nama pengajar terkait.
                             </div>
                         </div>
                     </div>
@@ -555,7 +562,126 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '5. Generate Formulir Guru & Input Desentralisasi',
+            title: '5. Teknis Tanda Tangan Digital (TTD), Stempel di Atas TTD & Pengampu Khusus (Hadits/Mutun)',
+            color: 'indigo',
+            content: (
+                <div className="space-y-4 text-sm">
+                    <p className="text-gray-700 leading-relaxed">
+                        Sistem pengesahan visual rapor dirancang presisi agar sesuai dengan tata naskah resmi pesantren—mulai dari integrasi aset TTD langsung di Data Master, tumpukan stempel di atas tanda tangan, hingga penugasan pengampu khusus lintas rombel:
+                    </p>
+
+                    {/* 1. Integrasi Langsung Data Master & Isolasi Ketat */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="p-3.5 bg-teal-50/80 rounded-xl border border-teal-200 space-y-2">
+                            <strong className="text-teal-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-cloud-upload-fill text-teal-600"></i> 1. Unggah Cepat TTD &amp; Stempel dari Data Master
+                            </strong>
+                            <p className="text-gray-700 text-[11px] leading-relaxed">
+                                Anda tidak perlu berpindah-pindah menu untuk mendaftarkan tanda tangan pengurus maupun stempel unit pendidikan:
+                            </p>
+                            <ul className="list-disc pl-4 space-y-1 text-[11px] text-gray-600">
+                                <li><strong>TTD Ustadz / Pejabat:</strong> Buka <strong>Data Master &gt; Tenaga Pendidik</strong>, edit atau tambah guru, lalu <em>drag &amp; drop</em> gambar TTD langsung pada kartu pengajar. Aset otomatis terdaftar dan tersinkron dua arah ke <strong>Pengaturan &gt; Aset Digital</strong> berdasarkan ID guru.</li>
+                                <li><strong>Stempel Marhalah &amp; Pondok:</strong> Unggah Stempel Marhalah langsung pada <strong>Data Master &gt; Struktur Pendidikan &gt; Jenjang</strong> (dan Stempel Pondok di <strong>Pengaturan &gt; Aset Digital</strong>).</li>
+                                <li><strong>Auto-Hapus Background Putih:</strong> Saat mengunggah foto TTD/stempel di atas kertas putih, fitur penghapus latar belakang otomatis menjadikannya PNG transparan bersih.</li>
+                            </ul>
+                        </div>
+
+                        <div className="p-3.5 bg-amber-50/80 rounded-xl border border-amber-200 space-y-2">
+                            <strong className="text-amber-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-shield-check text-amber-600"></i> 2. Aturan Isolasi TTD Ketat (Anti Salah Panggil)
+                            </strong>
+                            <p className="text-gray-700 text-[11px] leading-relaxed">
+                                Sistem memisahkan identitas tanda tangan setiap jabatan secara ketat demi keabsahan dokumen akademik:
+                            </p>
+                            <ul className="list-disc pl-4 space-y-1 text-[11px] text-gray-600">
+                                <li><strong>Tidak Pernah Meminjam TTD Pejabat Lain:</strong> Jika Wali Kelas atau Guru Pengampu pada suatu rombel <strong>belum mengunggah TTD digital</strong>, maka sel <code>$TTD_WALI_KELAS</code> / <code>$TTD_PENGAMPU</code> otomatis <strong>dikosongkan (putih bersih)</strong> untuk tanda tangan basah—sistem tidak akan memanggil TTD Mudir sebagai pengganti.</li>
+                                <li><strong>Tautan ID Akurat:</strong> Pencocokan TTD mengutamakan ID Tenaga Pendidik di Data Master sehingga perubahan gelar penulisan nama tidak memutus relasi tanda tangan.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    {/* 2. Teknis Stempel di Atas TTD (Overlay) */}
+                    <div className="p-3.5 bg-rose-50/70 rounded-xl border border-rose-200 space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between border-b border-rose-200/80 pb-2">
+                            <strong className="text-rose-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-patch-check-fill text-rose-600"></i> 3. Teknis Stempel Tumpuk di Atas TTD (Misal di Atas TTD Mudir Marhalah / Mudir Aam)
+                            </strong>
+                            <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold uppercase">
+                                Layer Stempel di Atas
+                            </span>
+                        </div>
+                        <p className="text-gray-700 text-[11px] leading-relaxed">
+                            Sebagaimana lazimnya dokumen resmi pesantren di mana cap/stempel dibubuhkan <strong>di atas tanda tangan Mudir Marhalah atau Pimpinan Pondok</strong> (sedikit bergeser ke sisi kiri tanda tangan), tersedia <strong>2 cara mudah</strong> yang menghasilkan tampilan identik di Kanvas Desain, Preview, maupun Cetak PDF:
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-[11px]">
+                            <div className="p-2.5 bg-white rounded-lg border border-rose-200 space-y-1">
+                                <strong className="text-rose-900 block">Cara A — Pakai Tag Gabungan Siap Pakai (1 Klik)</strong>
+                                <p className="text-gray-600">
+                                    Pilih kategori <strong>Tanda Tangan, Stempel &amp; Logo</strong> lalu masukkan tag gabungan pada sel tanda tangan:
+                                </p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-gray-700 font-mono text-[10px]">
+                                    <li>$TTD_STEMPEL_MUDIR_MARHALAH <span className="font-sans text-gray-500">(TTD + Stempel Marhalah)</span></li>
+                                    <li>$TTD_STEMPEL_MUDIR <span className="font-sans text-gray-500">(TTD + Stempel Pondok)</span></li>
+                                    <li>$TTD_STEMPEL_WALI_KELAS <span className="font-sans text-gray-500">(TTD Wali + Stempel)</span></li>
+                                    <li>$TTD_STEMPEL_PENGAMPU <span className="font-sans text-gray-500">(TTD Pengampu + Stempel)</span></li>
+                                </ul>
+                            </div>
+
+                            <div className="p-2.5 bg-white rounded-lg border border-rose-200 space-y-1">
+                                <strong className="text-rose-900 block">Cara B — Aktifkan Toggle &quot;Stempel di Atas TTD&quot; di Properti Sel</strong>
+                                <p className="text-gray-600">
+                                    Klik sel mana pun yang berisi <code>$TTD_MUDIR_MARHALAH</code>, <code>$TTD_MUDIR</code>, <code>$TTD_PENGAMPU</code>, atau <code>$TTD_PENGAJAR:...</code>, lalu nyalakan saklar <strong>&quot;Tumpuk Stempel di Atas TTD&quot;</strong> di panel kanan untuk mengatur detail:
+                                </p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-gray-600">
+                                    <li><strong>Sumber Stempel:</strong> <em>Otomatis Sesuai Jabatan</em>, <em>Stempel Pondok</em>, <em>Stempel Marhalah</em>, atau pilih aset stempel tertentu.</li>
+                                    <li><strong>Posisi &amp; Ukuran:</strong> Pilih posisi <strong>Kiri TTD (Standar Resmi)</strong>, <strong>Tengah</strong>, atau <strong>Kanan</strong>, serta ukuran <strong>Kecil / Sedang / Besar</strong>.</li>
+                                    <li><strong>Efek Tinta Transparan &amp; Opsi Kosong:</strong> Stempel dirender di lapisan atas TTD dengan bauran tinta alami (guratan tanda tangan di bawahnya tetap tembus terlihat). Jika TTD digital belum ada, area otomatis dikosongkan untuk TTD &amp; cap basah kecuali opsi <em>&quot;Tetap cetak stempel meskipun TTD kosong&quot;</em> dicentang.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 3. Skema Pengampu / Guru Khusus (Hadits, Mutun, Tahfizh) */}
+                    <div className="p-3.5 bg-indigo-50/80 rounded-xl border border-indigo-200 space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between border-b border-indigo-200/80 pb-2">
+                            <strong className="text-indigo-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-person-workspace text-indigo-600"></i> 4. Skema TTD Pengampu / Guru Khusus (Rapor Hafalan Hadits, Mutun &amp; Tahfizh)
+                            </strong>
+                            <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">
+                                Global / Per-Rombel / Halaqah
+                            </span>
+                        </div>
+                        <p className="text-gray-700 text-[11px] leading-relaxed">
+                            Untuk rapor khusus kepesantrenan (seperti <em>Rapor Hafalan Hadits Arbain/Umdatul Ahkam</em>, <em>Rapor Mutun Ilmiyah</em>, atau <em>Rapor Tahfizh</em>) yang ditandatangani oleh guru pengampu khusus di luar Wali Kelas, gunakan rangkaian tag <code>$JABATAN_PENGAMPU</code>, <code>$TTD_PENGAMPU</code> (atau <code>$TTD_STEMPEL_PENGAMPU</code>), <code>$NAMA_PENGAMPU</code>, dan <code>$NIP_PENGAMPU</code>:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                            <div className="p-2.5 bg-white rounded-lg border border-indigo-200 space-y-1">
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 font-bold text-[9px] uppercase">Mode 1: 1 Guru Semua Rombel</span>
+                                <p className="text-gray-600">Cocok bila koordinator/pengampu mutun atau hadits hanya 1 ustadz yang sama untuk seluruh rombel pada template tersebut.</p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-indigo-200 space-y-1">
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-bold text-[9px] uppercase">Mode 2: Berbeda Tiap Rombel</span>
+                                <p className="text-gray-600">Tiap rombel (misal 7A, 7B, 8A) dapat dipilih guru pengampu yang berbeda-beda dalam 1 template rapor yang sama, lengkap dengan opsi Guru Cadangan.</p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-indigo-200 space-y-1">
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 font-bold text-[9px] uppercase">Mode 3: Muhaffizh Halaqah</span>
+                                <p className="text-gray-600">Otomatis memanggil nama, NIP, dan TTD ustadz pengampu kelompok halaqah masing-masing santri (bisa juga memakai <code>$NAMA_MUHAFFIZH</code> &amp; <code>$TTD_MUHAFFIZH</code>).</p>
+                            </div>
+                        </div>
+                        <div className="bg-white/90 border border-indigo-200 rounded-lg p-2.5 text-[11px] text-gray-700 space-y-1">
+                            <p>
+                                <strong>Cara Mengatur &amp; Multi-Pengampu:</strong> Panel pengaturan Pengampu otomatis muncul saat Anda mengeklik sel bertag <code>$..._PENGAMPU</code> di <strong>Desain Rapor</strong>, di tab <strong>Lembar &amp; Kertas</strong>, maupun langsung melalui tombol <strong>&quot;Atur Pengampu&quot;</strong> di halaman <strong>Cetak Rapor</strong>.
+                            </p>
+                            <p className="text-gray-600">
+                                Jika dalam 1 rapor terdapat <strong>2 pengampu/penguji sekaligus</strong> (misal Pengampu Materi &amp; Penguji Tasmi&apos;), klik <strong>+ Tambah Pengampu Ke-2</strong> lalu gunakan tag akhiran angka <code>$JABATAN_PENGAMPU_2</code>, <code>$TTD_PENGAMPU_2</code>, <code>$NAMA_PENGAMPU_2</code>, dan <code>$NIP_PENGAMPU_2</code>. Untuk menunjuk 1 orang guru tetap secara langsung tanpa konfigurasi slot, tersedia pula pilihan <strong>Guru Spesifik</strong> (<code>$NAMA_PENGAJAR_ID</code> &amp; <code>$TTD_PENGAJAR:ID</code>).
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )
+        },
+        {
+            title: '6. Generate Formulir Guru & Input Desentralisasi',
             color: 'teal',
             content: (
                 <div className="space-y-3 text-sm">
@@ -586,7 +712,7 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '6. Input Nilai Langsung & Leger Nilai (Desktop & Mobile)',
+            title: '7. Input Nilai Langsung & Leger Nilai (Desktop & Mobile)',
             color: 'green',
             content: (
                 <div className="space-y-3 text-sm">
@@ -621,7 +747,7 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '7. Review Data & Filter Multi-Kriteria Lanjutan',
+            title: '8. Review Data & Filter Multi-Kriteria Lanjutan',
             color: 'cyan',
             content: (
                 <div className="space-y-3 text-sm">
@@ -651,7 +777,7 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '8. Pengesahan Nilai, Tata Letak Cetak & Distribusi WhatsApp',
+            title: '9. Pengesahan Nilai, Tata Letak Cetak & Distribusi WhatsApp',
             color: 'orange',
             content: (
                 <div className="space-y-4 text-sm">
@@ -691,12 +817,12 @@ export const raporPanduan: PanduanSectionData = {
                     {/* Kontrol Tata Letak Cetak & Titimangsa */}
                     <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 text-xs">
                         <strong className="text-slate-900 font-bold flex items-center gap-1.5">
-                            <i className="bi bi-sliders2 text-indigo-600"></i> Pengaturan Tata Letak Cetak, Titimangsa &amp; Seleksi Cerdas
+                            <i className="bi bi-sliders2 text-indigo-600"></i> Pengaturan Tata Letak Cetak, Pengampu Cepat, Titimangsa &amp; Seleksi Cerdas
                         </strong>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
                             <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
-                                <strong className="text-slate-800 block">Titimangsa &amp; Set Default</strong>
-                                <p className="text-gray-600">Atur kota serta tanggal penerbitan rapor secara serentak untuk satu rombel maupun per santri, lalu klik <strong>Set Default</strong> agar tersimpan otomatis.</p>
+                                <strong className="text-slate-800 block">Titimangsa &amp; Bilah &quot;Atur Pengampu&quot;</strong>
+                                <p className="text-gray-600">Atur kota &amp; tanggal rapor lalu klik <strong>Set Default</strong>. Jika template memakai tag <code>$..._PENGAMPU</code>, bilah status <strong>Pengampu Khusus</strong> otomatis tampil lengkap dengan indikator kesiapan TTD dan tombol <strong>Atur Pengampu</strong> langsung dari halaman cetak.</p>
                             </div>
                             <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
                                 <strong className="text-slate-800 block">Fit Halaman ala Excel (A4/F4 &amp; Multi-Halaman)</strong>

@@ -211,19 +211,22 @@ export const pengaturanPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '5. Tab Aset Digital: Stempel Resmi Pondok & Tanda Tangan Digital (TTD) Otomatis',
+            title: '5. Tab Aset Digital: Sinkronisasi 2 Arah Data Master, Drag & Drop & Stempel di Atas TTD',
             color: 'purple',
             content: (
                 <div className="space-y-3 text-sm text-gray-700">
                     <p className="leading-relaxed">
-                        Tab <strong>Aset Digital</strong> adalah gudang penyimpanan visual untuk gambar <strong>Stempel Resmi Lembaga</strong> dan <strong>Tanda Tangan (TTD) Pejabat/Ustadz</strong> yang terintegrasi ke seluruh dokumen cetak:
+                        Tab <strong>Aset Digital</strong> adalah pusat registri visual untuk gambar <strong>Stempel Resmi Pondok / Marhalah</strong> dan <strong>Tanda Tangan (TTD) Pejabat/Ustadz</strong> yang terhubung langsung dengan <strong>Data Master</strong> dan seluruh modul cetak:
                     </p>
                     <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
                         <li>
-                            <strong>Penghapus Background Putih Otomatis (Auto-Transparent):</strong> Jika Anda memfoto tanda tangan atau stempel di atas kertas HVS putih, aktifkan fitur hapus latar belakang saat mengunggah agar gambar otomatis menjadi transparan (PNG) dan tampak menyatu alami di atas garis tanda tangan dokumen.
+                            <strong>Terintegrasi Langsung ke Data Master (Drag &amp; Drop):</strong> Anda dapat mengunggah (atau tarik &amp; lepas file gambar) TTD ustadz langsung di <strong>Data Master &gt; Tenaga Pendidik</strong> serta Stempel Marhalah langsung di <strong>Data Master &gt; Struktur Pendidikan &gt; Jenjang</strong>. Aset yang diunggah dari Data Master otomatis terdaftar di daftar Aset Digital berdasarkan ID guru/jenjang, begitu pula sebaliknya.
                         </li>
                         <li>
-                            <strong>Penautan Otomatis berdasarkan Nama Pejabat:</strong> Beri nama aset TTD sesuai nama lengkap ustadz/pejabat di Data Master (atau tautkan ke profil guru terkait). Saat mencetak <strong>Surat Menyurat, Rapor, Syahadah Tahfizh, Kuitansi Keuangan,</strong> maupun <strong>Kartu Santri</strong>, sistem akan otomatis menampilkan tanda tangan dan stempel yang sesuai tanpa perlu unggah berulang.
+                            <strong>Penghapus Background Putih Otomatis (Auto-Transparent):</strong> Saat mengunggah foto tanda tangan atau stempel di atas kertas HVS putih, fitur penghapus latar belakang otomatis menjadikannya PNG transparan sehingga menyatu alami di atas garis tanda tangan maupun saat ditumpuk (stempel di atas TTD).
+                        </li>
+                        <li>
+                            <strong>Isolasi TTD Ketat &amp; Tumpuk Stempel di Atas TTD:</strong> Pada Rapor, sistem memanggil TTD sesuai pejabat/pengampu yang ditugaskan secara ketat (jika pejabat belum punya TTD digital, area dikosongkan untuk TTD basah dan tidak meminjam TTD Mudir). Mendukung pula penumpukan <strong>Stempel di atas TTD</strong> (misal <code>$TTD_STEMPEL_MUDIR_MARHALAH</code> atau opsi <em>Tumpuk Stempel di Atas TTD</em>).
                         </li>
                     </ul>
                 </div>

@@ -664,7 +664,7 @@ export const panduanData: PanduanSectionData[] = [
                         <p>Hierarki pendidikan diatur secara terstruktur bertingkat:</p>
                         <ol className="list-decimal pl-5 space-y-2 bg-gray-50 p-3 rounded-lg border text-xs text-gray-700">
                             <li>
-                                <strong>Jenjang (Marhalah):</strong> Menentukan unit tingkatan utama lembaga (misal: <em>Salafiyah Ula, Wustho, Ulya, MTs, SMP, MA, SMK</em>). Wajib mengisi <strong>Kode Jenjang</strong> karena digunakan sebagai prefiks generator Nomor Induk Santri (NIS) otomatis.
+                                <strong>Jenjang (Marhalah):</strong> Menentukan unit tingkatan utama lembaga (misal: <em>Salafiyah Ula, Wustho, Ulya, MTs, SMP, MA, SMK</em>). Wajib mengisi <strong>Kode Jenjang</strong> (prefiks generator NIS otomatis), serta dapat menetapkan <strong>Mudir Marhalah</strong> dan mengunggah <strong>Stempel Resmi Marhalah</strong> yang otomatis terhubung ke Rapor &amp; Aset Digital.
                             </li>
                             <li>
                                 <strong>Tingkat Kelas:</strong> Mengelompokkan tingkat kelas yang menginduk ke Jenjang tertentu (misal: <em>Kelas 1, 2, 3</em> atau <em>Kelas VII, VIII, IX</em>).
@@ -687,12 +687,13 @@ export const panduanData: PanduanSectionData[] = [
                 )
             },
             {
-                title: '2. Tenaga Pendidik & Staf: Pendidik, Kependidikan, Kontak WA & Pengampu',
+                title: '2. Tenaga Pendidik & Staf: Pendidik, TTD Digital Langsung, Kontak WA & Pengampu',
                 content: (
                     <div className="space-y-3 text-sm">
                         <p>Kelola data asatidz/guru pengampu dan staf tenaga kependidikan secara terpadu:</p>
                         <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
                             <li><strong>Kategori Pegawai:</strong> Pembedaan jelas antara <strong>Tenaga Pendidik (Guru/Asatidz)</strong> dan <strong>Tenaga Kependidikan (Staf TU, Kasir, Satpam, BK, Pengasuhan, dll)</strong>.</li>
+                            <li><strong>Unggah TTD Digital Langsung (Drag &amp; Drop):</strong> Unggah atau seret gambar tanda tangan ustadz/pengurus langsung di form atau kartu Tenaga Pendidik (dilengkapi hapus background putih otomatis). TTD otomatis terdaftar di <em>Pengaturan &gt; Aset Digital</em> dan siap dipanggil sebagai Wali Kelas, Pengampu Khusus, Muhaffizh, maupun Mudir di Rapor.</li>
                             <li><strong>Kontak WhatsApp Terhubung:</strong> Setiap baris pendidik dilengkapi tombol pintas WhatsApp untuk menghubungi guru atau staf secara langsung dengan satu klik.</li>
                             <li><strong>Kompetensi Mapel &amp; Sinkronisasi 2 Arah:</strong> Tentukan mata pelajaran yang diampu. Perubahan pengampu di menu <em>Kurikulum &gt; Plotting Pengampu</em> otomatis tersinkronisasi realtime ke Data Master guru ini, begitu pula sebaliknya.</li>
                             <li><strong>Jadwal & Ketersediaan Mengajar:</strong> Atur hari masuk dan jam pelajaran kesanggupan mengajar yang menjadi acuan anti-bentrok pada jadwal pelajaran otomatis.</li>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Santri, PondokSettings, RaporRecord, DigitalAsset, GridCell, RaporTemplate, TenagaPengajar, Rombel, Jenjang, Kelas, StempelOverlayConfig } from '../types';
+import { Santri, PondokSettings, RaporRecord, DigitalAsset, GridCell, RaporTemplate, TenagaPengajar, Rombel, Jenjang, Kelas, StempelOverlayConfig, RaporCustomSignatory } from '../types';
 import {
     formatDate,
     getHijriDate,
@@ -138,12 +138,17 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
     },
     {
         id: 'pejabat',
-        title: 'Wali Kelas & Pimpinan',
+        title: 'Wali Kelas, Pengampu & Pimpinan',
         icon: 'bi-person-check-fill',
         color: 'text-purple-600 bg-purple-50 border-purple-200',
         tags: [
             { tag: '$NAMA_WALI_KELAS', label: 'Nama Wali Kelas', description: 'Nama ustadz/ustadzah wali kelas rombel santri', example: 'Ust. Muhammad Rizki, S.Pd.' },
             { tag: '$NIP_WALI_KELAS', label: 'NIP / NIY Wali Kelas', description: 'Nomor induk kepegawaian wali kelas', example: '198501012010011002' },
+            { tag: '$NAMA_PENGAMPU', label: 'Nama Pengampu / Guru Khusus', description: 'Nama guru khusus rapor (Hadits/Mutun/Tahfizh — 1 guru semua rombel atau beda tiap rombel)', example: 'Ust. Ahmad Fauzi, Lc.' },
+            { tag: '$NIP_PENGAMPU', label: 'NIP / NIY Pengampu Khusus', description: 'NIP/NIY atau kode guru pengampu khusus', example: '199002102018011004' },
+            { tag: '$JABATAN_PENGAMPU', label: 'Jabatan Pengampu Khusus', description: 'Label jabatan pengampu sesuai pengaturan template', example: 'Pengampu Hafalan Hadits' },
+            { tag: '$NAMA_MUHAFFIZH', label: 'Nama Muhaffizh Halaqah', description: 'Nama ustadz pengampu halaqah santri dari Data Master Halaqah', example: 'Ust. Salman Al-Farisi, Al-Hafizh' },
+            { tag: '$NIP_MUHAFFIZH', label: 'NIP / NIY Muhaffizh Halaqah', description: 'NIP/NIY ustadz pengampu halaqah santri', example: '199204152019031002' },
             { tag: '$NAMA_MUDIR_MARHALAH', label: 'Nama Mudir Marhalah', description: 'Nama Mudir Marhalah / Kepala Jenjang santri', example: 'Ust. H. Abdul Hakim, Lc., M.A.' },
             { tag: '$NIP_MUDIR_MARHALAH', label: 'NIP / NIY Mudir Marhalah', description: 'Nomor induk kepegawaian Mudir Marhalah', example: '197805122005011003' },
             { tag: '$NAMA_MUDIR', label: 'Nama Mudir Aam / Pimpinan', description: 'Nama Pimpinan Pondok / Mudir Aam', example: 'K.H. Ahmad Dahlan, Lc.' },
@@ -228,6 +233,9 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
         tags: [
             { tag: '$TTD_STEMPEL_MUDIR_MARHALAH', label: 'TTD + Stempel Mudir Marhalah', description: 'TTD Mudir Marhalah dengan Stempel Marhalah/Pondok menimpa di atas TTD', example: '[Cap + TTD Mudir Marhalah]', isMedia: true },
             { tag: '$TTD_STEMPEL_MUDIR', label: 'TTD + Stempel Mudir Aam / Pimpinan', description: 'TTD Pimpinan Pondok dengan Stempel Resmi Pondok di atas TTD', example: '[Cap + TTD Mudir]', isMedia: true },
+            { tag: '$TTD_PENGAMPU', label: 'Tanda Tangan Pengampu / Guru Khusus', description: 'TTD guru khusus (Hadits/Mutun/Tahfizh — otomatis sesuai rombel atau global, kosong jika belum ada)', example: '[TTD Pengampu]', isMedia: true },
+            { tag: '$TTD_STEMPEL_PENGAMPU', label: 'TTD + Stempel Pengampu Khusus', description: 'TTD Pengampu Khusus dengan Stempel menimpa di atas TTD', example: '[Cap + TTD Pengampu]', isMedia: true },
+            { tag: '$TTD_MUHAFFIZH', label: 'Tanda Tangan Muhaffizh Halaqah', description: 'TTD ustadz pengampu halaqah santri (kosong otomatis jika belum ada)', example: '[TTD Muhaffizh]', isMedia: true },
             { tag: '$TTD_WALI_KELAS', label: 'Tanda Tangan Wali Kelas', description: 'TTD wali kelas sesuai rombel santri (kosong otomatis jika belum ada)', example: '[TTD Wali Kelas]', isMedia: true },
             { tag: '$TTD_MUDIR_MARHALAH', label: 'Tanda Tangan Mudir Marhalah', description: 'TTD Mudir Marhalah sesuai jenjang santri (kosong otomatis jika belum ada)', example: '[TTD Mudir Marhalah]', isMedia: true },
             { tag: '$TTD_MUDIR', label: 'Tanda Tangan Mudir Aam / Pimpinan', description: 'TTD Mudir Aam / Pimpinan Pondok (kosong otomatis jika belum ada)', example: '[TTD Mudir]', isMedia: true },
@@ -243,6 +251,7 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
 export interface RaporResolveContext {
     santri?: Santri | null;
     settings?: PondokSettings | null;
+    template?: RaporTemplate | null;
     record?: RaporRecord | null;
     digitalAssets?: DigitalAsset[];
     targetDate?: Date;
@@ -408,6 +417,118 @@ export const resolveMudirAamInfo = (
     return { nama: 'K.H. Pimpinan Pesantren', nip: '-' };
 };
 
+export const resolveMuhaffizhTeacher = (
+    santri?: Santri | null,
+    settings?: PondokSettings | null
+): TenagaPengajar | undefined => {
+    if (!settings?.tenagaPengajar) return undefined;
+    const halaqahList = settings.kelompokHalaqah || [];
+    const targetHalaqah = santri
+        ? (santri.halaqahId !== undefined && santri.halaqahId !== null
+            ? halaqahList.find(h => Number(h.id) === Number(santri.halaqahId))
+            : halaqahList.find(h => Array.isArray(h.santriIds) && h.santriIds.some(sid => Number(sid) === Number(santri.id))))
+        : (halaqahList.find(h => h.muhaffizhId) || halaqahList[0]);
+
+    if (!targetHalaqah) return undefined;
+    if (targetHalaqah.muhaffizhId !== undefined && targetHalaqah.muhaffizhId !== null) {
+        const direct = settings.tenagaPengajar.find(tp => Number(tp.id) === Number(targetHalaqah.muhaffizhId));
+        if (direct) return direct;
+    }
+    return undefined;
+};
+
+export const resolveCustomSignatoryInfo = (
+    slotNumber: number,
+    context: Pick<RaporResolveContext, 'santri' | 'settings' | 'template'>,
+    overrideRombel?: Rombel | null
+): {
+    config?: RaporCustomSignatory;
+    teacher?: TenagaPengajar;
+    nama: string;
+    nip: string;
+    jabatan: string;
+} => {
+    const slot = Math.max(1, Math.floor(slotNumber || 1));
+    const defaultLabel = slot === 1 ? 'Pengampu / Guru Khusus' : `Pengampu ${slot}`;
+    const signatories = context.template?.customSignatories || [];
+    const sig =
+        signatories.find(s => Number(s.slot) === slot) ||
+        (slot - 1 < signatories.length ? signatories[slot - 1] : undefined);
+
+    const jabatan = sig?.label?.trim() || defaultLabel;
+    const settings = context.settings;
+    if (!settings?.tenagaPengajar || !sig) {
+        return { config: sig, teacher: undefined, nama: '-', nip: '-', jabatan };
+    }
+
+    const findById = (tId?: number | null): TenagaPengajar | undefined => {
+        if (tId === undefined || tId === null || isNaN(Number(tId)) || Number(tId) <= 0) return undefined;
+        return settings.tenagaPengajar.find(tp => Number(tp.id) === Number(tId));
+    };
+
+    let teacher: TenagaPengajar | undefined;
+    if (sig.mode === 'global') {
+        teacher = findById(sig.defaultTeacherId);
+    } else if (sig.mode === 'per_rombel') {
+        const { rombel } = resolveSantriAcademicHierarchy(context.santri, settings);
+        const targetRombel = overrideRombel || rombel || (!context.santri ? settings.rombel?.[0] : undefined);
+        const mappedId = targetRombel ? sig.rombelTeacherMap?.[String(targetRombel.id)] : undefined;
+        teacher = findById(mappedId) || findById(sig.defaultTeacherId);
+    } else if (sig.mode === 'halaqah') {
+        teacher = resolveMuhaffizhTeacher(context.santri, settings) || findById(sig.defaultTeacherId);
+    }
+
+    return {
+        config: sig,
+        teacher,
+        nama: teacher?.nama || '-',
+        nip: formatTeacherNip(teacher),
+        jabatan
+    };
+};
+
+export const inspectTemplatePengampuUsage = (
+    template?: RaporTemplate | null
+): { usesPengampu: boolean; slotsUsed: number[] } => {
+    if (!template) return { usesPengampu: false, slotsUsed: [] };
+    const slotSet = new Set<number>();
+    (template.customSignatories || []).forEach(sig => {
+        if (sig && sig.slot >= 1) slotSet.add(sig.slot);
+    });
+
+    const sheets = template.sheets && template.sheets.length > 0 ? template.sheets : [{ cells: template.cells }];
+    for (const sh of sheets) {
+        if (!sh?.cells) continue;
+        for (const row of sh.cells) {
+            for (const cell of row) {
+                if (!cell || cell.hidden || !cell.value) continue;
+                const up = cell.value.toUpperCase();
+                if (
+                    up.includes('PENGAMPU') ||
+                    up.includes('PENGUJI') ||
+                    up.includes('MUSYRIF_RAPOR')
+                ) {
+                    const numberedMatches = up.match(/(?:PENGAMPU|PENGUJI)_(\d+)/g);
+                    if (numberedMatches && numberedMatches.length > 0) {
+                        numberedMatches.forEach(m => {
+                            const num = parseInt(m.split('_').pop() || '1', 10);
+                            if (!isNaN(num) && num >= 1) slotSet.add(num);
+                        });
+                    } else {
+                        slotSet.add(1);
+                    }
+                }
+            }
+        }
+    }
+
+    const slotsUsed = Array.from(slotSet).sort((a, b) => a - b);
+    return {
+        usesPengampu: slotsUsed.length > 0,
+        slotsUsed
+    };
+};
+
 const normalizeMediaTag = (raw: string): string => {
     const trimmed = (raw || '').trim();
     if (!trimmed) return '';
@@ -433,6 +554,38 @@ const normalizeMediaTag = (raw: string): string => {
     if (u === 'STEMPEL_MARHALAH' || u === 'STEMPEL_JENJANG' || u === 'STEMPEL_MADRASAH') return '$STEMPEL_MARHALAH';
     if (u === 'KOP_SURAT' || u === 'KOP_PONPES' || u === 'KOP') return '$KOP_SURAT';
     if (u === 'TTD_WALI_KELAS' || u === 'TTD_WALIKELAS' || u === 'TTD_WALI') return '$TTD_WALI_KELAS';
+    if (u === 'TTD_MUHAFFIZH' || u === 'TTD_USTADZ_HALAQAH' || u === 'TTD_PENGAMPU_HALAQAH') return '$TTD_MUHAFFIZH';
+    if (u === 'TTD_STEMPEL_MUHAFFIZH' || u === 'STEMPEL_TTD_MUHAFFIZH' || u === 'TTD_CAP_MUHAFFIZH') return '$TTD_STEMPEL_MUHAFFIZH';
+    if (
+        u === 'TTD_PENGAMPU' ||
+        u === 'TTD_PENGAMPU_1' ||
+        u === 'TTD_GURU_PENGAMPU' ||
+        u === 'TTD_PENGUJI' ||
+        u === 'TTD_PENGUJI_1' ||
+        u === 'TTD_MUSYRIF_RAPOR'
+    ) {
+        return '$TTD_PENGAMPU';
+    }
+    const pengampuTtdSlotMatch = u.match(/^TTD_(?:GURU_)?(?:PENGAMPU|PENGUJI)_(\d+)$/);
+    if (pengampuTtdSlotMatch) {
+        const slotNum = parseInt(pengampuTtdSlotMatch[1], 10);
+        return slotNum <= 1 ? '$TTD_PENGAMPU' : `$TTD_PENGAMPU_${slotNum}`;
+    }
+    if (
+        u === 'TTD_STEMPEL_PENGAMPU' ||
+        u === 'TTD_STEMPEL_PENGAMPU_1' ||
+        u === 'STEMPEL_TTD_PENGAMPU' ||
+        u === 'TTD_CAP_PENGAMPU' ||
+        u === 'CAP_TTD_PENGAMPU' ||
+        u === 'TTD_STEMPEL_PENGUJI'
+    ) {
+        return '$TTD_STEMPEL_PENGAMPU';
+    }
+    const pengampuStempelSlotMatch = u.match(/^(?:TTD_STEMPEL|STEMPEL_TTD|TTD_CAP)_(?:PENGAMPU|PENGUJI)_(\d+)$/);
+    if (pengampuStempelSlotMatch) {
+        const slotNum = parseInt(pengampuStempelSlotMatch[1], 10);
+        return slotNum <= 1 ? '$TTD_STEMPEL_PENGAMPU' : `$TTD_STEMPEL_PENGAMPU_${slotNum}`;
+    }
     if (
         u === 'TTD_STEMPEL_MUDIR_MARHALAH' ||
         u === 'STEMPEL_TTD_MUDIR_MARHALAH' ||
@@ -473,6 +626,12 @@ const isSingleMediaTag = (value: string): boolean => {
            v === '$STEMPEL_MARHALAH' ||
            v === '$KOP_SURAT' ||
            v === '$TTD_WALI_KELAS' ||
+           v === '$TTD_MUHAFFIZH' ||
+           v === '$TTD_STEMPEL_MUHAFFIZH' ||
+           v === '$TTD_PENGAMPU' ||
+           v.startsWith('$TTD_PENGAMPU_') ||
+           v === '$TTD_STEMPEL_PENGAMPU' ||
+           v.startsWith('$TTD_STEMPEL_PENGAMPU_') ||
            v === '$TTD_MUDIR_MARHALAH' ||
            v === '$TTD_MUDIR' ||
            v === '$TTD_STEMPEL_MUDIR_MARHALAH' ||
@@ -565,6 +724,29 @@ export const getMediaTagImageSrc = (tag: string, context: RaporResolveContext): 
         if (!teacher) return null;
         const teacherAsset = findStrictTeacherTtdAsset(digitalAssets, teacher);
         return teacherAsset?.base64Image || null;
+    }
+    if (t === '$TTD_MUHAFFIZH' || t === '$TTD_STEMPEL_MUHAFFIZH') {
+        if (!settings) return null;
+        const muhaffizh = resolveMuhaffizhTeacher(santri, settings);
+        if (!muhaffizh) return null;
+        const mhAsset = findStrictTeacherTtdAsset(digitalAssets, muhaffizh);
+        return mhAsset?.base64Image || null;
+    }
+    if (
+        t === '$TTD_PENGAMPU' ||
+        t.startsWith('$TTD_PENGAMPU_') ||
+        t === '$TTD_STEMPEL_PENGAMPU' ||
+        t.startsWith('$TTD_STEMPEL_PENGAMPU_')
+    ) {
+        if (!settings) return null;
+        const slotMatch = t.match(/_(\d+)$/);
+        const slotNum = slotMatch ? parseInt(slotMatch[1], 10) : 1;
+        const { teacher } = resolveCustomSignatoryInfo(slotNum, context);
+        // Strict isolation: jika pengampu belum ditentukan untuk rombel ini ATAU guru tersebut belum punya TTD digital,
+        // biarkan KOSONG (null) untuk tanda tangan basah — JANGAN PERNAH mengambil TTD Mudir / pejabat lain!
+        if (!teacher) return null;
+        const pAsset = findStrictTeacherTtdAsset(digitalAssets, teacher);
+        return pAsset?.base64Image || null;
     }
     if (t === '$TTD_MUDIR_MARHALAH' || t === '$TTD_STEMPEL_MUDIR_MARHALAH') {
         if (!settings) return null;
@@ -710,10 +892,40 @@ export const resolveCellMediaVisual = (
 
     const normTag = normalizeMediaTag(rawVal);
 
-    // 2. Tag gabungan siap pakai ($TTD_STEMPEL_MUDIR_MARHALAH / $TTD_STEMPEL_MUDIR)
-    if (normTag === '$TTD_STEMPEL_MUDIR_MARHALAH' || normTag === '$TTD_STEMPEL_MUDIR') {
+    // 2. Tag gabungan siap pakai ($TTD_STEMPEL_MUDIR_MARHALAH / $TTD_STEMPEL_MUDIR / $TTD_STEMPEL_PENGAMPU / $TTD_STEMPEL_MUHAFFIZH)
+    if (
+        normTag === '$TTD_STEMPEL_MUDIR_MARHALAH' ||
+        normTag === '$TTD_STEMPEL_MUDIR' ||
+        normTag === '$TTD_STEMPEL_MUHAFFIZH' ||
+        normTag === '$TTD_STEMPEL_PENGAMPU' ||
+        normTag.startsWith('$TTD_STEMPEL_PENGAMPU_')
+    ) {
+        const isMudirAam = normTag === '$TTD_STEMPEL_MUDIR';
         const isMarhalah = normTag === '$TTD_STEMPEL_MUDIR_MARHALAH';
-        const baseTtdTag = isMarhalah ? '$TTD_MUDIR_MARHALAH' : '$TTD_MUDIR';
+        const isMuhaffizh = normTag === '$TTD_STEMPEL_MUHAFFIZH';
+        const slotMatch = normTag.match(/_(\d+)$/);
+        const pengampuSlot = slotMatch ? parseInt(slotMatch[1], 10) : 1;
+
+        const baseTtdTag = isMarhalah
+            ? '$TTD_MUDIR_MARHALAH'
+            : isMudirAam
+            ? '$TTD_MUDIR'
+            : isMuhaffizh
+            ? '$TTD_MUHAFFIZH'
+            : pengampuSlot === 1
+            ? '$TTD_PENGAMPU'
+            : `$TTD_PENGAMPU_${pengampuSlot}`;
+
+        const baseLabel = isMarhalah
+            ? 'TTD Mudir Marhalah'
+            : isMudirAam
+            ? 'TTD Mudir Aam'
+            : isMuhaffizh
+            ? 'TTD Muhaffizh'
+            : pengampuSlot === 1
+            ? 'TTD Pengampu'
+            : `TTD Pengampu ${pengampuSlot}`;
+
         const primarySrc = getMediaTagImageSrc(baseTtdTag, context);
         if (overlayCfg?.enabled === false) {
             return {
@@ -724,12 +936,12 @@ export const resolveCellMediaVisual = (
                 position,
                 size,
                 showWhenTtdEmpty,
-                placeholderLabel: isMarhalah ? 'TTD Mudir Marhalah' : 'TTD Mudir Aam'
+                placeholderLabel: baseLabel
             };
         }
         const stempelOverlaySrc = resolveStampBySource(
             overlayCfg?.source,
-            isMarhalah ? 'marhalah_then_ponpes' : 'ponpes_only'
+            isMudirAam ? 'ponpes_only' : 'marhalah_then_ponpes'
         );
         return {
             kind: 'ttd_with_stempel',
@@ -739,7 +951,7 @@ export const resolveCellMediaVisual = (
             position,
             size,
             showWhenTtdEmpty,
-            placeholderLabel: isMarhalah ? 'Cap + TTD Mudir Marhalah' : 'Cap + TTD Mudir Aam'
+            placeholderLabel: `Cap + ${baseLabel}`
         };
     }
 
@@ -757,6 +969,12 @@ export const resolveCellMediaVisual = (
                 ? 'TTD Mudir Aam'
                 : normTag === '$TTD_WALI_KELAS'
                 ? 'TTD Wali Kelas'
+                : normTag === '$TTD_MUHAFFIZH'
+                ? 'TTD Muhaffizh'
+                : normTag === '$TTD_PENGAMPU'
+                ? 'TTD Pengampu'
+                : normTag.startsWith('$TTD_PENGAMPU_')
+                ? `TTD Pengampu ${normTag.replace('$TTD_PENGAMPU_', '')}`
                 : normTag.replace(/^\$/, '');
 
         if (overlayCfg?.enabled) {
@@ -921,6 +1139,63 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         if (u === 'NIP_WALI_KELAS' || u === 'NIY_WALI_KELAS' || u === 'NIP_WALIKELAS' || u === 'NIY_WALIKELAS') return '$NIP_WALI_KELAS';
         if (u === 'TTD_WALI_KELAS' || u === 'TTD_WALIKELAS' || u === 'TTD_WALI') return '$TTD_WALI_KELAS';
         if (
+            u === 'PENGAMPU' ||
+            u === 'NAMA_PENGAMPU' ||
+            u === 'NAMA_PENGAMPU_1' ||
+            u === 'GURU_PENGAMPU' ||
+            u === 'NAMA_GURU_PENGAMPU' ||
+            u === 'PENGUJI' ||
+            u === 'NAMA_PENGUJI' ||
+            u === 'NAMA_PENGUJI_1' ||
+            u === 'NAMA_MUSYRIF_RAPOR'
+        ) {
+            return '$NAMA_PENGAMPU';
+        }
+        const namaPengampuSlotMatch = u.match(/^(?:NAMA_)?(?:GURU_)?(?:PENGAMPU|PENGUJI)_(\d+)$/);
+        if (namaPengampuSlotMatch) {
+            const sNum = parseInt(namaPengampuSlotMatch[1], 10);
+            return sNum <= 1 ? '$NAMA_PENGAMPU' : `$NAMA_PENGAMPU_${sNum}`;
+        }
+        if (
+            u === 'NIP_PENGAMPU' ||
+            u === 'NIP_PENGAMPU_1' ||
+            u === 'NIY_PENGAMPU' ||
+            u === 'NIY_PENGAMPU_1' ||
+            u === 'NIP_GURU_PENGAMPU' ||
+            u === 'NIP_PENGUJI' ||
+            u === 'NIY_PENGUJI'
+        ) {
+            return '$NIP_PENGAMPU';
+        }
+        const nipPengampuSlotMatch = u.match(/^(?:NIP|NIY)_(?:GURU_)?(?:PENGAMPU|PENGUJI)_(\d+)$/);
+        if (nipPengampuSlotMatch) {
+            const sNum = parseInt(nipPengampuSlotMatch[1], 10);
+            return sNum <= 1 ? '$NIP_PENGAMPU' : `$NIP_PENGAMPU_${sNum}`;
+        }
+        if (u === 'JABATAN_PENGAMPU' || u === 'JABATAN_PENGAMPU_1' || u === 'LABEL_PENGAMPU' || u === 'JABATAN_PENGUJI') {
+            return '$JABATAN_PENGAMPU';
+        }
+        const jabPengampuSlotMatch = u.match(/^(?:JABATAN|LABEL)_(?:PENGAMPU|PENGUJI)_(\d+)$/);
+        if (jabPengampuSlotMatch) {
+            const sNum = parseInt(jabPengampuSlotMatch[1], 10);
+            return sNum <= 1 ? '$JABATAN_PENGAMPU' : `$JABATAN_PENGAMPU_${sNum}`;
+        }
+        if (u === 'TTD_PENGAMPU' || u === 'TTD_PENGAMPU_1' || u === 'TTD_GURU_PENGAMPU' || u === 'TTD_PENGUJI') {
+            return '$TTD_PENGAMPU';
+        }
+        if (u === 'TTD_STEMPEL_PENGAMPU' || u === 'STEMPEL_TTD_PENGAMPU' || u === 'TTD_CAP_PENGAMPU') {
+            return '$TTD_STEMPEL_PENGAMPU';
+        }
+        if (u === 'MUHAFFIZH' || u === 'NAMA_MUHAFFIZH' || u === 'USTADZ_HALAQAH' || u === 'NAMA_USTADZ_HALAQAH' || u === 'PENGAMPU_HALAQAH') {
+            return '$NAMA_MUHAFFIZH';
+        }
+        if (u === 'NIP_MUHAFFIZH' || u === 'NIY_MUHAFFIZH' || u === 'NIP_USTADZ_HALAQAH') {
+            return '$NIP_MUHAFFIZH';
+        }
+        if (u === 'TTD_MUHAFFIZH' || u === 'TTD_USTADZ_HALAQAH' || u === 'TTD_PENGAMPU_HALAQAH') {
+            return '$TTD_MUHAFFIZH';
+        }
+        if (
             u === 'MUDIR_MARHALAH' ||
             u === 'NAMA_MUDIR_MARHALAH' ||
             u === 'MUDIRMARHALAH' ||
@@ -1064,7 +1339,12 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     };
 
     const normalizeTagsInSegment = (segment: string, insideFormulaQuotes: boolean): string => {
-        let s = segment.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, p1) => normalizeTagWord(p1));
+        // Konversi $NAMA_PENGAJAR:12 / $NIP_PENGAJAR:12 ke underscore agar terbaca tokenMap
+        let s = segment.replace(/\$(NAMA_PENGAJAR|NIP_PENGAJAR|NIY_PENGAJAR):(\d+)/gi, (_m, p1, p2) => {
+            const pref = p1.toUpperCase() === 'NIY_PENGAJAR' ? 'NIP_PENGAJAR' : p1.toUpperCase();
+            return `$${pref}_${p2}`;
+        });
+        s = s.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, p1) => normalizeTagWord(p1));
         if (!insideFormulaQuotes) {
             s = s.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, p1) => normalizeTagWord(p1));
             s = s.replace(/\[([a-zA-Z0-9_]+)\]/g, (_match, p1) => normalizeTagWord(p1));
@@ -1156,6 +1436,34 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         const waliTeacher = resolveWaliKelasTeacher(targetRombel, settings);
         setToken('$NAMA_WALI_KELAS', waliTeacher?.nama || '-');
         setToken('$NIP_WALI_KELAS', formatTeacherNip(waliTeacher));
+
+        // Muhaffizh Halaqah Santri (otomatis dari kelompokHalaqah santri)
+        const muhaffizhTeacher = resolveMuhaffizhTeacher(santri, settings);
+        setToken('$NAMA_MUHAFFIZH', muhaffizhTeacher?.nama || '-');
+        setToken('$NIP_MUHAFFIZH', formatTeacherNip(muhaffizhTeacher));
+
+        // Pengampu / Guru Khusus Template (Slot 1 default + multi-slot _2, _3, dst.)
+        const maxSignatorySlot = Math.max(
+            3,
+            ...(context.template?.customSignatories || []).map(s => Number(s.slot) || 1)
+        );
+        for (let slotIdx = 1; slotIdx <= maxSignatorySlot; slotIdx++) {
+            const pInfo = resolveCustomSignatoryInfo(slotIdx, context, targetRombel);
+            if (slotIdx === 1) {
+                setToken('$NAMA_PENGAMPU', pInfo.nama);
+                setToken('$NIP_PENGAMPU', pInfo.nip);
+                setToken('$JABATAN_PENGAMPU', pInfo.jabatan);
+            }
+            setToken(`$NAMA_PENGAMPU_${slotIdx}`, pInfo.nama);
+            setToken(`$NIP_PENGAMPU_${slotIdx}`, pInfo.nip);
+            setToken(`$JABATAN_PENGAMPU_${slotIdx}`, pInfo.jabatan);
+        }
+
+        // Nama & NIP Pengajar Spesifik ($NAMA_PENGAJAR_<id> / $NIP_PENGAJAR_<id>)
+        (settings.tenagaPengajar || []).forEach(tp => {
+            setToken(`$NAMA_PENGAJAR_${tp.id}`, tp.nama || '-');
+            setToken(`$NIP_PENGAJAR_${tp.id}`, formatTeacherNip(tp));
+        });
 
         // Mudir Marhalah / Kepala Jenjang (memprioritaskan jenjang.mudirId lalu riwayatJabatan aktif)
         const targetJenjang = jenjang || (!santri ? settings.jenjang?.[0] : undefined);

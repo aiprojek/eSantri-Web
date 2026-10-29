@@ -3,13 +3,21 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporLengkapTemplate } from '../reports/modules/AcademicReports';
 import { printToPdfNative } from '../../utils/pdfGenerator';
-import { Santri, RaporTemplate, RaporRecord, DigitalAsset, RaporSheet, PageFitCount } from '../../types';
+import { Santri, RaporTemplate, RaporRecord, DigitalAsset, RaporSheet, PageFitCount, RaporCustomSignatory } from '../../types';
 import { PrintHeader } from '../common/PrintHeader';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { getRaporRecordsByPeriod } from '../../services/academicQueries';
-import { resolveRaporText, isMediaTag, resolveCellMediaVisual, templateHasBuiltInBiodata } from '../../utils/raporPlaceholderResolver';
+import {
+    resolveRaporText,
+    isMediaTag,
+    resolveCellMediaVisual,
+    templateHasBuiltInBiodata,
+    inspectTemplatePengampuUsage,
+    resolveCustomSignatoryInfo
+} from '../../utils/raporPlaceholderResolver';
 import { RaporSignatureStampMedia } from '../common/RaporSignatureStampMedia';
+import { RaporCustomSignatoryConfigurator } from './RaporCustomSignatoryConfigurator';
 import { applyCellTextTransform, formatCellNumericDisplay } from '../../utils/raporFormulaUtils';
 import {
     formatLocalDate,
@@ -21,7 +29,7 @@ import {
 } from '../../utils/formatters';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
-import { reconcileDigitalAssetsWithSettings } from '../../utils/digitalAssetUtils';
+import { findStrictTeacherTtdAsset, reconcileDigitalAssetsWithSettings } from '../../utils/digitalAssetUtils';
 import { buildRombelLegerData, StudentLegerRow } from '../../services/raporCalculationService';
 import { getTemplateSheets } from '../../services/raporExcelService';
 import { RaporTitleEditModal } from './modals/RaporTitleEditModal';
@@ -866,6 +874,7 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
     const resolveContext = useMemo(() => {
         const sharedExtraVars: Record<string, any> = { ...customData };
         const baseCtx = {
+            template,
             santri,
             settings: effectiveSettings,
             record,
@@ -902,7 +911,7 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
             }
         }
         return baseCtx;
-    }, [allTemplateSheets, customData, santri, effectiveSettings, record, digitalAssets, effectiveDate, tahunAjaran, semester, calculation, cohortRecords]);
+    }, [template, allTemplateSheets, customData, santri, effectiveSettings, record, digitalAssets, effectiveDate, tahunAjaran, semester, calculation, cohortRecords]);
 
     const hasBuiltInBiodata = useMemo(() => templateHasBuiltInBiodata(template), [template]);
 
@@ -1164,6 +1173,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
     const [isBatchPrinting, setIsBatchPrinting] = useState(false);
     const [batchData, setBatchData] = useState<{ santri: Santri; record: RaporRecord | null; calculation?: any; cohortRecords?: RaporRecord[] }[]>([]);
     const [isTitleModalOpen, setIsTitleModalOpen] = useState(false);
+    const [isPengampuPanelOpen, setIsPengampuPanelOpen] = useState(false);
 
     // WhatsApp Distribution Modal
     const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
@@ -1353,6 +1363,20 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
         });
         setShowJudul(isShowJudul);
         showToast('Judul dokumen rapor berhasil disimpan!', 'success');
+    };
+
+    const handleSaveTemplateCustomSignatories = async (nextSignatories: RaporCustomSignatory[]) => {
+        if (!selectedTemplate) return;
+        const allTemplates = (settings.raporTemplates || []) as RaporTemplate[];
+        const updated = allTemplates.map(tpl =>
+            tpl.id === selectedTemplate.id
+                ? { ...tpl, customSignatories: nextSignatories, lastModified: new Date().toISOString() }
+                : tpl
+        );
+        await onUpdateSettings({
+            ...settings,
+            raporTemplates: updated
+        });
     };
 
     const handleSaveUniversalDate = async () => {
@@ -2455,6 +2479,107 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                             </div>
                         </div>
                     )}
+
+                    {/* Quick Pengampu / Guru Khusus Banner (muncul otomatis jika template menggunakan tag $PENGAMPU) */}
+                    {selectedTemplate && (() => {
+                        const pengampuUsage = inspectTemplatePengampuUsage(selectedTemplate);
+                        if (!pengampuUsage.usesPengampu && !isPengampuPanelOpen) return null;
+
+                        const activeRombelObj = printRombel
+                            ? settings.rombel.find(r => r.id === parseInt(printRombel, 10))
+                            : undefined;
+                        const primarySlot = pengampuUsage.slotsUsed[0] || 1;
+                        const sigSummary = resolveCustomSignatoryInfo(
+                            primarySlot,
+                            { settings, template: selectedTemplate, santri: null },
+                            activeRombelObj
+                        );
+                        const hasTtd = Boolean(findStrictTeacherTtdAsset(digitalAssets, sigSummary.teacher));
+                        const modeBadge =
+                            sigSummary.config?.mode === 'per_rombel'
+                                ? 'Beda Tiap Rombel'
+                                : sigSummary.config?.mode === 'halaqah'
+                                ? 'Muhaffizh Halaqah'
+                                : '1 Guru Semua Rombel';
+
+                        return (
+                            <div className="mt-3 pt-3 border-t border-slate-200/80">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-indigo-50/70 border border-indigo-200/80 rounded-xl px-3 py-2">
+                                    <div className="flex items-start sm:items-center gap-2 min-w-0">
+                                        <i className="bi bi-person-workspace text-indigo-600 text-sm shrink-0 mt-0.5 sm:mt-0"></i>
+                                        <div className="text-xs min-w-0">
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <span className="font-bold text-indigo-950">{sigSummary.jabatan}:</span>
+                                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800">
+                                                    {modeBadge}
+                                                </span>
+                                                {sigSummary.config?.mode === 'halaqah' && !activeRombelObj ? (
+                                                    <span className="text-slate-700 font-semibold">
+                                                        Otomatis mengikuti kelompok halaqah masing-masing santri
+                                                    </span>
+                                                ) : sigSummary.teacher ? (
+                                                    <>
+                                                        <span className="font-bold text-slate-900">
+                                                            {sigSummary.teacher.nama}
+                                                        </span>
+                                                        {activeRombelObj && (
+                                                            <span className="text-[10px] text-slate-500">
+                                                                (Rombel {activeRombelObj.nama})
+                                                            </span>
+                                                        )}
+                                                        <span
+                                                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                                                hasTtd
+                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                                                            }`}
+                                                        >
+                                                            {hasTtd ? '✓ TTD Digital Siap' : 'Tanpa TTD Digital (Kosong u/ Basah)'}
+                                                        </span>
+                                                    </>
+                                                ) : sigSummary.config?.mode === 'per_rombel' && !activeRombelObj ? (
+                                                    <span className="text-slate-600">
+                                                        {Object.keys(sigSummary.config?.rombelTeacherMap || {}).length} rombel telah dipetakan
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-rose-600 font-semibold">
+                                                        Belum dipilih guru pengampu — klik &ldquo;Atur Pengampu&rdquo;
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {canLockRapor && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsPengampuPanelOpen(prev => !prev)}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 shrink-0 ${
+                                                isPengampuPanelOpen
+                                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                                                    : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-100/60'
+                                            }`}
+                                        >
+                                            <i className={`bi ${isPengampuPanelOpen ? 'bi-chevron-up' : 'bi-sliders'}`}></i>
+                                            <span>{isPengampuPanelOpen ? 'Tutup Pengaturan' : 'Atur Pengampu'}</span>
+                                        </button>
+                                    )}
+                                </div>
+
+                                {isPengampuPanelOpen && (
+                                    <div className="mt-2.5 p-3 bg-white rounded-xl border border-indigo-200 shadow-2xs">
+                                        <RaporCustomSignatoryConfigurator
+                                            template={selectedTemplate}
+                                            settings={settings}
+                                            digitalAssets={digitalAssets}
+                                            canWrite={canLockRapor}
+                                            activeRombelId={activeRombelObj?.id}
+                                            onChangeSignatories={handleSaveTemplateCustomSignatories}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
                 </div>
 
                 {/* Sub-bar: Search, Filter Tabs & Selection Tools */}

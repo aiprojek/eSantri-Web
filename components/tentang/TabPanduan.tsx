@@ -90,7 +90,7 @@ const PanduanLangkah: React.FC<{
     const activeLine = lineColors[color] || lineColors.teal;
 
     return (
-        <div id={id} className="flex items-start group scroll-mt-32">
+        <div id={id} className="flex items-start group scroll-mt-36">
             <div className="flex flex-col items-center mr-4 h-full min-h-[80px]">
                 <div
                     className={`flex items-center justify-center w-8 h-8 md:w-10 md:h-10 border-2 rounded-full font-bold text-sm md:text-base flex-shrink-0 transition-transform group-hover:scale-105 tabular-nums ${activeClass}`}
@@ -113,9 +113,16 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
     const { showConfirmation, onDeleteSampleData, showToast, isSampleDataDetected } = useAppContext();
     const [searchQuery, setSearchQuery] = useState('');
     const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+    const [isStepOutlineOpen, setIsStepOutlineOpen] = useState(false);
+    const [activeStepIndex, setActiveStepIndex] = useState(0);
+    const [canScrollStepLeft, setCanScrollStepLeft] = useState(false);
+    const [canScrollStepRight, setCanScrollStepRight] = useState(false);
     const [showBackToTop, setShowBackToTop] = useState(false);
     const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
     const contentTopRef = useRef<HTMLDivElement>(null);
+    const stepRailRef = useRef<HTMLDivElement>(null);
+    const stepPopoverRef = useRef<HTMLDivElement>(null);
+    const manualJumpLockRef = useRef<number>(0);
 
     // Deduplicate and order sections cleanly
     const orderedPanduanData = useMemo<PanduanSectionData[]>(() => {
@@ -150,21 +157,108 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
 
     const [activeSectionId, setActiveSectionId] = useState<string>(orderedPanduanData[0]?.id || 'setup');
 
+    const activeSectionIndex = useMemo(
+        () => orderedPanduanData.findIndex((s) => s.id === activeSectionId),
+        [orderedPanduanData, activeSectionId]
+    );
+    const activeSection = orderedPanduanData[activeSectionIndex] || orderedPanduanData[0];
+
     useEffect(() => {
         if (initialSection && orderedPanduanData.some((s) => s.id === initialSection)) {
             setActiveSectionId(initialSection);
         }
     }, [initialSection, orderedPanduanData]);
 
-    // Track window scroll for FAB Back to Top button
+    // Reset step state when switching chapter
     useEffect(() => {
+        setActiveStepIndex(0);
+        setIsStepOutlineOpen(false);
+        if (stepRailRef.current) {
+            stepRailRef.current.scrollTo({ left: 0, behavior: 'auto' });
+        }
+    }, [activeSectionId]);
+
+    // Close desktop step popover when clicking outside or pressing Escape
+    useEffect(() => {
+        if (!isStepOutlineOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setIsStepOutlineOpen(false);
+        };
+        const handleClickOutside = (e: MouseEvent) => {
+            if (
+                window.innerWidth >= 1024 &&
+                stepPopoverRef.current &&
+                !stepPopoverRef.current.contains(e.target as Node)
+            ) {
+                setIsStepOutlineOpen(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isStepOutlineOpen]);
+
+    // Track window scroll for FAB Back to Top + Active Step Scroll-Spy
+    useEffect(() => {
+        const stepCount = activeSection?.steps.length || 0;
         const handleScroll = () => {
             setShowBackToTop(window.scrollY > 350);
+
+            if (stepCount < 2 || Date.now() < manualJumpLockRef.current) return;
+
+            let currentIdx = 0;
+            const threshold = 185;
+            for (let i = 0; i < stepCount; i++) {
+                const el = document.getElementById(`panduan-step-${i + 1}`);
+                if (!el) continue;
+                const rect = el.getBoundingClientRect();
+                if (rect.top <= threshold) {
+                    currentIdx = i;
+                } else {
+                    break;
+                }
+            }
+            setActiveStepIndex((prev) => (prev === currentIdx ? prev : currentIdx));
         };
         window.addEventListener('scroll', handleScroll, { passive: true });
         handleScroll();
         return () => window.removeEventListener('scroll', handleScroll);
-    }, []);
+    }, [activeSection]);
+
+    // Measure horizontal step rail overflow for left/right fade masks & arrow nudges
+    useEffect(() => {
+        const rail = stepRailRef.current;
+        if (!rail) return;
+
+        const updateRailIndicators = () => {
+            const maxScrollLeft = rail.scrollWidth - rail.clientWidth;
+            setCanScrollStepLeft(rail.scrollLeft > 6);
+            setCanScrollStepRight(maxScrollLeft - rail.scrollLeft > 6);
+        };
+
+        updateRailIndicators();
+        rail.addEventListener('scroll', updateRailIndicators, { passive: true });
+        const observer = new ResizeObserver(updateRailIndicators);
+        observer.observe(rail);
+
+        return () => {
+            rail.removeEventListener('scroll', updateRailIndicators);
+            observer.disconnect();
+        };
+    }, [activeSection]);
+
+    // Auto-center active step chip inside horizontal rail without affecting vertical scroll
+    useEffect(() => {
+        const rail = stepRailRef.current;
+        if (!rail) return;
+        const activeChip = rail.querySelector<HTMLButtonElement>(`[data-step-chip="${activeStepIndex}"]`);
+        if (!activeChip) return;
+        const targetLeft = activeChip.offsetLeft - rail.clientWidth / 2 + activeChip.offsetWidth / 2;
+        rail.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+    }, [activeStepIndex]);
 
     // Ensure the category containing activeSectionId is expanded
     useEffect(() => {
@@ -187,16 +281,27 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
     const handleSelectSection = (id: string) => {
         setActiveSectionId(id);
         setIsMobileDrawerOpen(false);
+        setIsStepOutlineOpen(false);
         setTimeout(() => {
             scrollToGuideTop();
         }, 30);
     };
 
     const handleJumpToStep = (stepIndex: number) => {
+        manualJumpLockRef.current = Date.now() + 700;
+        setActiveStepIndex(stepIndex);
+        setIsStepOutlineOpen(false);
         const el = document.getElementById(`panduan-step-${stepIndex + 1}`);
         if (el) {
             el.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
+    };
+
+    const nudgeStepRail = (direction: 'left' | 'right') => {
+        const rail = stepRailRef.current;
+        if (!rail) return;
+        const delta = Math.max(180, Math.round(rail.clientWidth * 0.6));
+        rail.scrollBy({ left: direction === 'left' ? -delta : delta, behavior: 'smooth' });
     };
 
     const handleScrollToTop = () => {
@@ -260,21 +365,61 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
         }).filter((cat) => cat.sections.length > 0);
     }, [orderedPanduanData, searchQuery]);
 
-    const activeSectionIndex = useMemo(
-        () => orderedPanduanData.findIndex((s) => s.id === activeSectionId),
-        [orderedPanduanData, activeSectionId]
-    );
-    const activeSection = orderedPanduanData[activeSectionIndex] || orderedPanduanData[0];
     const prevSection = activeSectionIndex > 0 ? orderedPanduanData[activeSectionIndex - 1] : null;
     const nextSection =
         activeSectionIndex >= 0 && activeSectionIndex < orderedPanduanData.length - 1
             ? orderedPanduanData[activeSectionIndex + 1]
             : null;
     const activeCategory = PANDUAN_CATEGORIES.find((c) => c.sectionIds.includes(activeSection?.id || ''));
+    const hasStepNavigation = activeSection.steps.length >= 2;
+    const stepProgressPercent =
+        activeSection.steps.length > 0
+            ? Math.round(((activeStepIndex + 1) / activeSection.steps.length) * 100)
+            : 100;
 
     if (!activeSection) {
         return null;
     }
+
+    const cleanStepTitle = (raw: string) => raw.replace(/^\d+\.\s*/, '');
+
+    const renderStepOutlineItems = () => (
+        <div className="divide-y divide-slate-100">
+            {activeSection.steps.map((step, idx) => {
+                const isActive = idx === activeStepIndex;
+                return (
+                    <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleJumpToStep(idx)}
+                        className={`w-full px-4 py-3 text-left flex items-start gap-3 transition-colors min-h-[46px] ${
+                            isActive
+                                ? 'bg-teal-50/90 text-teal-900'
+                                : 'hover:bg-slate-50 text-slate-700'
+                        }`}
+                    >
+                        <span
+                            className={`w-6 h-6 rounded-lg font-mono text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 tabular-nums ${
+                                isActive
+                                    ? 'bg-teal-600 text-white shadow-2xs'
+                                    : 'bg-slate-100 text-slate-600'
+                            }`}
+                        >
+                            {idx + 1}
+                        </span>
+                        <span className={`text-xs sm:text-[13px] leading-snug flex-1 ${isActive ? 'font-bold text-teal-950' : 'font-medium'}`}>
+                            {cleanStepTitle(step.title)}
+                        </span>
+                        {isActive && (
+                            <span className="text-[11px] font-semibold text-teal-700 whitespace-nowrap shrink-0 mt-0.5">
+                                Aktif
+                            </span>
+                        )}
+                    </button>
+                );
+            })}
+        </div>
+    );
 
     const renderTocList = (isMobile = false) => (
         <div className="divide-y divide-slate-100">
@@ -369,33 +514,87 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
 
             {/* --- MOBILE & TABLET STICKY BAR (< lg) --- */}
             <div className="block lg:hidden sticky top-[70px] z-20 mb-4 -mx-1 px-1">
-                <div className="bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl p-2.5 shadow-md flex items-center justify-between gap-2">
+                <div className="bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl p-2 shadow-md flex items-center justify-between gap-1.5">
                     <button
                         type="button"
                         onClick={() => setIsMobileDrawerOpen(true)}
-                        className="flex items-center gap-2.5 min-w-0 flex-1 text-left px-2 py-1 rounded-xl hover:bg-slate-50"
+                        className="flex items-center gap-2.5 min-w-0 flex-1 text-left px-2 py-1 min-h-[42px] rounded-xl hover:bg-slate-50"
                     >
                         <span className="w-8 h-8 rounded-xl bg-teal-600 text-white font-mono font-bold text-xs flex items-center justify-center shrink-0 tabular-nums">
                             {sectionOrderNumberMap[activeSection.id]}
                         </span>
                         <div className="min-w-0 flex-1">
-                            <div className="text-[10px] font-bold uppercase tracking-wider text-teal-700 truncate">
+                            <div className="text-[10px] font-semibold text-teal-700 truncate">
                                 {activeCategory?.title || 'Panduan Penggunaan'}
                             </div>
                             <div className="text-xs font-bold text-slate-800 truncate">{activeSection.title}</div>
                         </div>
                     </button>
 
-                    <button
-                        type="button"
-                        onClick={() => setIsMobileDrawerOpen(true)}
-                        className="px-3 py-2 rounded-xl bg-teal-50 text-teal-800 border border-teal-200 text-xs font-bold flex items-center gap-1.5 shrink-0 hover:bg-teal-100 transition-colors"
-                    >
-                        <i className="bi bi-list-ul text-sm"></i>
-                        <span>Daftar Isi ({orderedPanduanData.length})</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                        {hasStepNavigation && (
+                            <button
+                                type="button"
+                                onClick={() => setIsStepOutlineOpen(true)}
+                                className="px-2.5 py-2 min-h-[40px] rounded-xl bg-slate-100 hover:bg-teal-50 text-slate-700 hover:text-teal-800 border border-slate-200 text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors tabular-nums"
+                                title="Loncat ke langkah dalam bab ini"
+                            >
+                                <i className="bi bi-signpost-split text-teal-600 text-xs"></i>
+                                <span>
+                                    <span className="hidden sm:inline">Langkah </span>
+                                    {activeStepIndex + 1}/{activeSection.steps.length}
+                                </span>
+                                <i className="bi bi-chevron-down text-[10px] text-slate-400"></i>
+                            </button>
+                        )}
+
+                        <button
+                            type="button"
+                            onClick={() => setIsMobileDrawerOpen(true)}
+                            className="px-2.5 sm:px-3 py-2 min-h-[40px] rounded-xl bg-teal-50 text-teal-800 border border-teal-200 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shrink-0 hover:bg-teal-100 transition-colors tabular-nums"
+                            title="Buka Daftar Isi seluruh bab panduan"
+                        >
+                            <i className="bi bi-list-ul text-sm"></i>
+                            <span className="hidden sm:inline">Daftar Isi ({orderedPanduanData.length})</span>
+                            <span className="sm:hidden">Bab</span>
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            {/* --- MOBILE & TABLET STEP JUMP BOTTOM SHEET (< lg) --- */}
+            {isStepOutlineOpen && hasStepNavigation && (
+                <div
+                    className="fixed inset-0 z-[95] bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 lg:hidden"
+                    onClick={() => setIsStepOutlineOpen(false)}
+                >
+                    <div
+                        className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl max-h-[80vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 animate-fade-in"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="w-10 h-1.5 bg-slate-300 rounded-full mx-auto mt-2.5 sm:hidden"></div>
+                        <div className="px-4 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 truncate">
+                                    <i className="bi bi-signpost-split text-teal-600"></i>
+                                    <span>Loncat ke Langkah ({activeSection.steps.length})</span>
+                                </h3>
+                                <p className="text-[11px] text-slate-500 truncate">{activeSection.title}</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsStepOutlineOpen(false)}
+                                className="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100 shrink-0"
+                                aria-label="Tutup daftar langkah"
+                            >
+                                <i className="bi bi-x-lg text-xs"></i>
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto flex-1 custom-scrollbar">{renderStepOutlineItems()}</div>
+                    </div>
+                </div>
+            )}
 
             {/* --- MOBILE & TABLET TOC DRAWER MODAL --- */}
             {isMobileDrawerOpen && (
@@ -407,6 +606,7 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
                         className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 animate-fade-in"
                         onClick={(e) => e.stopPropagation()}
                     >
+                        <div className="w-10 h-1.5 bg-slate-300 rounded-full mx-auto mt-2.5 sm:hidden"></div>
                         <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                             <div>
                                 <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
@@ -418,7 +618,8 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
                             <button
                                 type="button"
                                 onClick={() => setIsMobileDrawerOpen(false)}
-                                className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100"
+                                className="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100 shrink-0"
+                                aria-label="Tutup daftar isi"
                             >
                                 <i className="bi bi-x-lg text-xs"></i>
                             </button>
@@ -493,9 +694,13 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
 
                 {/* --- ACTIVE CHAPTER CONTENT --- */}
                 <div className="flex-1 w-full min-w-0 animate-fade-in">
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-xs">
                         {/* Section Header */}
-                        <div className="p-5 sm:p-6 bg-slate-50/80 border-b border-slate-200">
+                        <div
+                            className={`p-5 sm:p-6 bg-slate-50/80 border-b border-slate-200 rounded-t-2xl ${
+                                !hasStepNavigation ? '' : 'pb-4 sm:pb-5'
+                            }`}
+                        >
                             <div className="flex items-start gap-4">
                                 <span
                                     className={`${getColorClass(
@@ -505,7 +710,7 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
                                     {sectionOrderNumberMap[activeSection.id]}
                                 </span>
                                 <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mb-1">
+                                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mb-1 tabular-nums">
                                         <span>{activeCategory?.title || 'Dokumentasi Modul'}</span>
                                         <span aria-hidden="true">·</span>
                                         <span>{activeSection.steps.length} Langkah Pembahasan</span>
@@ -515,38 +720,154 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
                                     </h2>
                                 </div>
                             </div>
-
-                            {/* Quick Step Jump Bar (when chapter has >= 3 steps) */}
-                            {activeSection.steps.length >= 3 && (
-                                <div className="mt-4 pt-3.5 border-t border-slate-200/80">
-                                    <div className="text-[11px] font-semibold text-slate-500 mb-2 flex items-center gap-1.5">
-                                        <i className="bi bi-signpost-split text-teal-600"></i>
-                                        <span>Loncat Cepat ke Langkah:</span>
-                                    </div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {activeSection.steps.map((step, idx) => (
-                                            <button
-                                                key={idx}
-                                                type="button"
-                                                onClick={() => handleJumpToStep(idx)}
-                                                className="px-2.5 py-1 rounded-lg bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-800 border border-slate-200 hover:border-teal-300 text-xs font-medium transition-colors flex items-center gap-1.5 max-w-[240px]"
-                                                title={step.title}
-                                            >
-                                                <span className="font-mono font-bold text-teal-600 tabular-nums">
-                                                    #{idx + 1}
-                                                </span>
-                                                <span className="truncate">
-                                                    {step.title.replace(/^\d+\.\s*/, '')}
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
+                        {/* Single-Row Horizontal Step Jump Rail (Sticky on Desktop lg+, Swipeable on Mobile/Tablet) */}
+                        {hasStepNavigation && (
+                            <div
+                                ref={stepPopoverRef}
+                                className="relative lg:sticky lg:top-[72px] z-10 bg-white/95 backdrop-blur-md border-b border-slate-200"
+                            >
+                                <div className="px-3 sm:px-5 py-2 flex items-center gap-1.5 sm:gap-2">
+                                    {/* Label / Left Nudge */}
+                                    <div className="hidden xl:flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 whitespace-nowrap shrink-0 pr-1">
+                                        <i className="bi bi-signpost-split text-teal-600"></i>
+                                        <span>Langkah:</span>
+                                    </div>
+
+                                    {canScrollStepLeft && (
+                                        <button
+                                            type="button"
+                                            onClick={() => nudgeStepRail('left')}
+                                            className="hidden sm:flex w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 items-center justify-center shrink-0 transition-colors"
+                                            aria-label="Geser daftar langkah ke kiri"
+                                            title="Geser ke kiri"
+                                        >
+                                            <i className="bi bi-chevron-left text-xs"></i>
+                                        </button>
+                                    )}
+
+                                    {/* Single-Line Horizontal Scroll Strip */}
+                                    <div className="relative flex-1 min-w-0">
+                                        {canScrollStepLeft && (
+                                            <div
+                                                aria-hidden="true"
+                                                className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-white via-white/80 to-transparent z-10"
+                                            />
+                                        )}
+
+                                        <div
+                                            ref={stepRailRef}
+                                            className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth snap-x py-0.5"
+                                        >
+                                            {activeSection.steps.map((step, idx) => {
+                                                const isActive = idx === activeStepIndex;
+                                                const label = cleanStepTitle(step.title);
+                                                return (
+                                                    <button
+                                                        key={idx}
+                                                        type="button"
+                                                        data-step-chip={idx}
+                                                        onClick={() => handleJumpToStep(idx)}
+                                                        title={step.title}
+                                                        className={`snap-start min-h-[38px] px-3 py-1.5 rounded-xl border text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                                                            isActive
+                                                                ? 'bg-teal-600 text-white border-teal-600 font-semibold shadow-2xs'
+                                                                : 'bg-slate-50/80 hover:bg-teal-50/70 text-slate-600 hover:text-teal-800 border-slate-200/90 hover:border-teal-300'
+                                                        }`}
+                                                    >
+                                                        <span
+                                                            className={`font-mono text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded-md ${
+                                                                isActive
+                                                                    ? 'bg-white/20 text-white'
+                                                                    : 'bg-white text-teal-700 border border-slate-200/80'
+                                                            }`}
+                                                        >
+                                                            {idx + 1}
+                                                        </span>
+                                                        <span className="max-w-[165px] sm:max-w-[210px] truncate">
+                                                            {label}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {canScrollStepRight && (
+                                            <div
+                                                aria-hidden="true"
+                                                className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white via-white/80 to-transparent z-10"
+                                            />
+                                        )}
+                                    </div>
+
+                                    {canScrollStepRight && (
+                                        <button
+                                            type="button"
+                                            onClick={() => nudgeStepRail('right')}
+                                            className="hidden sm:flex w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 items-center justify-center shrink-0 transition-colors"
+                                            aria-label="Geser daftar langkah ke kanan"
+                                            title="Geser ke kanan"
+                                        >
+                                            <i className="bi bi-chevron-right text-xs"></i>
+                                        </button>
+                                    )}
+
+                                    {/* Full Untruncated Step List Trigger (Popover on Desktop, Bottom Sheet on Mobile/Tablet) */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsStepOutlineOpen((prev) => !prev)}
+                                        className={`min-h-[38px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors tabular-nums ${
+                                            isStepOutlineOpen
+                                                ? 'bg-teal-50 text-teal-800 border-teal-300'
+                                                : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                                        }`}
+                                        title="Lihat seluruh judul langkah secara utuh"
+                                    >
+                                        <i className="bi bi-list-ol text-teal-600 text-sm"></i>
+                                        <span className="hidden md:inline">Semua</span>
+                                        <span className="font-mono text-[11px] text-slate-500">
+                                            {activeStepIndex + 1}/{activeSection.steps.length}
+                                        </span>
+                                        <i
+                                            className={`bi bi-chevron-${isStepOutlineOpen ? 'up' : 'down'} text-[10px] text-slate-400 hidden lg:inline`}
+                                        ></i>
+                                    </button>
+                                </div>
+
+                                {/* Subtle Reading Progress Hairline */}
+                                <div className="h-[2px] w-full bg-slate-100 overflow-hidden">
+                                    <div
+                                        className="h-full bg-teal-500 transition-transform duration-200 origin-left"
+                                        style={{ transform: `scaleX(${stepProgressPercent / 100})` }}
+                                    />
+                                </div>
+
+                                {/* Desktop Floating Step Outline Popover (lg+) */}
+                                {isStepOutlineOpen && (
+                                    <div className="hidden lg:flex flex-col absolute right-4 top-full mt-2 w-96 max-h-[70vh] bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden z-30 animate-fade-in">
+                                        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                                            <span className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                                                <i className="bi bi-signpost-split text-teal-600"></i>
+                                                Daftar Lengkap Langkah ({activeSection.steps.length})
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsStepOutlineOpen(false)}
+                                                className="w-7 h-7 rounded-lg hover:bg-slate-200/70 text-slate-500 flex items-center justify-center"
+                                                aria-label="Tutup daftar langkah"
+                                            >
+                                                <i className="bi bi-x-lg text-[11px]"></i>
+                                            </button>
+                                        </div>
+                                        <div className="overflow-y-auto custom-scrollbar">{renderStepOutlineItems()}</div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Section Body */}
-                        <div className="p-5 sm:p-8">
+                        <div className="p-5 sm:p-8 rounded-b-2xl">
                             {activeSection.id === 'whatsapp' && (
                                 <div className="bg-emerald-50 p-4 rounded-xl mb-8 text-sm text-emerald-950 border border-emerald-200 flex items-start gap-3">
                                     <i className="bi bi-shield-check text-xl text-emerald-600 shrink-0"></i>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
-import { RaporTemplate, RaporSheet, GridCell, RaporColumnType, RaporInputMode, DigitalAsset, PageFitCount } from '../../types';
+import { RaporTemplate, RaporSheet, GridCell, RaporColumnType, RaporInputMode, DigitalAsset, PageFitCount, RaporCustomSignatory } from '../../types';
 import { loadXLSX } from '../../utils/lazyClientLibs';
 import { printToPdfNative } from '../../utils/pdfGenerator';
 import { PrintHeader } from '../common/PrintHeader';
@@ -29,9 +29,12 @@ import {
     resolveWaliKelasTeacher,
     resolveMudirMarhalahTeacher,
     resolveMudirAamInfo,
+    resolveMuhaffizhTeacher,
+    resolveCustomSignatoryInfo,
     formatTeacherNip
 } from '../../utils/raporPlaceholderResolver';
 import { RaporSignatureStampMedia } from '../common/RaporSignatureStampMedia';
+import { RaporCustomSignatoryConfigurator } from './RaporCustomSignatoryConfigurator';
 import { findStrictTeacherTtdAsset, findJenjangStempelAsset, reconcileDigitalAssetsWithSettings } from '../../utils/digitalAssetUtils';
 import {
     RAPOR_FORMULA_SUGGESTIONS,
@@ -1544,6 +1547,12 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
             const sheets = (prev.sheets || []).map(s => s.id === sheetId ? { ...s, name: newName.trim() } : s);
             return { ...prev, sheets };
         });
+    };
+
+    const handleUpdateCustomSignatories = (nextSignatories: RaporCustomSignatory[]) => {
+        if (!activeTemplate) return;
+        pushToHistory(activeTemplate);
+        setActiveTemplate(prev => (prev ? { ...prev, customSignatories: nextSignatories } : null));
     };
 
     const handleSaveActiveTemplate = async (shouldClose: boolean = false) => {
@@ -4730,6 +4739,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
         if ((cell.type === 'data' || cell.type === 'label') && isMediaTag(val)) {
             const { simRombel, simKelas, simJenjang } = getTemplateSimulatedHierarchy();
             const simulatedContext = {
+                template: activeTemplate,
                 settings,
                 digitalAssets,
                 santri: {
@@ -4875,6 +4885,40 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
             if (upperVal === '$NIP_MUDIR' || upperVal === '$NIY_MUDIR') {
                 const mudirInfo = resolveMudirAamInfo(settings);
                 if (mudirInfo.nip !== '-') return formatText(mudirInfo.nip);
+            }
+            const pengampuSimMatch = upperVal.match(/^\$(NAMA|NIP|NIY|JABATAN|LABEL)_(?:PENGAMPU|GURU_KHUSUS|PENGUJI)(?:_(\d+))?$/);
+            if (pengampuSimMatch) {
+                const fieldType = pengampuSimMatch[1];
+                const slotNum = pengampuSimMatch[2] ? parseInt(pengampuSimMatch[2], 10) : 1;
+                const sigInfo = resolveCustomSignatoryInfo(
+                    slotNum,
+                    { settings, template: activeTemplate, santri: null },
+                    simRombel
+                );
+                if (fieldType === 'JABATAN' || fieldType === 'LABEL') {
+                    return formatText(sigInfo.jabatan);
+                }
+                if (fieldType === 'NAMA') {
+                    return formatText(sigInfo.nama !== '-' ? sigInfo.nama : `[Guru ${sigInfo.jabatan}]`);
+                }
+                return formatText(sigInfo.nip !== '-' ? sigInfo.nip : '-');
+            }
+            if (upperVal === '$NAMA_MUHAFFIZH' || upperVal === '$MUHAFFIZH' || upperVal === '$MUSYRIF_HALAQAH') {
+                const mh = resolveMuhaffizhTeacher(null, settings);
+                if (mh?.nama) return formatText(mh.nama);
+            }
+            if (upperVal === '$NIP_MUHAFFIZH' || upperVal === '$NIY_MUHAFFIZH') {
+                const mh = resolveMuhaffizhTeacher(null, settings);
+                const nip = formatTeacherNip(mh);
+                if (nip !== '-') return formatText(nip);
+            }
+            const specificTeacherSimMatch = upperVal.match(/^\$(NAMA|NIP|NIY)_(?:PENGAJAR|GURU)[:_](\d+)$/);
+            if (specificTeacherSimMatch) {
+                const tId = parseInt(specificTeacherSimMatch[2], 10);
+                const tp = settings.tenagaPengajar?.find(t => Number(t.id) === tId);
+                if (tp) {
+                    return formatText(specificTeacherSimMatch[1] === 'NAMA' ? tp.nama : formatTeacherNip(tp));
+                }
             }
 
             // Find matching example in dynamic tag list
@@ -6943,6 +6987,50 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                     ))}
                                 </div>
 
+                                {/* Specific Teacher Name / NIP Helper under Pejabat Category */}
+                                {selectedTagCategory === 'pejabat' && (
+                                    <div className="space-y-2 mt-2">
+                                        <div className="p-2 bg-white rounded-lg border border-purple-200 space-y-1.5">
+                                            <label className="block text-[10px] font-bold text-gray-700 uppercase">
+                                                Nama / NIP Guru Spesifik (1 Orang Tetap)
+                                            </label>
+                                            <div className="grid grid-cols-1 gap-1.5">
+                                                <select
+                                                    value={activeCellData.value?.startsWith('$NAMA_PENGAJAR_') ? activeCellData.value : ''}
+                                                    className="w-full text-xs border rounded p-1.5 bg-gray-50 font-medium"
+                                                    onChange={e => {
+                                                        if (e.target.value) updateActiveCell({ value: e.target.value });
+                                                    }}
+                                                >
+                                                    <option value="">-- Sisipkan Nama Guru Spesifik --</option>
+                                                    {settings.tenagaPengajar.map(t => (
+                                                        <option key={t.id} value={`$NAMA_PENGAJAR_${t.id}`}>
+                                                            Nama: {t.nama}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <select
+                                                    value={activeCellData.value?.startsWith('$NIP_PENGAJAR_') ? activeCellData.value : ''}
+                                                    className="w-full text-xs border rounded p-1.5 bg-gray-50 font-medium"
+                                                    onChange={e => {
+                                                        if (e.target.value) updateActiveCell({ value: e.target.value });
+                                                    }}
+                                                >
+                                                    <option value="">-- Sisipkan NIP/NIY Guru Spesifik --</option>
+                                                    {settings.tenagaPengajar.map(t => (
+                                                        <option key={t.id} value={`$NIP_PENGAJAR_${t.id}`}>
+                                                            NIP: {t.nama} ({formatTeacherNip(t)})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <p className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded p-1.5 leading-snug">
+                                                💡 <strong>Tips Rapor Hadits / Mutun:</strong> Gunakan tag <code>$NAMA_PENGAMPU</code> &amp; <code>$TTD_PENGAMPU</code> agar guru pengampu bisa diatur fleksibel (1 guru semua rombel, beda tiap rombel, atau ikut halaqah).
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Specific Teacher Signature & Custom Digital Asset Helper */}
                                 {selectedTagCategory === 'media' && (
                                     <div className="space-y-2 mt-2">
@@ -7192,6 +7280,39 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                                 </label>
                                             </div>
                                         )}
+                                    </div>
+                                );
+                            })()}
+                        {activeTemplate &&
+                            (activeCellData.type === 'data' || activeCellData.type === 'label' || activeCellData.type === 'formula') &&
+                            /\$(?:TTD_(?:STEMPEL_)?|STEMPEL_TTD_|NAMA_|NIP_|NIY_|JABATAN_|LABEL_)?(?:PENGAMPU|GURU_KHUSUS|PENGUJI)(?:_(\d+))?/i.test(activeCellData.value || '') && (() => {
+                                const m = (activeCellData.value || '').toUpperCase().match(/(?:PENGAMPU|GURU_KHUSUS|PENGUJI)(?:_(\d+))?/);
+                                const detectedSlot = m?.[1] ? Math.max(1, parseInt(m[1], 10)) : 1;
+                                const { simRombel } = getTemplateSimulatedHierarchy();
+                                return (
+                                    <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-2 mt-2">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-1.5">
+                                                <i className="bi bi-person-workspace text-indigo-600 text-sm"></i>
+                                                <span className="text-xs font-bold text-indigo-950">
+                                                    Konfigurasi Pengampu / Guru Khusus
+                                                </span>
+                                            </div>
+                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800">
+                                                Slot #{detectedSlot}
+                                            </span>
+                                        </div>
+                                        <RaporCustomSignatoryConfigurator
+                                            template={activeTemplate}
+                                            settings={settings}
+                                            digitalAssets={digitalAssets}
+                                            canWrite={canWrite}
+                                            compact
+                                            focusSlot={detectedSlot}
+                                            activeRombelId={simRombel?.id}
+                                            onChangeSignatories={handleUpdateCustomSignatories}
+                                            onInsertTagToActiveCell={tag => updateActiveCell({ type: 'data', value: tag })}
+                                        />
                                     </div>
                                 );
                             })()}
@@ -7520,6 +7641,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                             <li><code>=TEMPAT_RAPOR()</code> : Nama tempat/kota penandatanganan rapor saja</li>
                                             <li><code>=TANGGAL_RAPOR()</code> / <code>=TANGGAL_RAPOR_GABUNGAN()</code> / <code>=TANGGAL_RAPOR_MASEHI()</code> / <code>=TANGGAL_RAPOR_HIJRIAH()</code> : Tanggal rapor saja (tanpa kota)</li>
                                             <li><code>$NAMA_WALI_KELAS</code>, <code>$NIP_WALI_KELAS</code>, <code>$TTD_WALI_KELAS</code> : Wali Kelas</li>
+                                            <li><code>$JABATAN_PENGAMPU</code>, <code>$NAMA_PENGAMPU</code>, <code>$NIP_PENGAMPU</code>, <code>$TTD_PENGAMPU</code> : Pengampu / Guru Khusus (Global / Per Rombel / Halaqah)</li>
                                             <li><code>$NAMA_MUDIR_MARHALAH</code>, <code>$NIP_MUDIR_MARHALAH</code>, <code>$TTD_MUDIR_MARHALAH</code> : Mudir Marhalah</li>
                                             <li><code>$NAMA_MUDIR</code>, <code>$NIP_MUDIR</code>, <code>$TTD_MUDIR</code> : Mudir Aam / Pimpinan</li>
                                         </ul>
@@ -8414,7 +8536,35 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                             </p>
                         </div>
 
-                        {/* 6. Pembersihan & Pengaturan Border Lembar */}
+                        {/* 6. Penandatangan / Pengampu Khusus (Hadits, Mutun, Tahfizh) */}
+                        {activeTemplate && (
+                            <div className="pt-2 border-t border-slate-200 space-y-2.5">
+                                <div>
+                                    <label className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
+                                        <i className="bi bi-person-workspace text-indigo-600"></i>
+                                        <span>Pengampu / Guru Khusus Rapor:</span>
+                                    </label>
+                                    <p className="text-[10.5px] text-slate-500 leading-snug mt-0.5">
+                                        Khusus Rapor Hafalan Hadits, Mutun, atau Tahfizh yang ditandatangani oleh guru pengampu di luar Wali Kelas &amp; Mudir. Bisa diatur 1 guru semua rombel, beda tiap rombel, atau otomatis Muhaffizh halaqah.
+                                    </p>
+                                </div>
+                                <RaporCustomSignatoryConfigurator
+                                    template={activeTemplate}
+                                    settings={settings}
+                                    digitalAssets={digitalAssets}
+                                    canWrite={canWrite}
+                                    activeRombelId={getTemplateSimulatedHierarchy().simRombel?.id}
+                                    onChangeSignatories={handleUpdateCustomSignatories}
+                                    onInsertTagToActiveCell={
+                                        activeCellData
+                                            ? tag => updateActiveCell({ type: 'data', value: tag })
+                                            : undefined
+                                    }
+                                />
+                            </div>
+                        )}
+
+                        {/* 7. Pembersihan & Pengaturan Border Lembar */}
                         <div className="pt-2 border-t border-slate-200 space-y-2.5">
                             <div>
                                 <label className="block font-bold text-xs text-slate-800">
@@ -8620,6 +8770,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                         : (isSimulationFallback ? 83.15 : 0));
 
                 const baseResolveContext: RaporResolveContext = {
+                    template: activeTemplate,
                     settings,
                     digitalAssets,
                     santri: previewSantriObj,

@@ -618,6 +618,17 @@ export interface RaporSheet {
     marginMode?: 'normal' | 'narrow' | 'none';
 }
 
+export type CustomSignatoryMode = 'global' | 'per_rombel' | 'halaqah';
+
+export interface RaporCustomSignatory {
+    id: string;
+    slot: number; // 1 = $NAMA_PENGAMPU / $TTD_PENGAMPU, 2 = $NAMA_PENGAMPU_2 / $TTD_PENGAMPU_2, dst.
+    label: string; // Contoh: "Pengampu Hafalan Hadits", "Musyrif Mutun", "Koordinator Tahfizh"
+    mode: CustomSignatoryMode;
+    defaultTeacherId?: number; // Digunakan pada mode 'global', atau cadangan jika rombel belum dipetakan
+    rombelTeacherMap?: Record<string, number>; // Peta String(rombelId) -> teacherId untuk mode 'per_rombel'
+}
+
 export interface RaporTemplate {
     id: string;
     name: string;
@@ -625,6 +636,7 @@ export interface RaporTemplate {
     jenjangId?: number; // Lock to specific Marhalah
     kelasId?: number;   // Lock to specific Kelas
     rombelId?: number;  // Lock to specific Rombel
+    customSignatories?: RaporCustomSignatory[]; // Konfigurasi Pengampu / Guru Khusus (Global / Per Rombel / Halaqah)
     rowCount: number;
     colCount: number;
     cells: GridCell[][];

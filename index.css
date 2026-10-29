@@ -257,6 +257,15 @@
     scrollbar-color: rgba(15, 118, 110, 0.28) transparent;
   }
 
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .app-table-shell {
     overflow: hidden;
     border: 1px solid var(--border-subtle);

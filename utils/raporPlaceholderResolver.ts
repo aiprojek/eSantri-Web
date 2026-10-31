@@ -1814,13 +1814,13 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     }
 
     // --- INTEGRASI KKM DINAMIS DARI DATA MASTER MATA PELAJARAN ---
-    // Menentukan Marhalah/Jenjang efektif (Santri -> Template.jenjangId -> Template.kelasId -> Template.rombelId)
+    // Menentukan Marhalah/Jenjang efektif secara hierarkis (Rombel/Kelas/Jenjang Santri -> Template.jenjangId -> Template.kelasId -> Template.rombelId)
     const effectiveJenjangId: number | undefined = (() => {
-        if (santri?.jenjangId) return Number(santri.jenjangId);
         if (santri && settings) {
             const h = resolveSantriAcademicHierarchy(santri, settings);
             if (h.jenjang?.id) return Number(h.jenjang.id);
         }
+        if (santri?.jenjangId) return Number(santri.jenjangId);
         if (context.template?.jenjangId) return Number(context.template.jenjangId);
         if (context.template?.kelasId && settings?.kelas) {
             const kls = settings.kelas.find(k => Number(k.id) === Number(context.template?.kelasId));

@@ -7141,12 +7141,15 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                                 >
                                                     {rowInspect.matchedMapel ? (
                                                         <div>
-                                                            <div className="font-bold flex items-center justify-between">
+                                                            <div className="font-bold flex items-center justify-between gap-1">
                                                                 <span>
                                                                     <i className="bi bi-check-circle-fill text-emerald-600 mr-1"></i>
                                                                     Cocok Data Master: {rowInspect.matchedMapel.nama}
+                                                                    {jenjangMap.get(rowInspect.matchedMapel.jenjangId)
+                                                                        ? ` (${jenjangMap.get(rowInspect.matchedMapel.jenjangId)})`
+                                                                        : ''}
                                                                 </span>
-                                                                <span className="font-mono bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-black">
+                                                                <span className="font-mono bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-black shrink-0">
                                                                     KKM {rowInspect.kkmValue}
                                                                 </span>
                                                             </div>
@@ -7155,7 +7158,10 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                                                 {rowInspect.source === 'master_label'
                                                                     ? `teks baris "${rowInspect.detectedLabel}"`
                                                                     : `kode variabel $${rowInspect.detectedInputKey}`}{' '}
-                                                                pada Baris #{activeCellData.row + 1}.
+                                                                pada Baris #{activeCellData.row + 1}
+                                                                {effJenjangId && jenjangMap.get(effJenjangId)
+                                                                    ? ` • Prioritas Marhalah: ${jenjangMap.get(effJenjangId)}`
+                                                                    : ' • Template Semua Jenjang (otomatis mengikuti jenjang tiap santri saat cetak/leger)'}.
                                                             </div>
                                                         </div>
                                                     ) : rowInspect.source === 'fallback_jenjang' ? (
@@ -7170,27 +7176,27 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                                                 </span>
                                                             </div>
                                                             <div className="text-[9.5px] text-amber-800 mt-0.5">
-                                                                Nama mapel ini belum ada di Data Master &gt; Mata Pelajaran, sehingga memakai KKM standar marhalah ({rowInspect.defaultKkm}).
+                                                                Nama mapel ini belum ada di Data Master &gt; Mata Pelajaran, sehingga memakai KKM standar marhalah{effJenjangId && jenjangMap.get(effJenjangId) ? ` ${jenjangMap.get(effJenjangId)}` : ''} ({rowInspect.defaultKkm}).
                                                             </div>
                                                         </div>
                                                     ) : (
                                                         <div>
                                                             <i className="bi bi-info-circle mr-1 text-slate-500"></i>
-                                                            Ketik nama mapel manual di Baris #{activeCellData.row + 1} (misal <strong>Fiqih</strong>) agar <code>$KKM</code> otomatis menarik nilai KKM-nya dari Data Master (default: <strong>{rowInspect.defaultKkm}</strong>).
+                                                            Ketik nama mapel manual di Baris #{activeCellData.row + 1} (misal <strong>Fiqih</strong>) agar <code>$KKM</code> otomatis menarik nilai KKM-nya dari Data Master sesuai jenjang (default: <strong>{rowInspect.defaultKkm}</strong>).
                                                         </div>
                                                     )}
                                                 </div>
                                             )}
 
                                             {isSpecificMapelKkm && (
-                                                <div className="p-2 rounded border bg-white border-emerald-300 text-[10px] text-emerald-900 flex items-center justify-between">
+                                                <div className="p-2 rounded border bg-white border-emerald-300 text-[10px] text-emerald-900 flex items-center justify-between gap-1">
                                                     <span>
                                                         <i className="bi bi-pin-angle-fill text-emerald-600 mr-1"></i>
                                                         {specificMatchedMp
-                                                            ? ` Terkunci ke Mapel: ${specificMatchedMp.nama}`
+                                                            ? ` Terkunci ke Mapel: ${specificMatchedMp.nama}${jenjangMap.get(specificMatchedMp.jenjangId) ? ` (${jenjangMap.get(specificMatchedMp.jenjangId)})` : ''}`
                                                             : ' Mapel spesifik belum terdaftar (pakai KKM standar)'}
                                                     </span>
-                                                    <span className="font-mono bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-black">
+                                                    <span className="font-mono bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-black shrink-0">
                                                         KKM {specificMatchedMp?.kkm ?? rowInspect.defaultKkm}
                                                     </span>
                                                 </div>
@@ -7655,12 +7661,14 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                     </select>
                                     <p className="text-[10px] text-slate-500 mt-1 leading-snug">
                                         {(() => {
+                                            const { simJenjang: inputSimJenjang } = getTemplateSimulatedHierarchy();
+                                            const effInputJenjangId = inputSimJenjang?.id || activeTemplate?.jenjangId;
                                             const rowInspectForInput = inspectSheetRowKkm({
                                                 sheetCells: activeTemplate?.cells,
                                                 row: activeCellData.row,
                                                 col: activeCellData.col,
                                                 mataPelajaran: settings.mataPelajaran || [],
-                                                preferredJenjangId: activeTemplate?.jenjangId
+                                                preferredJenjangId: effInputJenjangId
                                             });
                                             const cls = classifyRaporInputField({
                                                 key: activeCellData.key || 'NILAI',
@@ -7668,7 +7676,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                                 type: activeCellData.type,
                                                 inputMode: activeCellData.inputMode,
                                                 mataPelajaran: settings.mataPelajaran || [],
-                                                jenjangId: activeTemplate?.jenjangId
+                                                jenjangId: effInputJenjangId
                                             });
                                             if (cls.isLongText) {
                                                 return 'Tampil sebagai kolom Teks / Catatan lebar di Leger Input Wali Kelas.';
@@ -7676,7 +7684,10 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                             if (cls.isAttendanceCount) {
                                                 return 'Tampil sebagai kolom angka jumlah hari presensi (tanpa KKM).';
                                             }
-                                            return `Tampil sebagai kolom Input Nilai Angka (KKM: ${cls.kkm}${rowInspectForInput.matchedMapel ? ` • ${rowInspectForInput.matchedMapel.nama}` : ''}) di Leger Input & ikut dihitung rata-rata.`;
+                                            const matchedJenjangName = rowInspectForInput.matchedMapel
+                                                ? (settings.jenjang || []).find(j => j.id === rowInspectForInput.matchedMapel?.jenjangId)?.nama
+                                                : undefined;
+                                            return `Tampil sebagai kolom Input Nilai Angka (KKM: ${cls.kkm}${rowInspectForInput.matchedMapel ? ` • ${rowInspectForInput.matchedMapel.nama}${matchedJenjangName ? ` [${matchedJenjangName}]` : ''}` : ''}) di Leger Input & ikut dihitung rata-rata.`;
                                         })()}
                                     </p>
                                 </div>

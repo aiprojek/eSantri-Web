@@ -693,6 +693,22 @@ export function findMapelInMasterPool(
         pools.push(list);
     }
 
+    const extractKitabCandidates = (mp: MataPelajaran): string[] => {
+        const rawKitabs = [
+            ...(mp.modul ? [mp.modul] : []),
+            ...(Array.isArray(mp.modulList) ? mp.modulList : [])
+        ]
+            .map(s => (s || '').trim())
+            .filter(s => s.length >= 3 && !/^https?:\/\//i.test(s));
+        const out: string[] = [];
+        for (const kb of rawKitabs) {
+            for (const c of extractMapelLookupCandidates(kb)) {
+                if (c && !out.includes(c)) out.push(c);
+            }
+        }
+        return out;
+    };
+
     const preparedPoolEntries = pools.map(pool =>
         pool.map(mp => ({
             mp,
@@ -703,7 +719,8 @@ export function findMapelInMasterPool(
             candidateKeys: [
                 ...(mp.kodeMapel ? extractMapelLookupCandidates(mp.kodeMapel) : []),
                 ...extractMapelLookupCandidates(mp.nama || '')
-            ]
+            ],
+            kitabKeys: extractKitabCandidates(mp)
         }))
     );
 
@@ -713,16 +730,22 @@ export function findMapelInMasterPool(
         if (qCandidates.length === 0) continue;
 
         for (const entries of preparedPoolEntries) {
-            // Prioritas A: Kecocokan persis nama atau kodeMapel
+            // Prioritas A: Kecocokan persis nama atau kodeMapel pada jenjang aktif
             if (qExact) {
                 const exactHit = entries.find(e => e.exactKeys.includes(qExact));
                 if (exactHit) return exactHit.mp;
             }
-            // Prioritas B: Kecocokan kandidat kanonik / sinonim / kitab dalam kurung
+            // Prioritas B: Kecocokan kandidat kanonik / sinonim / kitab dalam kurung pada jenjang aktif
             for (const cand of qCandidates) {
                 if (!cand || NON_SUBJECT_ROW_LABELS.has(cand)) continue;
                 const candHit = entries.find(e => e.candidateKeys.includes(cand));
                 if (candHit) return candHit.mp;
+            }
+            // Prioritas C: Kecocokan nama kitab/modul yang terdaftar di Data Master > Mata Pelajaran pada jenjang aktif
+            for (const cand of qCandidates) {
+                if (!cand || NON_SUBJECT_ROW_LABELS.has(cand)) continue;
+                const kitabHit = entries.find(e => e.kitabKeys.includes(cand));
+                if (kitabHit) return kitabHit.mp;
             }
         }
     }
@@ -754,6 +777,22 @@ export function buildMasterKkmLookupMap(
         const kkmVal = typeof mp.kkm === 'number' && isFinite(mp.kkm) && mp.kkm > 0 ? mp.kkm : defaultKkm;
         lookup[`MAPEL_${mp.id}`] = kkmVal;
         lookup[`ID_${mp.id}`] = kkmVal;
+
+        const kitabRaw = [
+            ...(mp.modul ? [mp.modul] : []),
+            ...(Array.isArray(mp.modulList) ? mp.modulList : [])
+        ]
+            .map(s => (s || '').trim())
+            .filter(s => s.length >= 3 && !/^https?:\/\//i.test(s));
+
+        for (const kb of kitabRaw) {
+            for (const k of extractMapelLookupCandidates(kb)) {
+                // Kitab hanya mengisi jika belum ada nama mapel langsung yang memakai kunci tersebut
+                if (k && !NON_SUBJECT_ROW_LABELS.has(k) && lookup[k] === undefined) {
+                    lookup[k] = kkmVal;
+                }
+            }
+        }
 
         const keys = [
             ...(mp.kodeMapel ? extractMapelLookupCandidates(mp.kodeMapel) : []),

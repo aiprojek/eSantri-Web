@@ -19,7 +19,12 @@ import {
     parseExcelRangeCoord,
     splitTopLevelArgs,
     normalizeSubjectKeyForAvg,
-    formatCellNumericDisplay
+    formatCellNumericDisplay,
+    extractMapelLookupCandidates,
+    computeDefaultKkmForPool,
+    findMapelInMasterPool,
+    buildMasterKkmLookupMap,
+    inspectSheetRowKkm
 } from './raporFormulaUtils';
 import { resolveAcademicYearLabels } from './academicYear';
 
@@ -119,10 +124,12 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
     },
     {
         id: 'kalkulasi',
-        title: 'Kalkulasi & Ranking',
+        title: 'Kalkulasi, KKM & Ranking',
         icon: 'bi-calculator-fill',
         color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
         tags: [
+            { tag: '$KKM', label: 'KKM Otomatis Baris Ini (Data Master)', description: 'Otomatis mendeteksi nama mapel manual / kode nilai di baris ini lalu mengambil KKM dari Data Master', example: '75' },
+            { tag: '$KKM_STANDAR', label: 'KKM Standar Marhalah', description: 'Nilai KKM standar/dominan pada marhalah santri dari Data Master', example: '70' },
             { tag: '$TOTAL_NILAI', label: 'Total Akumulasi Nilai', description: 'Jumlah total seluruh nilai mapel santri', example: '850' },
             { tag: '$RATA_RATA', label: 'Nilai Rata-Rata', description: 'Rata-rata seluruh nilai mapel santri', example: '85.50' },
             { tag: '$RATA_RATA_KELAS', label: 'Rata-Rata Umum Kelas', description: 'Rata-rata nilai gabungan seluruh santri di rombel', example: '83.45' },
@@ -219,7 +226,7 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
         tags: [
             { tag: '$MAPEL_NO', label: 'Nomor Urut Mapel', description: 'Nomor urut otomatis 1, 2, 3...', example: '1' },
             { tag: '$MAPEL_NAMA', label: 'Nama Mata Pelajaran', description: 'Nama mapel dinamis', example: 'Bahasa Arab' },
-            { tag: '$MAPEL_KKM', label: 'KKM / Nilai Kriteria', description: 'Nilai standar ketuntasan minimal', example: '75' },
+            { tag: '$MAPEL_KKM', label: 'KKM / Nilai Kriteria (Data Master)', description: 'Otomatis menarik KKM dari Data Master sesuai mapel pada baris ini (sama dengan $KKM)', example: '75' },
             { tag: '$MAPEL_NILAI', label: 'Nilai Akhir Mapel', description: 'Nilai angka hasil evaluasi', example: '88' },
             { tag: '$MAPEL_PREDIKAT', label: 'Predikat Mapel', description: 'Huruf predikat (A / B / C atau Mumtaz)', example: 'Mumtaz' },
             { tag: '$MAPEL_DESKRIPSI', label: 'Deskripsi Capaian Mapel', description: 'Deskripsi narasi capaian per mapel', example: 'Sangat baik dalam penguasaan kaidah nahwu dasar.' },
@@ -1335,6 +1342,17 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
             return '$TAHUN_AJAR_GABUNGAN';
         }
         if (u === 'CATATAN_WALI' || u === 'CATATAN' || u === 'CATATANWALIKELAS' || u === 'CATATAN_WALI_KELAS') return '$CATATAN_WALI_KELAS';
+        if (u === 'KKM' || u === 'NILAI_KKM' || u === 'KBM') return '$KKM';
+        if (
+            u === 'KKM_STANDAR' ||
+            u === 'STANDAR_KKM' ||
+            u === 'KKM_DEFAULT' ||
+            u === 'KKM_UMUM' ||
+            u === 'KKM_MARHALAH' ||
+            u === 'KKM_JENJANG'
+        ) {
+            return '$KKM_STANDAR';
+        }
         return `$${u}`;
     };
 
@@ -1788,7 +1806,85 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         if (!rawKey || val === undefined || val === null) continue;
         const upperKey = rawKey.trim().toUpperCase().replace(/[\s-]+/g, '_');
         if (!upperKey) continue;
+        // Jangan biarkan variabel kosong bertabrakan dengan tag sistem $KKM / $MAPEL_KKM
+        if ((upperKey === 'KKM' || upperKey === 'MAPEL_KKM' || upperKey === 'KKM_STANDAR') && String(val).trim() === '') {
+            continue;
+        }
         setToken(`$${upperKey}`, String(val));
+    }
+
+    // --- INTEGRASI KKM DINAMIS DARI DATA MASTER MATA PELAJARAN ---
+    // Menentukan Marhalah/Jenjang efektif (Santri -> Template.jenjangId -> Template.kelasId -> Template.rombelId)
+    const effectiveJenjangId: number | undefined = (() => {
+        if (santri?.jenjangId) return Number(santri.jenjangId);
+        if (santri && settings) {
+            const h = resolveSantriAcademicHierarchy(santri, settings);
+            if (h.jenjang?.id) return Number(h.jenjang.id);
+        }
+        if (context.template?.jenjangId) return Number(context.template.jenjangId);
+        if (context.template?.kelasId && settings?.kelas) {
+            const kls = settings.kelas.find(k => Number(k.id) === Number(context.template?.kelasId));
+            if (kls?.jenjangId) return Number(kls.jenjangId);
+        }
+        if (context.template?.rombelId && settings?.rombel && settings?.kelas) {
+            const rmb = settings.rombel.find(r => Number(r.id) === Number(context.template?.rombelId));
+            const kls = rmb ? settings.kelas.find(k => Number(k.id) === Number(rmb.kelasId)) : undefined;
+            if (kls?.jenjangId) return Number(kls.jenjangId);
+        }
+        return undefined;
+    })();
+
+    const masterMapelList = settings?.mataPelajaran || [];
+    const defaultJenjangKkm = computeDefaultKkmForPool(masterMapelList, effectiveJenjangId);
+    const masterKkmLookup = buildMasterKkmLookupMap(masterMapelList, effectiveJenjangId);
+
+    setToken('$KKM_STANDAR', String(defaultJenjangKkm));
+
+    // Daftarkan tag eksplisit per mapel ($KKM_FIQIH, $KKM_BAHASA_ARAB, $KKM_<KODE>, $KKM_MAPEL_<ID>)
+    // Urutkan jenjang aktif paling akhir agar menimpa mapel bernama sama dari jenjang lain
+    const orderedMasterMapels = effectiveJenjangId
+        ? [
+              ...masterMapelList.filter(m => Number(m.jenjangId) !== Number(effectiveJenjangId)),
+              ...masterMapelList.filter(m => Number(m.jenjangId) === Number(effectiveJenjangId))
+          ]
+        : masterMapelList;
+
+    for (const mp of orderedMasterMapels) {
+        const mpKkmStr = String(typeof mp.kkm === 'number' && isFinite(mp.kkm) && mp.kkm > 0 ? mp.kkm : defaultJenjangKkm);
+        setToken(`$KKM_MAPEL_${mp.id}`, mpKkmStr);
+        const mapelTagSuffixes = [
+            ...(mp.kodeMapel ? extractMapelLookupCandidates(mp.kodeMapel) : []),
+            ...extractMapelLookupCandidates(mp.nama || '')
+        ];
+        for (const sfx of mapelTagSuffixes) {
+            if (sfx) {
+                setToken(`$KKM_${sfx}`, mpKkmStr);
+            }
+        }
+    }
+
+    // Deteksi otomatis KKM kontekstual berdasarkan nama mapel manual / $KEY pada baris aktif ($KKM & $MAPEL_KKM)
+    const rowKkmInspection =
+        sheetCells && context.currentCellCoord
+            ? inspectSheetRowKkm({
+                  sheetCells,
+                  row: context.currentCellCoord.r,
+                  col: context.currentCellCoord.c,
+                  mataPelajaran: masterMapelList,
+                  preferredJenjangId: effectiveJenjangId
+              })
+            : null;
+
+    const resolvedRowKkmNumber =
+        rowKkmInspection && rowKkmInspection.kkmValue !== null
+            ? rowKkmInspection.kkmValue
+            : defaultJenjangKkm;
+
+    if (!tokenMap.has('$KKM') || tokenMap.get('$KKM') === '') {
+        setToken('$KKM', String(resolvedRowKkmNumber));
+    }
+    if (!tokenMap.has('$MAPEL_KKM') || tokenMap.get('$MAPEL_KKM') === '') {
+        setToken('$MAPEL_KKM', String(resolvedRowKkmNumber));
     }
 
     const isFormula = isRaporFormulaExpression(res);
@@ -2099,7 +2195,197 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         return out;
     };
 
-    const preparedRes = isFormula ? preprocessClassAvgFormulaCalls(res) : res;
+    // Pra-pemrosesan argumen fungsi =KKM(...) / =NILAI_KKM(...) / =STANDAR_KKM(...)
+    // agar referensi sel (baik sel nama mapel manual seperti B6 maupun sel nilai santri seperti D6 / $FIQIH)
+    // membaca identitas mata pelajarannya di Data Master, BUKAN membaca angka nilai santri (misal 88)!
+    const resolveCellToKkmArg = (r: number, c: number): string => {
+        if (!sheetCells) return '"__KKM_EMPTY__"';
+        const master = findMasterCoord(r, c);
+        const cell = sheetCells[master.r]?.[master.c];
+        if (!cell) return '"__KKM_EMPTY__"';
+
+        if (cell.type === 'label') {
+            const rawLabel = (cell.value || '').trim();
+            if (!rawLabel) return '"__KKM_EMPTY__"';
+            const matched = findMapelInMasterPool(rawLabel, masterMapelList, effectiveJenjangId);
+            if (matched) {
+                const kVal = typeof matched.kkm === 'number' && isFinite(matched.kkm) ? matched.kkm : defaultJenjangKkm;
+                return `"__KKM_RESOLVED__:${kVal}"`;
+            }
+            return '"__KKM_UNMATCHED__:"';
+        }
+
+        if (cell.type === 'input' || cell.type === 'dropdown') {
+            if (cell.key?.trim()) {
+                const byKey = findMapelInMasterPool(cell.key.trim(), masterMapelList, effectiveJenjangId);
+                if (byKey) {
+                    const kVal = typeof byKey.kkm === 'number' && isFinite(byKey.kkm) ? byKey.kkm : defaultJenjangKkm;
+                    return `"__KKM_RESOLVED__:${kVal}"`;
+                }
+            }
+            // Jika $KEY berupa kode generik (misal $NILAI_1), periksa teks nama mapel manual pada baris yang sama!
+            const rowInspect = inspectSheetRowKkm({
+                sheetCells,
+                row: master.r,
+                col: master.c,
+                mataPelajaran: masterMapelList,
+                preferredJenjangId: effectiveJenjangId
+            });
+            if (rowInspect.matchedMapel && rowInspect.kkmValue !== null) {
+                return `"__KKM_RESOLVED__:${rowInspect.kkmValue}"`;
+            }
+            if (rowInspect.kkmValue !== null) {
+                return '"__KKM_UNMATCHED__:"';
+            }
+            return '"__KKM_EMPTY__"';
+        }
+
+        const scalar = resolveGridCellScalar(master.r, master.c).trim();
+        if (!scalar || scalar === '-') return '"__KKM_EMPTY__"';
+        const numCheck = Number(scalar.replace(',', '.'));
+        if (!isNaN(numCheck) && isFinite(numCheck)) {
+            return `"__KKM_RESOLVED__:${numCheck}"`;
+        }
+        const byScalar = findMapelInMasterPool(scalar, masterMapelList, effectiveJenjangId);
+        if (byScalar) {
+            const kVal = typeof byScalar.kkm === 'number' && isFinite(byScalar.kkm) ? byScalar.kkm : defaultJenjangKkm;
+            return `"__KKM_RESOLVED__:${kVal}"`;
+        }
+        return '"__KKM_UNMATCHED__:"';
+    };
+
+    const resolveSingleKkmTarget = (rawTargetArg: string): string => {
+        const t = rawTargetArg.trim();
+        if (!t) return '""';
+
+        // 1. Koordinat sel tunggal Excel (contoh: B6, $B$6, B$6)
+        if (sheetCells && sheetRowCount > 0) {
+            const coord = parseExcelCellCoord(t, false);
+            if (coord && coord.r >= 0 && coord.r < sheetRowCount && coord.c >= 0 && coord.c < sheetColCount) {
+                return resolveCellToKkmArg(coord.r, coord.c);
+            }
+        }
+
+        // 2. Variabel $KODE_MAPEL (contoh: $FIQIH) atau koordinat kolom-terkunci $B6
+        const dollarMatch = t.match(/^\$([A-Za-z0-9_]+)$/);
+        if (dollarMatch) {
+            const rawIdent = dollarMatch[1];
+            const upperTok = `$${rawIdent.toUpperCase()}`;
+
+            // Jika memang tag $KKM... atau $MAPEL_NAMA, gunakan nilai tokennya langsung
+            if (upperTok.startsWith('$KKM') || upperTok === '$MAPEL_NAMA') {
+                const tokVal = tokenMap.get(upperTok);
+                if (tokVal !== undefined) {
+                    const num = Number(tokVal);
+                    if (!isNaN(num) && isFinite(num)) return `"__KKM_RESOLVED__:${num}"`;
+                    const escaped = tokVal.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                    return `"${escaped}"`;
+                }
+            }
+
+            // Cek di Data Master berdasarkan nama kunci $FIQIH
+            const byMaster = findMapelInMasterPool(rawIdent, masterMapelList, effectiveJenjangId);
+            if (byMaster) {
+                const kVal = typeof byMaster.kkm === 'number' && isFinite(byMaster.kkm) ? byMaster.kkm : defaultJenjangKkm;
+                return `"__KKM_RESOLVED__:${kVal}"`;
+            }
+
+            // Cek apakah $KEY adalah sel input di sheet (misal $NILAI_1 pada baris "Fiqih")
+            if (sheetCells) {
+                const nk = normalizeSubjectKeyForAvg(rawIdent);
+                for (let rr = 0; rr < sheetCells.length; rr++) {
+                    const row = sheetCells[rr] || [];
+                    for (let cc = 0; cc < row.length; cc++) {
+                        const cand = row[cc];
+                        if (cand && !cand.hidden && cand.key && normalizeSubjectKeyForAvg(cand.key) === nk) {
+                            return resolveCellToKkmArg(rr, cc);
+                        }
+                    }
+                }
+                // Jika bukan $KEY di sheet, cek apakah koordinat kolom-terkunci seperti $B6
+                if (sheetRowCount > 0) {
+                    const colLocked = parseExcelCellCoord(t, true);
+                    if (colLocked && colLocked.r >= 0 && colLocked.r < sheetRowCount && colLocked.c >= 0 && colLocked.c < sheetColCount) {
+                        return resolveCellToKkmArg(colLocked.r, colLocked.c);
+                    }
+                }
+            }
+
+            return '"__KKM_UNMATCHED__:"';
+        }
+
+        // 3. Teks kutip ("Fiqih") atau ekspresi lain -> biarkan dievaluasi oleh evaluator rumus
+        return t;
+    };
+
+    const preprocessKkmFormulaCalls = (exprStr: string): string => {
+        let out = '';
+        let i = 0;
+        let q: '"' | "'" | null = null;
+        while (i < exprStr.length) {
+            const c = exprStr[i];
+            if (q) {
+                if (c === q && exprStr[i - 1] !== '\\') q = null;
+                out += c;
+                i++;
+                continue;
+            }
+            if (c === '"' || c === "'") {
+                q = c;
+                out += c;
+                i++;
+                continue;
+            }
+            if (/[A-Za-z]/.test(c) && (i === 0 || !/[A-Za-z0-9_$]/.test(exprStr[i - 1]))) {
+                const fnStartMatch = exprStr.slice(i).match(/^(KKM|NILAI_KKM|STANDAR_KKM)(\s*)\(/i);
+                if (fnStartMatch) {
+                    const fnCallPrefix = fnStartMatch[0];
+                    const openParenIdx = i + fnCallPrefix.length - 1;
+                    let depth = 0;
+                    let innerQ: '"' | "'" | null = null;
+                    let closeParenIdx = -1;
+                    for (let j = openParenIdx; j < exprStr.length; j++) {
+                        const jc = exprStr[j];
+                        if (innerQ) {
+                            if (jc === innerQ && exprStr[j - 1] !== '\\') innerQ = null;
+                            continue;
+                        }
+                        if (jc === '"' || jc === "'") {
+                            innerQ = jc;
+                            continue;
+                        }
+                        if (jc === '(') depth++;
+                        else if (jc === ')') {
+                            depth--;
+                            if (depth === 0) {
+                                closeParenIdx = j;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (closeParenIdx !== -1) {
+                        const rawInner = exprStr.slice(openParenIdx + 1, closeParenIdx);
+                        if (rawInner.trim() === '') {
+                            out += `${fnStartMatch[1]}()`;
+                        } else {
+                            const topArgs = splitTopLevelArgs(rawInner);
+                            const rewrittenFirst = resolveSingleKkmTarget(topArgs[0]);
+                            const restArgs = topArgs.slice(1).map(a => preprocessKkmFormulaCalls(a));
+                            out += `${fnStartMatch[1]}(${[rewrittenFirst, ...restArgs].join(', ')})`;
+                        }
+                        i = closeParenIdx + 1;
+                        continue;
+                    }
+                }
+            }
+            out += c;
+            i++;
+        }
+        return out;
+    };
+
+    const preparedRes = isFormula ? preprocessKkmFormulaCalls(preprocessClassAvgFormulaCalls(res)) : res;
 
     // Substitusi token $TAG serta koordinat/rentang sel Excel (misal D6:D15 atau D6) dengan pemindai sadar-kutip
     let substituted = '';
@@ -2195,6 +2481,18 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
                     idx += rawTok.length;
                     continue;
                 }
+                // Fallback cerdas untuk $KKM_<MAPEL> meskipun ejaannya sedikit berbeda atau belum terdaftar di Data Master
+                if (upperTok.startsWith('$KKM_')) {
+                    const matchedMp = findMapelInMasterPool(upperTok, masterMapelList, effectiveJenjangId);
+                    const kkmFallbackStr = String(
+                        matchedMp && typeof matchedMp.kkm === 'number' && isFinite(matchedMp.kkm)
+                            ? matchedMp.kkm
+                            : defaultJenjangKkm
+                    );
+                    substituted += isFormula ? formatScalarForFormula(kkmFallbackStr) : kkmFallbackStr;
+                    idx += rawTok.length;
+                    continue;
+                }
                 // Jika merupakan $KEY variabel input pada sheet namun nilainya masih kosong
                 if (definedSheetKeys.has(upperTok)) {
                     substituted += isFormula ? '""' : '';
@@ -2255,6 +2553,9 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         tanggalRaporMasehiHijriah: masehiHijriCombined,
         classAverages: effectiveClassAverages,
         classOverallAverage: effectiveClassOverallAvg,
+        kkmLookup: masterKkmLookup,
+        defaultKkm: defaultJenjangKkm,
+        rowDetectedKkm: resolvedRowKkmNumber,
         decimalPlaces: context.decimalPlaces
     });
 };

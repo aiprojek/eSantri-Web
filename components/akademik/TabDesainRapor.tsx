@@ -46,6 +46,10 @@ import {
     autoCloseFormulaParens,
     extractFormulaReferencedCoords,
     normalizeSubjectKeyForAvg,
+    canonicalizeMapelLookupKey,
+    computeDefaultKkmForPool,
+    findMapelInMasterPool,
+    inspectSheetRowKkm,
     shiftFormulaReferences,
     cycleFormulaReferenceLockAtCaret,
     computeSeriesStringAtOffset,
@@ -1653,7 +1657,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                 const wb = XLSX.read(bstr, { type: 'binary' });
                 if (!wb.SheetNames || wb.SheetNames.length === 0) throw new Error("File tidak memiliki lembar sheet.");
                 
-                const systemKeys = ['$NAMA', '$NIS', '$NISN', '$KELAS', '$ROMBEL', '$SEMESTER', '$TAHUN_AJAR', '$NAMA_YAYASAN', '$NAMA_PONPES', '$ALAMAT_PONDOK', '$LOGO', '$WALI_KELAS', '$MUDIR', '$TOTAL_NILAI', '$RATA_RATA', '$PERINGKAT'];
+                const systemKeys = ['$NAMA', '$NIS', '$NISN', '$KELAS', '$ROMBEL', '$SEMESTER', '$TAHUN_AJAR', '$NAMA_YAYASAN', '$NAMA_PONPES', '$ALAMAT_PONDOK', '$LOGO', '$WALI_KELAS', '$MUDIR', '$TOTAL_NILAI', '$RATA_RATA', '$PERINGKAT', '$KKM', '$KKM_STANDAR', '$NILAI_KKM', '$KBM'];
                 const importedSheets: RaporSheet[] = [];
 
                 wb.SheetNames.forEach((sheetName, sIdx) => {
@@ -1717,14 +1721,27 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                         : inner === 'NISN' ? '$NISN'
                                         : inner === 'ROMBEL' || inner === 'KELAS' ? '$ROMBEL'
                                         : inner === 'PERINGKAT' || inner === 'RANKING' ? '$PERINGKAT'
+                                        : inner === 'KKM' || inner === 'NILAI_KKM' ? '$KKM'
                                         : `$${inner}`;
                                     newCells[r][c].value = mappedTag;
                                     newCells[r][c].type = 'data';
-                                    hasBiodataInSheet = true;
+                                    if (mappedTag !== '$KKM' && !mappedTag.startsWith('$KKM_')) {
+                                        hasBiodataInSheet = true;
+                                    }
                                 } else if (valStr.startsWith('$')) {
-                                    if (systemKeys.includes(valStr) || valStr.startsWith('$MAPEL_NAME') || valStr.startsWith('$TOTAL') || valStr.startsWith('$RATA') || valStr.startsWith('$RANK')) {
+                                    const upVal = valStr.toUpperCase();
+                                    if (
+                                        systemKeys.includes(upVal) ||
+                                        upVal === '$KKM' ||
+                                        upVal.startsWith('$KKM_') ||
+                                        upVal.startsWith('$MAPEL_') ||
+                                        upVal.startsWith('$TOTAL') ||
+                                        upVal.startsWith('$RATA') ||
+                                        upVal.startsWith('$RANK')
+                                    ) {
                                         newCells[r][c].type = 'data';
-                                        if (valStr === '$NAMA' || valStr === '$NIS' || valStr === '$ROMBEL' || valStr === '$PERINGKAT') {
+                                        newCells[r][c].value = upVal;
+                                        if (upVal === '$NAMA' || upVal === '$NIS' || upVal === '$ROMBEL' || upVal === '$PERINGKAT') {
                                             hasBiodataInSheet = true;
                                         }
                                     } else {
@@ -1914,14 +1931,15 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
     const isKnownDynamicSystemTag = (raw: string): boolean => {
         const up = raw.trim().toUpperCase();
         if (!up.startsWith('$') || up.includes(' ')) return false;
-        if (up.startsWith('$MAPEL_') || up.startsWith('$TTD_')) return true;
+        if (up === '$KKM' || up.startsWith('$KKM_') || up.startsWith('$MAPEL_') || up.startsWith('$TTD_')) return true;
         for (const cat of DYNAMIC_TAG_CATEGORIES) {
             if (cat.tags.some(t => t.tag.toUpperCase() === up)) return true;
         }
         const aliases = [
             '$TAHUNAJAR', '$TAHUN_AJAR', '$TAHUNAJARAN', '$TAHUN_AJARAN',
             '$MARHALAH', '$JENJANG', '$TINGKAT', '$KELAS', '$ROMBEL', '$SEMESTER',
-            '$FASE', '$CAPAIAN_KOMPETENSI', '$P5', '$CATATAN_WALIKELAS', '$LOGO'
+            '$FASE', '$CAPAIAN_KOMPETENSI', '$P5', '$CATATAN_WALIKELAS', '$LOGO',
+            '$NILAI_KKM', '$STANDAR_KKM', '$KKM_DEFAULT', '$KKM_MARHALAH', '$KBM'
         ];
         return aliases.includes(up);
     };
@@ -1970,7 +1988,8 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
             nextValue = rawDraft;
         } else if (isMediaTag(trimmed) || isKnownDynamicSystemTag(trimmed)) {
             nextType = 'data';
-            nextValue = trimmed;
+            const upTrim = trimmed.toUpperCase();
+            nextValue = (upTrim === '$NILAI_KKM' || upTrim === '$KBM') ? '$KKM' : (trimmed.startsWith('$TTD_PENGAJAR:') ? trimmed : upTrim);
             nextKey = undefined;
         } else if (/^\$[A-Za-z0-9_]+$/.test(trimmed)) {
             nextType = 'input';
@@ -2148,8 +2167,31 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
             });
         });
 
+        // 4. Per-Subject $KKM_<MAPEL> Tags Directly from Data Master Mata Pelajaran
+        const jenjangMap = new Map<number, string>((settings.jenjang || []).map(j => [j.id, j.nama]));
+        const targetJId = activeTemplate?.jenjangId;
+        const mapelCandidates = (settings.mataPelajaran || []).filter(mp => !targetJId || Number(mp.jenjangId) === Number(targetJId));
+        const mapelPoolForAuto = mapelCandidates.length > 0 ? mapelCandidates : (settings.mataPelajaran || []);
+        const seenKkmTags = new Set<string>();
+        mapelPoolForAuto.forEach(mp => {
+            const rawSuffix = canonicalizeMapelLookupKey(mp.kodeMapel || mp.nama || '', false);
+            if (!rawSuffix) return;
+            const kkmTag = `$KKM_${rawSuffix}`;
+            if (seenKkmTags.has(kkmTag)) return;
+            seenKkmTags.add(kkmTag);
+            const jName = jenjangMap.get(mp.jenjangId);
+            items.push({
+                id: `kkm_master_${mp.id}`,
+                label: kkmTag,
+                insertText: kkmTag,
+                subtitle: `KKM ${mp.nama}${jName ? ` (${jName})` : ''} → ${mp.kkm ?? 70} (Data Master)`,
+                badge: 'KKM Master',
+                badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200'
+            });
+        });
+
         return items;
-    }, [activeTemplate, activeSheetId]);
+    }, [activeTemplate, activeSheetId, settings.mataPelajaran, settings.jenjang]);
 
     const detectAutocompleteTrigger = (text: string, caretPos: number, source: 'fx' | 'inline') => {
         const beforeCaret = text.slice(0, caretPos);
@@ -4933,6 +4975,36 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                 }
             }
 
+            // Live KKM preview from Data Master Mata Pelajaran ($KKM, $MAPEL_KKM, $KKM_STANDAR, $KKM_<MAPEL>)
+            const activeJenjangForKkm = simJenjang?.id || activeTemplate?.jenjangId;
+            if (upperVal === '$KKM' || upperVal === '$MAPEL_KKM' || upperVal === '$NILAI_KKM' || upperVal === '$KBM') {
+                const rowInspect = inspectSheetRowKkm({
+                    sheetCells: activeTemplate?.cells,
+                    row: cell.row,
+                    col: cell.col,
+                    mataPelajaran: settings.mataPelajaran || [],
+                    preferredJenjangId: activeJenjangForKkm
+                });
+                const previewKkm = rowInspect.kkmValue !== null ? rowInspect.kkmValue : rowInspect.defaultKkm;
+                return formatText(String(previewKkm));
+            }
+            if (
+                upperVal === '$KKM_STANDAR' ||
+                upperVal === '$STANDAR_KKM' ||
+                upperVal === '$KKM_DEFAULT' ||
+                upperVal === '$KKM_UMUM' ||
+                upperVal === '$KKM_MARHALAH' ||
+                upperVal === '$KKM_JENJANG'
+            ) {
+                const stdKkm = computeDefaultKkmForPool(settings.mataPelajaran || [], activeJenjangForKkm);
+                return formatText(String(stdKkm));
+            }
+            if (upperVal.startsWith('$KKM_')) {
+                const matchedMp = findMapelInMasterPool(upperVal, settings.mataPelajaran || [], activeJenjangForKkm);
+                const fallbackStd = computeDefaultKkmForPool(settings.mataPelajaran || [], activeJenjangForKkm);
+                return formatText(String(matchedMp?.kkm ?? fallbackStd));
+            }
+
             // Find matching example in dynamic tag list
             for (const cat of DYNAMIC_TAG_CATEGORIES) {
                 const found = cat.tags.find(t => t.tag === upperVal);
@@ -6999,6 +7071,163 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                     ))}
                                 </div>
 
+                                {/* Smart KKM Data Master Picker & Live Row Detection Inspector */}
+                                {(selectedTagCategory === 'kalkulasi' ||
+                                    selectedTagCategory === 'mapel_repeater' ||
+                                    (activeCellData.value || '').toUpperCase().includes('KKM')) && (() => {
+                                    const { simJenjang } = getTemplateSimulatedHierarchy();
+                                    const effJenjangId = simJenjang?.id || activeTemplate?.jenjangId;
+                                    const jenjangMap = new Map<number, string>((settings.jenjang || []).map(j => [j.id, j.nama]));
+                                    const filteredMasterMapel = (settings.mataPelajaran || []).filter(
+                                        mp => !effJenjangId || Number(mp.jenjangId) === Number(effJenjangId)
+                                    );
+                                    const displayMasterMapel =
+                                        filteredMasterMapel.length > 0 ? filteredMasterMapel : (settings.mataPelajaran || []);
+
+                                    const curValUpper = (activeCellData.value || '').trim().toUpperCase();
+                                    const isRowAutoKkm =
+                                        curValUpper === '$KKM' ||
+                                        curValUpper === '$MAPEL_KKM' ||
+                                        curValUpper === '$NILAI_KKM' ||
+                                        curValUpper === '$KBM';
+                                    const isSpecificMapelKkm =
+                                        curValUpper.startsWith('$KKM_') &&
+                                        curValUpper !== '$KKM_STANDAR' &&
+                                        curValUpper !== '$KKM_DEFAULT' &&
+                                        curValUpper !== '$KKM_MARHALAH';
+
+                                    const rowInspect = inspectSheetRowKkm({
+                                        sheetCells: activeTemplate?.cells,
+                                        row: activeCellData.row,
+                                        col: activeCellData.col,
+                                        mataPelajaran: settings.mataPelajaran || [],
+                                        preferredJenjangId: effJenjangId
+                                    });
+
+                                    const specificMatchedMp = isSpecificMapelKkm
+                                        ? findMapelInMasterPool(curValUpper, settings.mataPelajaran || [], effJenjangId)
+                                        : undefined;
+
+                                    return (
+                                        <div className="p-2.5 bg-emerald-50/70 rounded-lg border border-emerald-200 space-y-2 mt-2">
+                                            <div className="flex items-center justify-between gap-1">
+                                                <span className="text-[10.5px] font-black text-emerald-900 uppercase flex items-center gap-1">
+                                                    <i className="bi bi-database-check text-emerald-600"></i>
+                                                    <span>Integrasi KKM Data Master</span>
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => updateActiveCell({ type: 'data', value: '$KKM' })}
+                                                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition-colors ${
+                                                        isRowAutoKkm
+                                                            ? 'bg-emerald-600 text-white border-emerald-700'
+                                                            : 'bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                                    }`}
+                                                    title="Gunakan $KKM agar otomatis membaca nama mapel ketikan manual di baris ini"
+                                                >
+                                                    Pakai $KKM Otomatis
+                                                </button>
+                                            </div>
+
+                                            {isRowAutoKkm && (
+                                                <div
+                                                    className={`p-2 rounded border text-[10px] leading-snug ${
+                                                        rowInspect.matchedMapel
+                                                            ? 'bg-white border-emerald-300 text-emerald-900'
+                                                            : rowInspect.source === 'fallback_jenjang'
+                                                            ? 'bg-amber-50 border-amber-300 text-amber-900'
+                                                            : 'bg-slate-50 border-slate-200 text-slate-600'
+                                                    }`}
+                                                >
+                                                    {rowInspect.matchedMapel ? (
+                                                        <div>
+                                                            <div className="font-bold flex items-center justify-between">
+                                                                <span>
+                                                                    <i className="bi bi-check-circle-fill text-emerald-600 mr-1"></i>
+                                                                    Cocok Data Master: {rowInspect.matchedMapel.nama}
+                                                                </span>
+                                                                <span className="font-mono bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-black">
+                                                                    KKM {rowInspect.kkmValue}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-[9.5px] text-slate-500 mt-0.5">
+                                                                Terdeteksi otomatis dari{' '}
+                                                                {rowInspect.source === 'master_label'
+                                                                    ? `teks baris "${rowInspect.detectedLabel}"`
+                                                                    : `kode variabel $${rowInspect.detectedInputKey}`}{' '}
+                                                                pada Baris #{activeCellData.row + 1}.
+                                                            </div>
+                                                        </div>
+                                                    ) : rowInspect.source === 'fallback_jenjang' ? (
+                                                        <div>
+                                                            <div className="font-bold flex items-center justify-between">
+                                                                <span>
+                                                                    <i className="bi bi-exclamation-circle-fill text-amber-600 mr-1"></i>
+                                                                    Mapel Manual: &ldquo;{rowInspect.detectedLabel || `$${rowInspect.detectedInputKey}`}&rdquo;
+                                                                </span>
+                                                                <span className="font-mono bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-black">
+                                                                    KKM {rowInspect.kkmValue}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-[9.5px] text-amber-800 mt-0.5">
+                                                                Nama mapel ini belum ada di Data Master &gt; Mata Pelajaran, sehingga memakai KKM standar marhalah ({rowInspect.defaultKkm}).
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div>
+                                                            <i className="bi bi-info-circle mr-1 text-slate-500"></i>
+                                                            Ketik nama mapel manual di Baris #{activeCellData.row + 1} (misal <strong>Fiqih</strong>) agar <code>$KKM</code> otomatis menarik nilai KKM-nya dari Data Master (default: <strong>{rowInspect.defaultKkm}</strong>).
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {isSpecificMapelKkm && (
+                                                <div className="p-2 rounded border bg-white border-emerald-300 text-[10px] text-emerald-900 flex items-center justify-between">
+                                                    <span>
+                                                        <i className="bi bi-pin-angle-fill text-emerald-600 mr-1"></i>
+                                                        {specificMatchedMp
+                                                            ? ` Terkunci ke Mapel: ${specificMatchedMp.nama}`
+                                                            : ' Mapel spesifik belum terdaftar (pakai KKM standar)'}
+                                                    </span>
+                                                    <span className="font-mono bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-black">
+                                                        KKM {specificMatchedMp?.kkm ?? rowInspect.defaultKkm}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {displayMasterMapel.length > 0 && (
+                                                <div>
+                                                    <label className="block text-[10px] font-semibold text-emerald-900 mb-1">
+                                                        Atau Kunci ke KKM Mapel Tertentu (Data Master):
+                                                    </label>
+                                                    <select
+                                                        value={isSpecificMapelKkm ? curValUpper : ''}
+                                                        onChange={e => {
+                                                            if (e.target.value) {
+                                                                updateActiveCell({ type: 'data', value: e.target.value });
+                                                            }
+                                                        }}
+                                                        className="w-full text-xs border border-emerald-200 rounded p-1.5 bg-white font-medium text-slate-800"
+                                                    >
+                                                        <option value="">-- Pilih KKM Mapel Spesifik ($KKM_...) --</option>
+                                                        {displayMasterMapel.map(mp => {
+                                                            const codeSuffix = canonicalizeMapelLookupKey(mp.kodeMapel || mp.nama || '', false);
+                                                            const tagVal = codeSuffix ? `$KKM_${codeSuffix}` : `$KKM_MAPEL_${mp.id}`;
+                                                            const jLabel = !effJenjangId ? jenjangMap.get(mp.jenjangId) : '';
+                                                            return (
+                                                                <option key={mp.id} value={tagVal}>
+                                                                    {mp.nama}{jLabel ? ` (${jLabel})` : ''} — KKM {mp.kkm ?? 70} ({tagVal})
+                                                                </option>
+                                                            );
+                                                        })}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+
                                 {/* Specific Teacher Name / NIP Helper under Pejabat Category */}
                                 {selectedTagCategory === 'pejabat' && (
                                     <div className="space-y-2 mt-2">
@@ -7426,8 +7655,16 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                     </select>
                                     <p className="text-[10px] text-slate-500 mt-1 leading-snug">
                                         {(() => {
+                                            const rowInspectForInput = inspectSheetRowKkm({
+                                                sheetCells: activeTemplate?.cells,
+                                                row: activeCellData.row,
+                                                col: activeCellData.col,
+                                                mataPelajaran: settings.mataPelajaran || [],
+                                                preferredJenjangId: activeTemplate?.jenjangId
+                                            });
                                             const cls = classifyRaporInputField({
                                                 key: activeCellData.key || 'NILAI',
+                                                label: rowInspectForInput.detectedLabel,
                                                 type: activeCellData.type,
                                                 inputMode: activeCellData.inputMode,
                                                 mataPelajaran: settings.mataPelajaran || [],
@@ -7439,7 +7676,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                             if (cls.isAttendanceCount) {
                                                 return 'Tampil sebagai kolom angka jumlah hari presensi (tanpa KKM).';
                                             }
-                                            return `Tampil sebagai kolom Input Nilai Angka (KKM: ${cls.kkm}) di Leger Input & ikut dihitung rata-rata.`;
+                                            return `Tampil sebagai kolom Input Nilai Angka (KKM: ${cls.kkm}${rowInspectForInput.matchedMapel ? ` • ${rowInspectForInput.matchedMapel.nama}` : ''}) di Leger Input & ikut dihitung rata-rata.`;
                                         })()}
                                     </p>
                                 </div>
@@ -7514,7 +7751,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                         placeholder="=SUM(D6:D15) atau =RATA2(D6:D15)"
                                     />
                                     <div className="flex flex-wrap gap-1">
-                                        {(['=SUM(', '=RATA2(', '=ROUND(', '=FIXED(', '=RATA2_KELAS(', '=TERBILANG(', '=PREDIKAT('] as const).map(starter => (
+                                        {(['=SUM(', '=RATA2(', '=KKM(', '=ROUND(', '=FIXED(', '=RATA2_KELAS(', '=TERBILANG(', '=PREDIKAT('] as const).map(starter => (
                                             <button
                                                 key={starter}
                                                 type="button"
@@ -7632,6 +7869,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                             <li><code>=RATA2(D6:D15)</code> : Rata-rata blok sel santri (atau <code>=RATA2($A, $B)</code>)</li>
                                             <li><code>=RATA2_KELAS(D6)</code> : Rerata kelas suatu mapel (klik sel mapel / <code>$KODE</code>; alias <code>=RERATA_KELAS</code>, <code>=NRK</code>)</li>
                                             <li><code>=RATA2_KELAS()</code> / <code>$RATA_RATA_KELAS</code> : Rata-rata umum seluruh kelas/rombel</li>
+                                            <li><code>=KKM(B6)</code> / <code>=KKM()</code> / <code>$KKM</code> : Ambil KKM otomatis dari Data Master sesuai nama mapel manual di sel <code>B6</code> atau baris aktif (bisa fallback <code>=KKM(B6, 75)</code>)</li>
                                             <li><code>=ROUND(D6, 2)</code> / <code>=BULAT(D6, 2)</code> : Bulatkan ke 1, 2, atau 3 angka di belakang koma</li>
                                             <li><code>=FIXED(RATA2(D6:D15), 2)</code> / <code>=DESIMAL(..., 2)</code> : Format desimal tetap (misal <code>85,50</code>)</li>
                                             <li><code>=ROUNDUP(D6, 1)</code> / <code>=ROUNDDOWN(D6, 1)</code> : Bulatkan ke atas / ke bawah</li>
@@ -7639,7 +7877,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                             <li><code>=ARAB(D6)</code> : Angka ke Arab-Timur (٨٨)</li>
                                             <li><code>=PREDIKAT(D6, "pesantren")</code> : Mumtaz / Jayyid Jiddan</li>
                                             <li><code>=PREDIKAT(D6, "huruf")</code> : Predikat A / B / C / D</li>
-                                            <li><code>=IF(D6&gt;=75, "Tuntas", "Remidi")</code> : Logika syarat IF</li>
+                                            <li><code>=IF(D6&gt;=KKM(B6), "Tuntas", "Remidi")</code> : Logika syarat ketuntasan otomatis terhadap KKM Data Master</li>
                                             <li><code>=MAX(D6:D15)</code> / <code>=MIN(D6:D15)</code> : Nilai tertinggi / terendah</li>
                                             <li><code>=RANK($TOTAL_NILAI, "rombel")</code> : Peringkat kelas otomatis</li>
                                             <li><code>=CONCAT("Semester ", $SEMESTER)</code> : Gabung teks (spasi dalam kutip terjaga)</li>

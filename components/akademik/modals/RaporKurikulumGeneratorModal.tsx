@@ -33,6 +33,7 @@ export const RaporKurikulumGeneratorModal: React.FC<RaporKurikulumGeneratorModal
 
     // Opsi Kolom
     const [includeKkm, setIncludeKkm] = useState<boolean>(true);
+    const [kkmMode, setKkmMode] = useState<'dynamic' | 'static'>('dynamic');
     const [includeClassAvg, setIncludeClassAvg] = useState<boolean>(false);
     const [extraScoreFormat, setExtraScoreFormat] = useState<'none' | 'terbilang' | 'arab'>('terbilang');
     const [predikatMode, setPredikatMode] = useState<'none' | 'huruf' | 'pesantren'>('huruf');
@@ -176,6 +177,13 @@ export const RaporKurikulumGeneratorModal: React.FC<RaporKurikulumGeneratorModal
                     });
                 }
                 if (col.id === 'kkm') {
+                    if (kkmMode === 'dynamic') {
+                        return makeCell(rIdx, cIdx, col.width, {
+                            type: 'data',
+                            value: '$KKM',
+                            align: 'center'
+                        });
+                    }
                     return makeCell(rIdx, cIdx, col.width, {
                         value: String(mp.kkm ?? 70),
                         align: 'center'
@@ -475,6 +483,22 @@ export const RaporKurikulumGeneratorModal: React.FC<RaporKurikulumGeneratorModal
                                     className="rounded text-teal-600 w-4 h-4"
                                 />
                             </label>
+
+                            {includeKkm && (
+                                <div className="pl-2.5 border-l-2 border-teal-200">
+                                    <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                                        Sumber Nilai KKM
+                                    </label>
+                                    <select
+                                        value={kkmMode}
+                                        onChange={e => setKkmMode(e.target.value as 'dynamic' | 'static')}
+                                        className="w-full border border-slate-300 rounded-lg px-2 py-1 text-[11px] font-bold bg-white"
+                                    >
+                                        <option value="dynamic">Dinamis ikut Data Master ($KKM)</option>
+                                        <option value="static">Angka Tetap Statis (70, 75, dst.)</option>
+                                    </select>
+                                </div>
+                            )}
 
                             <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer">
                                 <span>Tampilkan Kolom Rerata Kelas (<code>=RATA2_KELAS</code>)</span>

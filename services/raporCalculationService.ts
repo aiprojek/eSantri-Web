@@ -3,7 +3,7 @@ import { extractTemplateKeys, ExtractedTemplateKey, getTemplateSheets } from './
 export { getTemplateSheets };
 import { loadXLSX } from '../utils/lazyClientLibs';
 import { formatDate, resolveTempatRapor } from '../utils/formatters';
-import { normalizeSubjectKeyForAvg } from '../utils/raporFormulaUtils';
+import { normalizeSubjectKeyForAvg, findMapelInMasterPool, computeDefaultKkmForPool } from '../utils/raporFormulaUtils';
 import { resolveMudirAamInfo } from '../utils/raporPlaceholderResolver';
 
 export interface PredikatResult {
@@ -118,19 +118,22 @@ export const classifyRaporInputField = (params: {
     const nLabel = normAlnum(upperLabel);
     const strippedKey = normAlnum(upperKey.replace(/^(?:NILAI|ANGKA|SKOR|MAPEL)_+/, '').replace(/_+(?:UH\d*|PTS|PAS|PAT|UTS|UAS|HARIAN|UJIAN|PRAKTEK|PRAKTIK|TEORI)$/, ''));
 
-    const matchedMapel = mapelPool.find(mp => {
-        const nKode = mp.kodeMapel ? normAlnum(mp.kodeMapel) : '';
-        const nNama = normAlnum(mp.nama || '');
-        if (nKode && (nKey === nKode || strippedKey === nKode || (nKode.length >= 3 && keyTokens.includes(nKode)))) {
-            return true;
-        }
-        if (nNama && (nKey === nNama || strippedKey === nNama || (nLabel.length >= 3 && nLabel === nNama))) {
-            return true;
-        }
-        return false;
-    });
+    const matchedMapel =
+        findMapelInMasterPool([label, key].filter(Boolean), mataPelajaran, jenjangId) ||
+        mapelPool.find(mp => {
+            const nKode = mp.kodeMapel ? normAlnum(mp.kodeMapel) : '';
+            const nNama = normAlnum(mp.nama || '');
+            if (nKode && (nKey === nKode || strippedKey === nKode || (nKode.length >= 3 && keyTokens.includes(nKode)))) {
+                return true;
+            }
+            if (nNama && (nKey === nNama || strippedKey === nNama || (nLabel.length >= 3 && nLabel === nNama))) {
+                return true;
+            }
+            return false;
+        });
 
-    const resolvedKkm = matchedMapel?.kkm ?? 70;
+    const defaultJenjangKkm = computeDefaultKkmForPool(mataPelajaran, jenjangId);
+    const resolvedKkm = matchedMapel?.kkm ?? defaultJenjangKkm;
 
     // 1. Prioritaskan pilihan manual eksplisit dari Desainer Rapor
     if (inputMode === 'number') {

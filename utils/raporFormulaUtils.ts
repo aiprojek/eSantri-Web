@@ -1,4 +1,4 @@
-import { MataPelajaran } from '../types';
+import { MataPelajaran, GridCell } from '../types';
 
 export interface FormulaSuggestionItem {
     token: string;
@@ -40,6 +40,14 @@ export const RAPOR_FORMULA_SUGGESTIONS: FormulaSuggestionItem[] = [
         label: 'Rerata Kelas Mapel (RERATA_KELAS / NRK)',
         syntax: '=RERATA_KELAS($KODE_MAPEL)',
         description: 'Alias RATA2_KELAS — klik sel nilai mapel atau ketik $KODE_MAPEL (alias singkat: =NRK)',
+        category: 'formula'
+    },
+    {
+        token: '=KKM',
+        insertText: '=KKM(',
+        label: 'KKM Otomatis dari Data Master (KKM)',
+        syntax: '=KKM(B6)',
+        description: 'Ambil KKM dari Data Master Mata Pelajaran sesuai nama mapel manual / sel nilai (misal =KKM(B6), =KKM(), atau =KKM(B6, 75))',
         category: 'formula'
     },
     {
@@ -102,8 +110,8 @@ export const RAPOR_FORMULA_SUGGESTIONS: FormulaSuggestionItem[] = [
         token: '=IF',
         insertText: '=IF(',
         label: 'Logika Kondisi (IF)',
-        syntax: '=IF($NILAI>=75, "Tuntas", "Remidi")',
-        description: 'Menampilkan hasil berdasarkan syarat perbandingan nilai',
+        syntax: '=IF(D6>=KKM(B6), "Tuntas", "Remidi")',
+        description: 'Menampilkan hasil berdasarkan syarat nilai (mendukung angka statis maupun =KKM(B6) / sel $KKM)',
         category: 'formula'
     },
     {
@@ -363,6 +371,9 @@ export interface FormulaEvalMeta {
     tanggalRaporMasehiHijriah?: string;   // misal "20 Juni 2026 M / 5 Muharram 1448 H"
     classAverages?: Record<string, number>; // rata-rata kelas per kunci mapel (misal { FIQIH: 84.35 })
     classOverallAverage?: number;           // rata-rata umum seluruh mapel di kelas/rombel
+    kkmLookup?: Record<string, number>;     // peta nama/kode mapel ternormalisasi -> nilai KKM dari Data Master
+    defaultKkm?: number;                    // KKM standar marhalah/pondok jika mapel manual belum terdaftar di Data Master
+    rowDetectedKkm?: number;                // KKM hasil deteksi otomatis baris aktif (saat memanggil =KKM() tanpa argumen)
     decimalPlaces?: number;                 // jumlah digit desimal sel (0..4) agar evaluasi rumus tidak membulatkan terlalu dini
 }
 
@@ -371,6 +382,540 @@ export interface FormulaEvalMeta {
  */
 export function normalizeSubjectKeyForAvg(rawKey: string): string {
     return rawKey.trim().replace(/^\$/, '').toUpperCase().replace(/[\s-]+/g, '_');
+}
+
+// ============================================================================
+// SMART DATA MASTER KKM & MATA PELAJARAN MATCHING ENGINE
+// ============================================================================
+
+const MAPEL_WORD_SYNONYM_MAP: Record<string, string> = {
+    FIQH: 'FIQIH',
+    FIKIH: 'FIQIH',
+    FEQIH: 'FIQIH',
+    TAHFIDZ: 'TAHFIZH',
+    TAHFIZ: 'TAHFIZH',
+    TAHFIDH: 'TAHFIZH',
+    HIFDZ: 'TAHFIZH',
+    HIFZ: 'TAHFIZH',
+    SHARAF: 'SHOROF',
+    SOROF: 'SHOROF',
+    SARAF: 'SHOROF',
+    SHORF: 'SHOROF',
+    NAHU: 'NAHWU',
+    AQIDAH: 'AKIDAH',
+    AKHLAQ: 'AKHLAK',
+    AHLAQ: 'AKHLAK',
+    AHLAK: 'AKHLAK',
+    QURAN: 'ALQURAN',
+    HADIS: 'HADITS',
+    HADIST: 'HADITS',
+    ALHADITS: 'HADITS',
+    ALHADIS: 'HADITS',
+    IMLAK: 'IMLA',
+    KHAT: 'KHOT',
+    KHATH: 'KHOT',
+    MUHADASAH: 'MUHADATSAH',
+    MUTHOLAAH: 'MUTHALAAH',
+    MUTOLAAH: 'MUTHALAAH',
+    INSYAK: 'INSYA',
+    BALAGHOH: 'BALAGHAH',
+    FAROID: 'FARAIDH',
+    FAROIDH: 'FARAIDH',
+    USUL: 'USHUL',
+    MUSTHOLAH: 'MUSTHALAH',
+    MTK: 'MATEMATIKA',
+    PKN: 'PPKN',
+    PENJAS: 'PJOK',
+    PENJASKES: 'PJOK',
+    PENJASORKES: 'PJOK',
+    OLAHRAGA: 'PJOK',
+    TIK: 'INFORMATIKA',
+    BIND: 'BAHASA_INDONESIA',
+    BINDO: 'BAHASA_INDONESIA'
+};
+
+const MAPEL_PHRASE_REPLACEMENTS: Array<[RegExp, string]> = [
+    [/^(?:B|BHS|BASA)_+ARAB$/i, 'BAHASA_ARAB'],
+    [/(?:^|_)(?:B|BHS)_+ARAB(?=_|$)/gi, '_BAHASA_ARAB_'],
+    [/^(?:AL_)?LUGHAH_(?:AL_)?ARABIYYAH$/i, 'BAHASA_ARAB'],
+    [/^(?:B|BHS)_+INGGRIS$/i, 'BAHASA_INGGRIS'],
+    [/(?:^|_)(?:B|BHS)_+INGGRIS(?=_|$)/gi, '_BAHASA_INGGRIS_'],
+    [/^ENGLISH$/i, 'BAHASA_INGGRIS'],
+    [/^(?:B|BHS)_+(?:INDONESIA|INDO)$/i, 'BAHASA_INDONESIA'],
+    [/(?:^|_)(?:B|BHS)_+(?:INDONESIA|INDO)(?=_|$)/gi, '_BAHASA_INDONESIA_'],
+    [/^(?:B|BHS)_+JAWA$/i, 'BAHASA_JAWA'],
+    [/^(?:B|BHS)_+SUNDA$/i, 'BAHASA_SUNDA'],
+    [/^(?:B|BHS)_+DAERAH$/i, 'BAHASA_DAERAH'],
+    [/^AL_+QURAN/i, 'ALQURAN'],
+    [/_AL_+QURAN/gi, '_ALQURAN'],
+    [/^AL_+HADITS/i, 'HADITS'],
+    [/_AL_+HADITS/gi, '_HADITS'],
+    [/^PENDIDIKAN_AGAMA_ISLAM(?:_DAN_BUDI_PEKERTI)?$/i, 'PAI'],
+    [/^PENDIDIKAN_(?:PANCASILA(?:_DAN_KEWARGANEGARAAN)?|KEWARGANEGARAAN)$/i, 'PPKN'],
+    [/^SEJARAH_KEBUDAYAAN_ISLAM$/i, 'SKI']
+];
+
+const NON_SUBJECT_ROW_LABELS = new Set([
+    'NO',
+    'NOMOR',
+    'URUT',
+    'MATA_PELAJARAN',
+    'MATAPELAJARAN',
+    'MAPEL',
+    'NAMA_MAPEL',
+    'NAMA_MATA_PELAJARAN',
+    'KOMPONEN',
+    'BIDANG_STUDI',
+    'KITAB',
+    'MATERI',
+    'KKM',
+    'KBM',
+    'KRITERIA_KETUNTASAN_MINIMAL',
+    'STANDAR_KETUNTASAN',
+    'NILAI',
+    'NILAI_ANGKA',
+    'NILAI_HURUF',
+    'NILAI_RAPOR',
+    'NILAI_AKHIR',
+    'ANGKA',
+    'ANGKA_ARAB',
+    'HURUF',
+    'TERBILANG',
+    'TERBILANG_HURUF',
+    'PREDIKAT',
+    'TAQDIR',
+    'DESKRIPSI',
+    'CAPAIAN_KOMPETENSI',
+    'KETERANGAN',
+    'CATATAN',
+    'CATATAN_WALI_KELAS',
+    'RERATA_KELAS',
+    'RATA_RATA_KELAS',
+    'NRK',
+    'JUMLAH',
+    'JUMLAH_NILAI',
+    'TOTAL',
+    'TOTAL_NILAI',
+    'RATA_RATA',
+    'RATA_RATA_NILAI',
+    'RERATA',
+    'PERINGKAT',
+    'PERINGKAT_KELAS',
+    'RANKING',
+    'SAKIT',
+    'IZIN',
+    'IJIN',
+    'ALPHA',
+    'ALPA',
+    'KEHADIRAN',
+    'KETIDAKHADIRAN'
+]);
+
+/**
+ * Mengubah nama/kode mapel menjadi kunci pencocokan kanonik (mendukung ejaan Latin, Arab, transliterasi, dan singkatan umum)
+ */
+export function canonicalizeMapelLookupKey(raw: string, applySynonyms = true): string {
+    if (!raw) return '';
+    // Hapus apostrof/ain/hamzah transkripsi agar Al-Qur'an, Al-Quran, Muthala'ah, Imla' seragam
+    const withoutQuotes = raw
+        .trim()
+        .replace(/^\$+/, '')
+        .replace(/['’‘`ʼʻʿʾ]/g, '');
+
+    const rawTokens = withoutQuotes
+        .toUpperCase()
+        .split(/[^A-Z0-9\u0600-\u06FF]+/)
+        .filter(Boolean);
+
+    if (rawTokens.length === 0) return '';
+    if (!applySynonyms) {
+        return rawTokens.join('_');
+    }
+
+    const mappedTokens = rawTokens.map(tok => MAPEL_WORD_SYNONYM_MAP[tok] || tok);
+    let joined = mappedTokens.join('_');
+
+    for (const [pattern, replacement] of MAPEL_PHRASE_REPLACEMENTS) {
+        joined = joined.replace(pattern, replacement);
+    }
+
+    return joined.replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+/**
+ * Mengekstrak kandidat kunci pencocokan dari teks mapel ketikan manual maupun kode variabel ($KEY).
+ * Contoh:
+ * - "1. Fiqih (Safinatun Najah)" -> ["FIQIH_SAFINATUN_NAJAH", "FIQIH", "SAFINATUN_NAJAH"]
+ * - "B. Arab" -> ["B_ARAB", "BAHASA_ARAB"]
+ * - "Al-Qur'an & Hadits" -> ["ALQURAN_HADITS"]
+ * - "NILAI_TAHFIDZ_PAS" -> ["TAHFIDZ", "TAHFIZH"]
+ */
+export function extractMapelLookupCandidates(raw: string): string[] {
+    if (!raw) return [];
+    const cleaned = raw.trim().replace(/^\$+/, '');
+    if (!cleaned) return [];
+
+    const textVariants: string[] = [];
+    const pushVariant = (v: string) => {
+        const t = v.trim();
+        if (t && !textVariants.includes(t)) {
+            textVariants.push(t);
+        }
+    };
+
+    // Hilangkan prefix KKM_ bila dipanggil dari tag $KKM_<MAPEL>
+    const baseInput = cleaned.replace(/^KKM_+/i, '');
+    pushVariant(baseInput);
+
+    // Hilangkan penomoran di awal baris ("1. ", "10) ", "١. ", "- ", "Mapel: "), namun JANGAN merusak "B. Arab" / "B. Inggris" / "B. Indo"
+    const withoutPrefixLabel = baseInput.replace(/^(?:mata\s+pelajaran|mapel)\s*[:.\-]\s*/i, '').trim();
+    pushVariant(withoutPrefixLabel);
+
+    const numericBulletStripped = withoutPrefixLabel.replace(/^[0-9٠-٩]{1,2}\s*[.)\-:]\s*/, '').trim();
+    pushVariant(numericBulletStripped);
+
+    if (!/^b\.\s*(?:arab|inggris|indo|indonesia|jawa|sunda|madura|daerah)\b/i.test(numericBulletStripped)) {
+        const alphaBulletStripped = numericBulletStripped.replace(/^(?:[a-z]|[ivxlcdm]{1,4})\s*[.)]\s+/i, '').trim();
+        pushVariant(alphaBulletStripped);
+    }
+
+    // Ekstrak nama utama sebelum (...) dan isi di dalam (...) — misal "Fiqih (Safinatun Najah)" atau "Sejarah Kebudayaan Islam (SKI)"
+    const snapshotForParts = [...textVariants];
+    for (const v of snapshotForParts) {
+        const parenMatch = v.match(/^([^(]+)\(([^)]+)\)/);
+        if (parenMatch) {
+            pushVariant(parenMatch[1]);
+            pushVariant(parenMatch[2]);
+        }
+        // Ekstrak pemisah kitab / sub-mapel ("Fiqih - Safinatun Najah", "Fiqih: Ibadah", "Al-Qur'an / Tahfizh")
+        const splitParts = v.split(/\s*(?:\s-\s|:\s|\/)\s*/).map(p => p.trim()).filter(p => p.length >= 2);
+        if (splitParts.length >= 2) {
+            splitParts.forEach(pushVariant);
+        }
+        // Hilangkan prefix/suffix variabel nilai seperti NILAI_FIQIH_PAS -> FIQIH
+        const strippedAffix = v
+            .replace(/^(?:NILAI|ANGKA|SKOR|MAPEL)[_\s-]+/i, '')
+            .replace(/[_\s-]+(?:UH\d*|PTS|PAS|PAT|UTS|UAS|HARIAN|UJIAN|PRAKTEK|PRAKTIK|TEORI|NILAI|ANGKA)$/i, '')
+            .trim();
+        pushVariant(strippedAffix);
+    }
+
+    const keysOut: string[] = [];
+    const pushKey = (k: string) => {
+        if (k && !keysOut.includes(k)) {
+            keysOut.push(k);
+        }
+    };
+
+    for (const variant of textVariants) {
+        const exactKey = canonicalizeMapelLookupKey(variant, false);
+        const canonKey = canonicalizeMapelLookupKey(variant, true);
+        pushKey(exactKey);
+        pushKey(canonKey);
+
+        // Variasi tanpa kata hubung ("Al-Qur'an dan Hadits" <-> "Al-Qur'an Hadits")
+        if (canonKey.includes('_')) {
+            const noConj = canonKey
+                .split('_')
+                .filter(tok => tok !== 'DAN' && tok !== 'WA' && tok !== 'SERTA')
+                .join('_');
+            if (noConj && noConj !== canonKey) {
+                pushKey(noConj);
+            }
+        }
+    }
+
+    return keysOut;
+}
+
+/**
+ * Menghitung KKM standar dominan pada suatu Marhalah/Jenjang (atau seluruh pondok jika jenjang belum memiliki mapel).
+ * Jika mayoritas mapel di Marhalah memiliki KKM 75, maka KKM standar otomatis bernilai 75 (default 70 bila kosong).
+ */
+export function computeDefaultKkmForPool(mataPelajaran?: MataPelajaran[], preferredJenjangId?: number): number {
+    const all = (mataPelajaran || []).filter(mp => typeof mp.kkm === 'number' && isFinite(mp.kkm) && mp.kkm > 0);
+    if (all.length === 0) return 70;
+
+    const jenjangPool = preferredJenjangId
+        ? all.filter(mp => Number(mp.jenjangId) === Number(preferredJenjangId))
+        : [];
+    const targetPool = jenjangPool.length > 0 ? jenjangPool : all;
+
+    const freq = new Map<number, number>();
+    let bestVal = targetPool[0].kkm;
+    let bestCount = 0;
+    for (const mp of targetPool) {
+        const k = Math.round(Number(mp.kkm));
+        const nextCount = (freq.get(k) || 0) + 1;
+        freq.set(k, nextCount);
+        if (nextCount > bestCount) {
+            bestCount = nextCount;
+            bestVal = k;
+        }
+    }
+    return bestVal || 70;
+}
+
+/**
+ * Mencari entitas MataPelajaran dari Data Master berdasarkan nama ketikan manual, kodeMapel, atau kode $KEY.
+ * Memprioritaskan mata pelajaran pada Marhalah/Jenjang aktif terlebih dahulu, lalu lintas jenjang sebagai cadangan.
+ */
+export function findMapelInMasterPool(
+    queries: string | string[],
+    mataPelajaran?: MataPelajaran[],
+    preferredJenjangId?: number
+): MataPelajaran | undefined {
+    const list = mataPelajaran || [];
+    if (list.length === 0) return undefined;
+
+    const rawList = (Array.isArray(queries) ? queries : [queries])
+        .map(q => (q || '').trim())
+        .filter(Boolean);
+    if (rawList.length === 0) return undefined;
+
+    // 1. Cek referensi ID eksplisit (misal MAPEL_12 atau $KKM_MAPEL_12)
+    for (const q of rawList) {
+        const idMatch = q.replace(/^\$+/, '').replace(/^KKM_+/i, '').match(/^(?:MAPEL|ID)[_:](\d+)$/i);
+        if (idMatch) {
+            const targetId = Number(idMatch[1]);
+            const byId = list.find(m => Number(m.id) === targetId);
+            if (byId) return byId;
+        }
+    }
+
+    const pools: MataPelajaran[][] = [];
+    if (preferredJenjangId) {
+        const sameJenjang = list.filter(m => Number(m.jenjangId) === Number(preferredJenjangId));
+        const otherJenjang = list.filter(m => Number(m.jenjangId) !== Number(preferredJenjangId));
+        if (sameJenjang.length > 0) pools.push(sameJenjang);
+        if (otherJenjang.length > 0) pools.push(otherJenjang);
+    } else {
+        pools.push(list);
+    }
+
+    const preparedPoolEntries = pools.map(pool =>
+        pool.map(mp => ({
+            mp,
+            exactKeys: [
+                canonicalizeMapelLookupKey(mp.kodeMapel || '', false),
+                canonicalizeMapelLookupKey(mp.nama || '', false)
+            ].filter(Boolean),
+            candidateKeys: [
+                ...(mp.kodeMapel ? extractMapelLookupCandidates(mp.kodeMapel) : []),
+                ...extractMapelLookupCandidates(mp.nama || '')
+            ]
+        }))
+    );
+
+    for (const q of rawList) {
+        const qExact = canonicalizeMapelLookupKey(q.replace(/^KKM_+/i, ''), false);
+        const qCandidates = extractMapelLookupCandidates(q);
+        if (qCandidates.length === 0) continue;
+
+        for (const entries of preparedPoolEntries) {
+            // Prioritas A: Kecocokan persis nama atau kodeMapel
+            if (qExact) {
+                const exactHit = entries.find(e => e.exactKeys.includes(qExact));
+                if (exactHit) return exactHit.mp;
+            }
+            // Prioritas B: Kecocokan kandidat kanonik / sinonim / kitab dalam kurung
+            for (const cand of qCandidates) {
+                if (!cand || NON_SUBJECT_ROW_LABELS.has(cand)) continue;
+                const candHit = entries.find(e => e.candidateKeys.includes(cand));
+                if (candHit) return candHit.mp;
+            }
+        }
+    }
+
+    return undefined;
+}
+
+/**
+ * Membangun kamus pencarian cepat KKM dari Data Master Mata Pelajaran (mendukung kodeMapel, nama lengkap, sinonim, dan ID)
+ */
+export function buildMasterKkmLookupMap(
+    mataPelajaran?: MataPelajaran[],
+    preferredJenjangId?: number
+): Record<string, number> {
+    const lookup: Record<string, number> = {};
+    const list = mataPelajaran || [];
+    if (list.length === 0) return lookup;
+
+    const defaultKkm = computeDefaultKkmForPool(list, preferredJenjangId);
+    // Urutkan agar jenjang lain diisi lebih dulu, kemudian ditimpa oleh jenjang aktif (prioritas tertinggi)
+    const ordered = preferredJenjangId
+        ? [
+              ...list.filter(m => Number(m.jenjangId) !== Number(preferredJenjangId)),
+              ...list.filter(m => Number(m.jenjangId) === Number(preferredJenjangId))
+          ]
+        : list;
+
+    for (const mp of ordered) {
+        const kkmVal = typeof mp.kkm === 'number' && isFinite(mp.kkm) && mp.kkm > 0 ? mp.kkm : defaultKkm;
+        lookup[`MAPEL_${mp.id}`] = kkmVal;
+        lookup[`ID_${mp.id}`] = kkmVal;
+
+        const keys = [
+            ...(mp.kodeMapel ? extractMapelLookupCandidates(mp.kodeMapel) : []),
+            ...extractMapelLookupCandidates(mp.nama || '')
+        ];
+        for (const k of keys) {
+            if (k && !NON_SUBJECT_ROW_LABELS.has(k)) {
+                lookup[k] = kkmVal;
+            }
+        }
+    }
+
+    return lookup;
+}
+
+export interface RowKkmInspectionResult {
+    matchedMapel?: MataPelajaran;
+    detectedLabel?: string;
+    detectedInputKey?: string;
+    kkmValue: number | null;
+    defaultKkm: number;
+    source: 'master_label' | 'master_key' | 'fallback_jenjang' | 'empty_row';
+}
+
+function isMeaningfulSubjectLabelText(raw?: string): boolean {
+    if (!raw) return false;
+    const t = raw.trim();
+    if (!t || t.startsWith('$') || t.startsWith('=')) return false;
+    // Abaikan angka murni / nomor urut ("1", "2.", "١", "75", "-")
+    if (/^(?:[+-]?[0-9٠-٩]+(?:[.,][0-9٠-٩]+)?%?|[0-9٠-٩]{1,3}[.)\-]|[IVXLCDM]{1,4}[.)]|[.:\-/#()]+)$/i.test(t)) {
+        return false;
+    }
+    if (!/[A-Za-z\u0600-\u06FF]/.test(t)) return false;
+    const exactNorm = canonicalizeMapelLookupKey(t, false);
+    if (!exactNorm || NON_SUBJECT_ROW_LABELS.has(exactNorm)) return false;
+    return true;
+}
+
+/**
+ * Mendeteksi mata pelajaran pada suatu baris tabel Rapor secara otomatis (baik dari teks nama mapel ketikan manual
+ * maupun dari kode variabel $KEY sel nilai pada baris yang sama) lalu mengambil nilai KKM-nya dari Data Master.
+ */
+export function inspectSheetRowKkm(params: {
+    sheetCells?: GridCell[][];
+    row: number;
+    col: number;
+    mataPelajaran?: MataPelajaran[];
+    preferredJenjangId?: number;
+}): RowKkmInspectionResult {
+    const { sheetCells, row, col, mataPelajaran = [], preferredJenjangId } = params;
+    const defaultKkm = computeDefaultKkmForPool(mataPelajaran, preferredJenjangId);
+
+    if (!sheetCells || row < 0 || row >= sheetCells.length) {
+        return { kkmValue: null, defaultKkm, source: 'empty_row' };
+    }
+
+    const colCount = sheetCells[row]?.length || 0;
+    const resolveMasterAt = (r: number, c: number): GridCell | undefined => {
+        const direct = sheetCells[r]?.[c];
+        if (direct && !direct.hidden) return direct;
+        for (let mr = r; mr >= 0; mr--) {
+            for (let mc = c; mc >= 0; mc--) {
+                const cand = sheetCells[mr]?.[mc];
+                if (cand && !cand.hidden) {
+                    const rSpan = cand.rowSpan || 1;
+                    const cSpan = cand.colSpan || 1;
+                    if (r >= mr && r < mr + rSpan && c >= mc && c < mc + cSpan) {
+                        return cand;
+                    }
+                }
+            }
+        }
+        return direct;
+    };
+
+    const seenCellCoords = new Set<string>();
+    const labelCells: Array<{ cell: GridCell; isSingleRow: boolean; isLeft: boolean; dist: number }> = [];
+    const inputKeys: string[] = [];
+
+    for (let cc = 0; cc < colCount; cc++) {
+        if (cc === col) continue;
+        const mCell = resolveMasterAt(row, cc);
+        if (!mCell || mCell.hidden) continue;
+        if (mCell.row === row && mCell.col === col) continue;
+
+        const coordId = `${mCell.row}:${mCell.col}`;
+        if (seenCellCoords.has(coordId)) continue;
+        seenCellCoords.add(coordId);
+
+        if ((mCell.type === 'input' || mCell.type === 'dropdown') && mCell.key?.trim()) {
+            const k = mCell.key.trim();
+            const normK = canonicalizeMapelLookupKey(k, false);
+            if (normK && !NON_SUBJECT_ROW_LABELS.has(normK)) {
+                inputKeys.push(k);
+            }
+        }
+
+        if (mCell.type === 'label' && isMeaningfulSubjectLabelText(mCell.value)) {
+            labelCells.push({
+                cell: mCell,
+                isSingleRow: (mCell.rowSpan || 1) === 1,
+                isLeft: mCell.col < col,
+                dist: Math.abs(mCell.col - col)
+            });
+        }
+    }
+
+    // Prioritaskan sel teks yang khusus milik baris ini (rowSpan === 1) dibanding sel kategori vertikal yang di-merge lintas baris,
+    // lalu prioritaskan sel di sebelah kiri kolom KKM (atau sebelah kanan untuk tabel Rapor Arab RTL) berdasarkan kedekatan.
+    labelCells.sort((a, b) => {
+        if (a.isSingleRow !== b.isSingleRow) return a.isSingleRow ? -1 : 1;
+        if (a.isLeft !== b.isLeft) return a.isLeft ? -1 : 1;
+        return a.dist - b.dist;
+    });
+
+    // 1. Cek kecocokan teks nama mapel manual dengan Data Master Mata Pelajaran
+    for (const item of labelCells) {
+        const matched = findMapelInMasterPool(item.cell.value, mataPelajaran, preferredJenjangId);
+        if (matched) {
+            return {
+                matchedMapel: matched,
+                detectedLabel: item.cell.value.trim(),
+                detectedInputKey: inputKeys[0],
+                kkmValue: typeof matched.kkm === 'number' && isFinite(matched.kkm) ? matched.kkm : defaultKkm,
+                defaultKkm,
+                source: 'master_label'
+            };
+        }
+    }
+
+    // 2. Cek kecocokan kode variabel input ($KEY) pada baris yang sama (berguna misal nama mapel memakai huruf Arab namun $KEY memakai kode Latin $FIQIH)
+    for (const key of inputKeys) {
+        const matched = findMapelInMasterPool(key, mataPelajaran, preferredJenjangId);
+        if (matched) {
+            return {
+                matchedMapel: matched,
+                detectedLabel: labelCells[0]?.cell.value.trim(),
+                detectedInputKey: key,
+                kkmValue: typeof matched.kkm === 'number' && isFinite(matched.kkm) ? matched.kkm : defaultKkm,
+                defaultKkm,
+                source: 'master_key'
+            };
+        }
+    }
+
+    // 3. Jika baris memang memiliki nama mapel manual (yang belum didaftarkan di Data Master) atau sel nilai, gunakan KKM standar Marhalah
+    const primarySingleRowLabel = labelCells.find(l => l.isSingleRow)?.cell.value.trim();
+    if (primarySingleRowLabel || inputKeys.length > 0) {
+        return {
+            detectedLabel: primarySingleRowLabel || labelCells[0]?.cell.value.trim(),
+            detectedInputKey: inputKeys[0],
+            kkmValue: defaultKkm,
+            defaultKkm,
+            source: 'fallback_jenjang'
+        };
+    }
+
+    return {
+        kkmValue: null,
+        defaultKkm,
+        source: 'empty_row'
+    };
 }
 
 /**
@@ -1437,6 +1982,67 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta, isNested = fa
                 }
                 return formatNumberClean(meanVal, autoDecimals);
             }
+            if (fnName === 'KKM' || fnName === 'NILAI_KKM' || fnName === 'STANDAR_KKM') {
+                // Pemanggilan =KKM() tanpa argumen -> gunakan deteksi otomatis baris aktif atau KKM standar jenjang
+                if (evalArgs.length === 0) {
+                    if (meta?.rowDetectedKkm !== undefined && isFinite(meta.rowDetectedKkm)) {
+                        return formatNumberClean(meta.rowDetectedKkm, autoDecimals);
+                    }
+                    if (meta?.defaultKkm !== undefined && isFinite(meta.defaultKkm)) {
+                        return formatNumberClean(meta.defaultKkm, autoDecimals);
+                    }
+                    return '-';
+                }
+
+                // Argumen ke-2 opsional: fallback KKM manual jika mapel tidak ditemukan di Data Master, misal =KKM(B6, 75)
+                let explicitFallback: number | undefined;
+                if (evalArgs.length >= 2) {
+                    const fbStr = unquote(evalArgs[1]).trim().replace(',', '.');
+                    const fbNum = Number(fbStr);
+                    if (fbStr !== '' && fbStr !== '-' && !isNaN(fbNum) && isFinite(fbNum)) {
+                        explicitFallback = fbNum;
+                    }
+                }
+
+                const rawTarget = unquote(evalArgs[0]).trim();
+                if (rawTarget.startsWith('__KKM_RESOLVED__:')) {
+                    const resolvedNum = Number(rawTarget.slice('__KKM_RESOLVED__:'.length));
+                    if (!isNaN(resolvedNum) && isFinite(resolvedNum)) {
+                        return formatNumberClean(resolvedNum, autoDecimals);
+                    }
+                }
+                if (rawTarget === '__KKM_EMPTY__' || rawTarget === '' || rawTarget === '-') {
+                    if (explicitFallback !== undefined) {
+                        return formatNumberClean(explicitFallback, autoDecimals);
+                    }
+                    if (rawTarget === '' && meta?.rowDetectedKkm !== undefined && isFinite(meta.rowDetectedKkm)) {
+                        return formatNumberClean(meta.rowDetectedKkm, autoDecimals);
+                    }
+                    return '-';
+                }
+                if (rawTarget.startsWith('__KKM_UNMATCHED__:')) {
+                    const fallbackVal = explicitFallback ?? meta?.defaultKkm;
+                    return fallbackVal !== undefined && isFinite(fallbackVal)
+                        ? formatNumberClean(fallbackVal, autoDecimals)
+                        : '-';
+                }
+
+                // Pencarian langsung pada kamus Data Master (misal =KKM("Fiqih") atau =KKM(B6))
+                if (meta?.kkmLookup) {
+                    const candidates = extractMapelLookupCandidates(rawTarget);
+                    for (const cand of candidates) {
+                        if (meta.kkmLookup[cand] !== undefined) {
+                            return formatNumberClean(meta.kkmLookup[cand], autoDecimals);
+                        }
+                    }
+                }
+
+                const finalFallback = explicitFallback ?? meta?.defaultKkm;
+                if (finalFallback !== undefined && isFinite(finalFallback)) {
+                    return formatNumberClean(finalFallback, autoDecimals);
+                }
+                return '-';
+            }
             if (fnName === 'MAX') {
                 const nums = parseNumericValues(evalArgs);
                 if (nums.length === 0) return '-';
@@ -1691,7 +2297,7 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta, isNested = fa
     return unquote(exprForMath);
 }
 
-const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|RATA2_KELAS|RERATA_KELAS|RATA_KELAS|NRK|AVG_KELAS|MAX|MIN|COUNT|HITUNG|COUNTA|HITUNG_ISI|COUNTBLANK|HITUNG_KOSONG|COUNTIF|HITUNG_JIKA|SUMIF|JUMLAH_JIKA|AVERAGEIF|RATA2_JIKA|RERATA_JIKA|ROUND|BULAT|ROUNDUP|BULAT_ATAS|ROUNDDOWN|BULAT_BAWAH|FIXED|DESIMAL|ABS|INT|TRUNC|MOD|POWER|PANGKAT|SQRT|AKAR|LEN|PANJANG|LEFT|KIRI|RIGHT|KANAN|MID|TENGAH|IF|JIKA|IFS|AND|DAN|OR|ATAU|NOT|BUKAN|IFERROR|JIKA_ERROR|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|CONCAT_SPASI|GABUNG_SPASI|TEXTJOIN_SPASI|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_MASEHI|TAHUN_AJARAN_MASEHI|TAPEL_MASEHI|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|TAHUN_AJAR_HIJRIYAH|TAHUN_AJARAN_HIJRIYAH|TAPEL_HIJRIAH|TAHUN_AJAR_GABUNGAN|TAHUN_AJAR_LENGKAP|TAHUN_AJARAN_GABUNGAN|TAHUN_AJARAN_LENGKAP|TAPEL_GABUNGAN|SEMESTER|SEMESTER_ANGKA|TEMPAT_RAPOR|KOTA_RAPOR|TEMPAT_TTD|KOTA_PONPES|TANGGAL_RAPOR|TANGGAL_TTD|TANGGAL_CETAK|TANGGAL_DOKUMEN|TANGGAL_RAPOR_MASEHI|TANGGAL_MASEHI|TANGGAL_RAPOR_HIJRIAH|TANGGAL_RAPOR_HIJRIYAH|TANGGAL_HIJRIAH|TANGGAL_HIJRIYAH|TANGGAL_RAPOR_GABUNGAN|TANGGAL_RAPOR_LENGKAP|TANGGAL_HIJRIAH_MASEHI|TANGGAL_MASEHI_HIJRIAH|TITIMANGSA|TITIMANGSA_RAPOR|KOTA_TANGGAL|TEMPAT_TANGGAL|KOTA_TANGGAL_DOKUMEN|TITIMANGSA_MASEHI|KOTA_TANGGAL_MASEHI|TEMPAT_TANGGAL_MASEHI|TITIMANGSA_HIJRIAH|TITIMANGSA_HIJRIYAH|KOTA_TANGGAL_HIJRIAH|TEMPAT_TANGGAL_HIJRIAH|TITIMANGSA_GABUNGAN|TITIMANGSA_HIJRIAH_MASEHI|TITIMANGSA_MASEHI_HIJRIAH|TITIMANGSA_LENGKAP|KOTA_TANGGAL_GABUNGAN|KOTA_TANGGAL_HIJRIAH_MASEHI)\s*\([\s\S]*\)$/i;
+const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|RATA2_KELAS|RERATA_KELAS|RATA_KELAS|NRK|AVG_KELAS|KKM|NILAI_KKM|STANDAR_KKM|MAX|MIN|COUNT|HITUNG|COUNTA|HITUNG_ISI|COUNTBLANK|HITUNG_KOSONG|COUNTIF|HITUNG_JIKA|SUMIF|JUMLAH_JIKA|AVERAGEIF|RATA2_JIKA|RERATA_JIKA|ROUND|BULAT|ROUNDUP|BULAT_ATAS|ROUNDDOWN|BULAT_BAWAH|FIXED|DESIMAL|ABS|INT|TRUNC|MOD|POWER|PANGKAT|SQRT|AKAR|LEN|PANJANG|LEFT|KIRI|RIGHT|KANAN|MID|TENGAH|IF|JIKA|IFS|AND|DAN|OR|ATAU|NOT|BUKAN|IFERROR|JIKA_ERROR|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|CONCAT_SPASI|GABUNG_SPASI|TEXTJOIN_SPASI|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_MASEHI|TAHUN_AJARAN_MASEHI|TAPEL_MASEHI|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|TAHUN_AJAR_HIJRIYAH|TAHUN_AJARAN_HIJRIYAH|TAPEL_HIJRIAH|TAHUN_AJAR_GABUNGAN|TAHUN_AJAR_LENGKAP|TAHUN_AJARAN_GABUNGAN|TAHUN_AJARAN_LENGKAP|TAPEL_GABUNGAN|SEMESTER|SEMESTER_ANGKA|TEMPAT_RAPOR|KOTA_RAPOR|TEMPAT_TTD|KOTA_PONPES|TANGGAL_RAPOR|TANGGAL_TTD|TANGGAL_CETAK|TANGGAL_DOKUMEN|TANGGAL_RAPOR_MASEHI|TANGGAL_MASEHI|TANGGAL_RAPOR_HIJRIAH|TANGGAL_RAPOR_HIJRIYAH|TANGGAL_HIJRIAH|TANGGAL_HIJRIYAH|TANGGAL_RAPOR_GABUNGAN|TANGGAL_RAPOR_LENGKAP|TANGGAL_HIJRIAH_MASEHI|TANGGAL_MASEHI_HIJRIAH|TITIMANGSA|TITIMANGSA_RAPOR|KOTA_TANGGAL|TEMPAT_TANGGAL|KOTA_TANGGAL_DOKUMEN|TITIMANGSA_MASEHI|KOTA_TANGGAL_MASEHI|TEMPAT_TANGGAL_MASEHI|TITIMANGSA_HIJRIAH|TITIMANGSA_HIJRIYAH|KOTA_TANGGAL_HIJRIAH|TEMPAT_TANGGAL_HIJRIAH|TITIMANGSA_GABUNGAN|TITIMANGSA_HIJRIAH_MASEHI|TITIMANGSA_MASEHI_HIJRIAH|TITIMANGSA_LENGKAP|KOTA_TANGGAL_GABUNGAN|KOTA_TANGGAL_HIJRIAH_MASEHI)\s*\([\s\S]*\)$/i;
 
 /**
  * Mengecek apakah string teks sel merupakan ekspresi rumus rapor

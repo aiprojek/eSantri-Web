@@ -37,6 +37,7 @@ const SYSTEM_KEYS = [
     '$KELAS', '$ROMBEL', '$SEMESTER', '$TAHUN_AJAR', '$TAHUN_AJARAN',
     '$NAMA_YAYASAN', '$NAMA_PONPES', '$ALAMAT_PONDOK', '$LOGO',
     '$WALI_KELAS', '$MUDIR', '$TOTAL_NILAI', '$RATA_RATA', '$PERINGKAT',
+    '$KKM', '$KKM_STANDAR', '$NILAI_KKM', '$KBM',
     '$TANGGAL_RAPOR', '$TEMPAT_TANGGAL_RAPOR'
 ];
 
@@ -110,7 +111,10 @@ export const analyzeCellValue = (rawVal: string): { type: RaporColumnType; key?:
             'LOGO_PONPES': '$LOGO_PONPES',
             'SEMESTER': '$SEMESTER',
             'TAHUN_AJAR': '$TAHUN_AJARAN',
-            'TAHUN_AJARAN': '$TAHUN_AJARAN'
+            'TAHUN_AJARAN': '$TAHUN_AJARAN',
+            'KKM': '$KKM',
+            'NILAI_KKM': '$KKM',
+            'KKM_STANDAR': '$KKM_STANDAR'
         };
         const mapped = tagMap[inner] || `$${inner}`;
         return { type: 'data', value: mapped };
@@ -120,6 +124,8 @@ export const analyzeCellValue = (rawVal: string): { type: RaporColumnType; key?:
         const upper = trimmed.toUpperCase();
         if (
             SYSTEM_KEYS.includes(upper) ||
+            upper === '$KKM' ||
+            upper.startsWith('$KKM_') ||
             upper.startsWith('$MAPEL_') ||
             upper.startsWith('$TOTAL') ||
             upper.startsWith('$RATA') ||

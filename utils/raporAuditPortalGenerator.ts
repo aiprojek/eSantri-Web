@@ -3,6 +3,7 @@ import {
     compileTemplateInteractiveSchema,
     CompiledTemplateSchema
 } from '../services/academicService';
+import { buildMasterKkmLookupMap, computeDefaultKkmForPool } from '../utils/raporFormulaUtils';
 
 /**
  * Google Apps Script v3.0 (Terpadu / Multi-Tab Otomatis + Smart Merge per Santri)
@@ -622,7 +623,12 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
     });
 
     const compiledTemplates: PortalCompiledTemplatePayload[] = rawTemplates.map(tpl => {
-        const schema = compileTemplateInteractiveSchema(tpl, settings, 'all', 'rombel');
+        const effectiveTplJenjang = tpl.jenjangId
+            ? Number(tpl.jenjangId)
+            : filterJenjangId > 0
+            ? Number(filterJenjangId)
+            : undefined;
+        const schema = compileTemplateInteractiveSchema(tpl, settings, 'all', 'rombel', effectiveTplJenjang);
         return {
             id: tpl.id,
             name: tpl.name,
@@ -715,6 +721,19 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
         gasBytes: obfuscateUrlToCodeArray(googleScriptUrl)
     };
 
+    const kkmLookupByJenjang: Record<string, Record<string, number>> = {};
+    const kkmDefaultByJenjang: Record<string, number> = {};
+    (settings.jenjang || []).forEach(j => {
+        kkmLookupByJenjang[String(j.id)] = buildMasterKkmLookupMap(settings.mataPelajaran || [], Number(j.id));
+        kkmDefaultByJenjang[String(j.id)] = computeDefaultKkmForPool(settings.mataPelajaran || [], Number(j.id));
+    });
+    const kkmPayload = {
+        byJenjang: kkmLookupByJenjang,
+        global: buildMasterKkmLookupMap(settings.mataPelajaran || [], filterJenjangId > 0 ? filterJenjangId : undefined),
+        defaultByJenjang: kkmDefaultByJenjang,
+        defaultGlobal: computeDefaultKkmForPool(settings.mataPelajaran || [], filterJenjangId > 0 ? filterJenjangId : undefined)
+    };
+
     const embeddedData = {
         pondok: pondokPayload,
         jenjang: targetJenjangList.map(j => ({ id: Number(j.id), nama: j.nama })),
@@ -722,7 +741,8 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
         rombel: targetRombelList,
         santri: activeSantri,
         templates: compiledTemplates,
-        baseline: baselineSnapshot
+        baseline: baselineSnapshot,
+        kkm: kkmPayload
     };
 
     const serializedData = safeJsonForHtmlScript(embeddedData);
@@ -973,6 +993,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
         const SANTRI_LIST = RAW.santri || [];
         const TEMPLATES = RAW.templates || [];
         const BASELINE_ROWS = RAW.baseline || [];
+        const KKM_CONFIG = RAW.kkm || { byJenjang: {}, global: {}, defaultByJenjang: {}, defaultGlobal: 70 };
 
         function decodeGasUrl(bytes) {
             if (!Array.isArray(bytes) || bytes.length === 0) return '';
@@ -1130,12 +1151,90 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
             return String(num);
         }
         function excelIf(c, t, f) { return c ? t : f; }
+        function excelIfs(...args) {
+            for (let i = 0; i + 1 < args.length; i += 2) {
+                if (args[i]) return args[i + 1];
+            }
+            return '';
+        }
+        function excelIfError(val, fallback = '-') {
+            if (val === null || val === undefined || (typeof val === 'number' && (!isFinite(val) || isNaN(val)))) return fallback;
+            return val;
+        }
         function excelAnd(...args) { return args.every(Boolean); }
         function excelOr(...args) { return args.some(Boolean); }
         function excelNot(v) { return !Boolean(v); }
         function excelConcat(...args) { return args.map(a => (a === null || a === undefined) ? '' : String(a)).join(''); }
+        function excelConcatSpasi(...args) { return args.map(a => (a === null || a === undefined) ? '' : String(a).trim()).filter(Boolean).join(' '); }
         function excelUpper(v) { return String(v ?? '').toUpperCase(); }
         function excelLower(v) { return String(v ?? '').toLowerCase(); }
+        function excelProper(v) {
+            return String(v ?? '').toLowerCase().replace(/(?:^|\\s|[-'/])\\S/g, ch => ch.toUpperCase());
+        }
+        function matchExcelCriteria(val, criteria) {
+            const crit = String(criteria ?? '').trim();
+            const m = crit.match(/^(>=|<=|!=|<>|>|<|=)\\s*(.*)$/);
+            const op = m ? m[1] : '=';
+            const rhsRaw = m ? m[2].trim() : crit;
+            const lhsNum = typeof val === 'number' ? val : Number(String(val ?? '').replace(',', '.'));
+            const rhsNum = Number(rhsRaw.replace(',', '.'));
+            const bothNum = !isNaN(lhsNum) && !isNaN(rhsNum) && rhsRaw !== '';
+            if (bothNum) {
+                if (op === '>') return lhsNum > rhsNum;
+                if (op === '>=') return lhsNum >= rhsNum;
+                if (op === '<') return lhsNum < rhsNum;
+                if (op === '<=') return lhsNum <= rhsNum;
+                if (op === '!=' || op === '<>') return Math.abs(lhsNum - rhsNum) > 1e-9;
+                return Math.abs(lhsNum - rhsNum) <= 1e-9;
+            }
+            const lhsStr = String(val ?? '').trim().toLowerCase();
+            const rhsStr = rhsRaw.replace(/^["']|["']$/g, '').trim().toLowerCase();
+            if (op === '!=' || op === '<>') return lhsStr !== rhsStr;
+            return lhsStr === rhsStr;
+        }
+        function excelCount(...args) {
+            return args.filter(a => typeof a === 'number' && !isNaN(a) && a > 0).length;
+        }
+        function excelCountIf(...args) {
+            if (args.length < 2) return 0;
+            const criteria = args[args.length - 1];
+            return args.slice(0, -1).filter(v => matchExcelCriteria(v, criteria)).length;
+        }
+        function excelAverageIf(...args) {
+            if (args.length < 2) return 0;
+            const criteria = args[args.length - 1];
+            const matched = args.slice(0, -1).filter(v => typeof v === 'number' && !isNaN(v) && matchExcelCriteria(v, criteria));
+            if (matched.length === 0) return 0;
+            return matched.reduce((a, b) => a + b, 0) / matched.length;
+        }
+        function normMapelKeyJs(raw) {
+            return String(raw ?? '')
+                .trim()
+                .replace(/^\\$+/g, '')
+                .replace(/^KKM_+/i, '')
+                .replace(/^[0-9٠-٩]{1,2}\\s*[.)\\-:]\\s*/, '')
+                .replace(/['’‘\\u0060]/g, '')
+                .toUpperCase()
+                .replace(/[^A-Z0-9\\u0600-\\u06FF]+/g, '_')
+                .replace(/^_+|_+$/g, '');
+        }
+        function excelKkm(rowId, subjectOrKey, fallbackVal) {
+            const sMeta = santriById.get(Number(rowId));
+            const jKey = sMeta && sMeta.jenjangId ? String(sMeta.jenjangId) : '';
+            const jDict = (jKey && KKM_CONFIG.byJenjang && KKM_CONFIG.byJenjang[jKey]) ? KKM_CONFIG.byJenjang[jKey] : null;
+            const gDict = KKM_CONFIG.global || {};
+            const q = normMapelKeyJs(subjectOrKey);
+            if (q) {
+                if (jDict && jDict[q] !== undefined) return jDict[q];
+                if (gDict[q] !== undefined) return gDict[q];
+            }
+            const fbNum = Number(fallbackVal);
+            if (!isNaN(fbNum) && fbNum > 0) return fbNum;
+            if (jKey && KKM_CONFIG.defaultByJenjang && KKM_CONFIG.defaultByJenjang[jKey]) {
+                return KKM_CONFIG.defaultByJenjang[jKey];
+            }
+            return KKM_CONFIG.defaultGlobal || 70;
+        }
 
         function formatFormulaOutput(val, decimalPlaces) {
             if (typeof val === 'string') return val;
@@ -1155,7 +1254,8 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
         }
 
         const compiledExprCache = new Map();
-        function evalCompiledJs(exprJs, rowId, getValueFn) {
+        const noopRata2Kelas = function() { return 0; };
+        function evalCompiledJs(exprJs, rowId, getValueFn, rata2KelasFn) {
             if (!exprJs) return 0;
             let fn = compiledExprCache.get(exprJs);
             if (!fn) {
@@ -1164,8 +1264,9 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                         'rowId', 'getValue', 'average', 'sum', 'excelMin', 'excelMax',
                         'excelRound', 'excelRoundUp', 'excelRoundDown', 'excelFixed',
                         'excelPredikat', 'angkaKeArab', 'terbilang',
-                        'excelIf', 'excelAnd', 'excelOr', 'excelNot',
-                        'excelConcat', 'excelUpper', 'excelLower',
+                        'excelIf', 'excelIfs', 'excelIfError', 'excelAnd', 'excelOr', 'excelNot',
+                        'excelConcat', 'excelConcatSpasi', 'excelUpper', 'excelLower', 'excelProper',
+                        'excelCount', 'excelCountIf', 'excelAverageIf', 'excelKkm', 'rata2Kelas',
                         'return (' + exprJs + ');'
                     );
                 } catch (e) {
@@ -1178,8 +1279,9 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                     rowId, getValueFn, average, sum, excelMin, excelMax,
                     excelRound, excelRoundUp, excelRoundDown, excelFixed,
                     excelPredikat, angkaKeArab, terbilang,
-                    excelIf, excelAnd, excelOr, excelNot,
-                    excelConcat, excelUpper, excelLower
+                    excelIf, excelIfs, excelIfError, excelAnd, excelOr, excelNot,
+                    excelConcat, excelConcatSpasi, excelUpper, excelLower, excelProper,
+                    excelCount, excelCountIf, excelAverageIf, excelKkm, rata2KelasFn || noopRata2Kelas
                 );
             } catch (e) {
                 return null;
@@ -1289,6 +1391,13 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                     tplEntry = bySantriAndTpl.get(key);
                 }
 
+                if (parsed.__cleared && typeof parsed.__cleared === 'object') {
+                    Object.keys(parsed.__cleared).forEach(ck => {
+                        delete anyEntry.data[ck];
+                        if (tplEntry) delete tplEntry.data[ck];
+                    });
+                }
+
                 Object.keys(parsed).forEach(k => {
                     if (k.startsWith('_')) return;
                     const v = parsed[k];
@@ -1391,6 +1500,25 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 return raw;
             }
 
+            function rata2Kelas(rowId, colKey) {
+                const key = String(colKey ?? '').trim().replace(/^\\$+/g, '');
+                if (!key) return 0;
+                const sObj = santriById.get(Number(rowId));
+                const targetRombel = sObj ? Number(sObj.rombelId || 0) : 0;
+                const cohort = targetRombel > 0 ? students.filter(st => Number(st.rombelId) === targetRombel) : students;
+                const vals = [];
+                cohort.forEach(st => {
+                    const row = valuesByStudent.get(st.id);
+                    if (!row) return;
+                    const raw = String(row[key] ?? '').trim();
+                    if (raw === '' || raw === '-') return;
+                    const num = Number(raw.replace(',', '.'));
+                    if (!isNaN(num) && isFinite(num)) vals.push(num);
+                });
+                if (vals.length === 0) return 0;
+                return vals.reduce((a, b) => a + b, 0) / vals.length;
+            }
+
             // 2-pass evaluasi formula per baris santri (agar rumus berantai seperti JUMLAH -> RATA2 -> PREDIKAT sinkron)
             students.forEach(s => {
                 const meta = metaByStudent.get(s.id);
@@ -1400,7 +1528,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 }
                 for (let pass = 0; pass < 2; pass++) {
                     formulaCols.forEach(fc => {
-                        const out = evalCompiledJs(fc.formulaJs, s.id, getValue);
+                        const out = evalCompiledJs(fc.formulaJs, s.id, getValue, rata2Kelas);
                         valuesByStudent.get(s.id)[fc.key] = formatFormulaOutput(out, fc.decimalPlaces);
                     });
                 }
@@ -1421,7 +1549,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                     else if (scope === 'kelas') gKey = 'k_' + s.kelasId;
                     else if (scope === 'jenjang') gKey = 'j_' + s.jenjangId;
                     if (!groups[gKey]) groups[gKey] = [];
-                    const rawScore = Number(evalCompiledJs(cfg.sourceJs, s.id, getValue)) || 0;
+                    const rawScore = Number(evalCompiledJs(cfg.sourceJs, s.id, getValue, rata2Kelas)) || 0;
                     groups[gKey].push({ id: s.id, val: rawScore });
                 });
 

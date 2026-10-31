@@ -7,12 +7,15 @@ import { RaporTemplate, RaporRecord } from '../../types';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import {
     buildRombelLegerData,
+    classifyRaporInputField,
     exportLegerToExcel,
     StudentLegerRow
 } from '../../services/raporCalculationService';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { PrintHeader } from '../common/PrintHeader';
-import { formatDate } from '../../utils/formatters';
+import { formatDate, resolveTempatRapor } from '../../utils/formatters';
+import { resolveMudirAamInfo } from '../../utils/raporPlaceholderResolver';
+import { printToPdfNative } from '../../utils/pdfGenerator';
 import { RaporCloudPullControl } from './RaporWaCloudImportModal';
 
 interface TabLegerNilaiProps {
@@ -322,15 +325,56 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
         }
     };
 
-    // Print Leger
+    // Per-subject Jenjang-aware KKM from Data Master Mata Pelajaran
+    const subjectKkmMap = useMemo(() => {
+        const map: Record<string, number> = {};
+        legerData.gradeKeys.forEach(gk => {
+            const cls = classifyRaporInputField({
+                key: gk.key,
+                label: gk.label,
+                type: gk.type,
+                inputMode: gk.inputMode,
+                mataPelajaran: settings.mataPelajaran || [],
+                jenjangId: currentJenjang?.id
+            });
+            map[gk.key] = cls.kkm ?? 70;
+        });
+        return map;
+    }, [legerData.gradeKeys, settings.mataPelajaran, currentJenjang?.id]);
+
+    const resolvedMudirDisplay = useMemo(() => {
+        const hasConfiguredMudir = Boolean(
+            (settings?.mudirAamId !== undefined && settings?.mudirAamId !== null) ||
+            (settings?.namaMudir && settings.namaMudir.trim()) ||
+            (Array.isArray(settings?.tenagaPengajar) && settings.tenagaPengajar.some(tp =>
+                Array.isArray(tp.riwayatJabatan) &&
+                tp.riwayatJabatan.some(rj => !rj.tanggalSelesai && (rj.jabatan || '').toLowerCase().includes('mudir'))
+            ))
+        );
+        return hasConfiguredMudir ? resolveMudirAamInfo(settings).nama : '..................................';
+    }, [settings]);
+
+    const resolvedKotaRapor = useMemo(() => resolveTempatRapor(settings, 'Pesantren'), [settings]);
+
+    // Print Leger (Isolated Landscape Vector Print)
     const handleTriggerPrint = () => {
-        window.print();
+        const cleanRombel = (currentRombel?.nama || 'Rombel').replace(/[^a-zA-Z0-9]/g, '_');
+        const cleanTahun = (filterTahun || defaultAcademicYear).replace(/[^a-zA-Z0-9]/g, '_');
+        printToPdfNative(
+            'leger-nilai-print-area',
+            `Leger_Nilai_${cleanRombel}_${cleanTahun}_${filterSemester}`,
+            {
+                paperSize: 'A4',
+                orientation: 'landscape',
+                margin: { top: 1, right: 1, bottom: 1, left: 1 }
+            }
+        );
     };
 
     return (
         <div className="space-y-6">
             {/* Top Period & Rombel Filter Panel */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                 {/* Mobile Filter Button */}
                 <div className="md:hidden mb-3">
                     <button
@@ -856,13 +900,14 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                             const score = row.numericGrades[k.key];
                                             const raw = row.grades[k.key];
                                             const isFilled = score !== undefined || (raw !== undefined && raw !== '');
-                                            const isLow = score !== undefined && score < 70;
+                                            const kkmThreshold = subjectKkmMap[k.key] ?? 70;
+                                            const isLow = score !== undefined && score < kkmThreshold;
 
                                             return (
                                                 <div
                                                     key={k.key}
-                                                    className="bg-white p-2 rounded-lg border border-slate-200/70 flex items-center justify-between gap-1 text-[11px] shadow-2xs"
-                                                    title={k.label}
+                                                    className="bg-white p-2 rounded-lg border border-slate-200/70 flex items-center justify-between gap-1 text-[11px] shadow-sm"
+                                                    title={`${k.label} (KKM: ${kkmThreshold})`}
                                                 >
                                                     <span className="text-slate-600 font-medium truncate flex-1" title={k.label}>
                                                         {k.label}
@@ -964,7 +1009,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
 
                                     {/* Subject Columns */}
                                     {legerData.gradeKeys.map(k => (
-                                        <th key={k.key} className="p-3 min-w-[90px] text-center font-bold border-r border-slate-200">
+                                        <th key={k.key} className="p-3 min-w-[95px] text-center font-bold border-r border-slate-200">
                                             {activeLegerSheetId === 'all' && k.sheetName && (
                                                 <div className="text-[9px] font-bold text-emerald-700 uppercase tracking-tight bg-emerald-50 px-1.5 py-0.5 rounded inline-block mb-1 border border-emerald-100 truncate max-w-[100px]">
                                                     {k.sheetName}
@@ -973,11 +1018,16 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                             <div className="truncate max-w-[120px] mx-auto" title={k.label}>
                                                 {k.label}
                                             </div>
-                                            {legerData.subjectStats[k.key]?.average > 0 && (
-                                                <div className="mt-0.5 text-[9px] font-semibold text-slate-400">
-                                                    Avg: {legerData.subjectStats[k.key].average.toFixed(decimalPlaces)}
-                                                </div>
-                                            )}
+                                            <div className="mt-0.5 flex items-center justify-center gap-1 flex-wrap text-[9px] font-semibold">
+                                                <span className="text-teal-700 bg-teal-50 px-1 rounded border border-teal-100">
+                                                    KKM {subjectKkmMap[k.key] ?? 70}
+                                                </span>
+                                                {legerData.subjectStats[k.key]?.average > 0 && (
+                                                    <span className="text-slate-400">
+                                                        Avg: {legerData.subjectStats[k.key].average.toFixed(decimalPlaces)}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </th>
                                     ))}
 
@@ -1054,10 +1104,11 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                             const score = row.numericGrades[k.key];
                                             const raw = row.grades[k.key];
                                             const isFilled = score !== undefined || (raw !== undefined && raw !== '');
-                                            const isLow = score !== undefined && score < 70;
+                                            const kkmThreshold = subjectKkmMap[k.key] ?? 70;
+                                            const isLow = score !== undefined && score < kkmThreshold;
 
                                             return (
-                                                <td key={k.key} className="p-3 text-center border-r border-slate-100">
+                                                <td key={k.key} className="p-3 text-center border-r border-slate-100" title={isLow ? `Di bawah KKM (${kkmThreshold})` : undefined}>
                                                     {isFilled ? (
                                                         <span className={`font-semibold ${isLow ? 'text-rose-600 font-bold bg-rose-50 px-1.5 py-0.5 rounded' : 'text-slate-800'}`}>
                                                             {score ?? raw}
@@ -1199,7 +1250,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
 
             {/* Inspect Student Missing Fields Modal */}
             {inspectStudent && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 animate-in fade-in zoom-in-95">
                         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                             <div>
@@ -1260,7 +1311,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                         setInspectStudent(null);
                                         onNavigateToInputWali(currentRombel.id);
                                     }}
-                                    className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs"
+                                    className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm"
                                 >
                                     Input Nilai Sekarang
                                 </button>
@@ -1272,7 +1323,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
 
             {/* Print Modal / Landscape Preview */}
             {isPrintModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200">
                         {/* Header */}
                         <div className="p-4 border-b border-slate-200 flex items-center justify-between">
@@ -1288,7 +1339,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={handleTriggerPrint}
-                                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 shadow-xs flex items-center gap-1.5"
+                                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 shadow-sm flex items-center gap-1.5"
                                 >
                                     <i className="bi bi-printer-fill"></i>
                                     <span>Print Sekarang</span>
@@ -1305,7 +1356,9 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                         {/* Printable Content Scroll Area */}
                         <div className="p-6 overflow-y-auto flex-1 bg-slate-100">
                             <div
+                                id="leger-nilai-print-area"
                                 ref={printAreaRef}
+                                data-print-orientation="landscape"
                                 className="bg-white p-8 shadow-sm rounded-lg mx-auto text-black font-sans text-xs print-landscape max-w-[1100px]"
                             >
                                 {(() => {
@@ -1399,10 +1452,10 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                         <p>Mengetahui,</p>
                                         <p className="font-bold">Kepala Madrasah / Mudir</p>
                                         <div className="h-16"></div>
-                                        <p className="font-bold underline">({settings?.namaMudir || '..................................'})</p>
+                                        <p className="font-bold underline">({resolvedMudirDisplay})</p>
                                     </div>
                                     <div className="text-center">
-                                        <p>{settings?.tempatRaporDefault || 'Pesantren'}, {formatDate(new Date())}</p>
+                                        <p>{resolvedKotaRapor}, {formatDate(new Date())}</p>
                                         <p className="font-bold">Wali Kelas {currentRombel?.nama}</p>
                                         <div className="h-16"></div>
                                         <p className="font-bold underline">({currentWaliName})</p>

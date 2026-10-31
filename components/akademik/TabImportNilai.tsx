@@ -1,17 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
-import { fetchRaporFromCloud, parseRaporDataV2 } from '../../services/academicService';
+import { fetchRaporFromCloud, parseRaporDataV2, syncRaporStructuredData } from '../../services/academicService';
 import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
-
-const encodeUtf8ToBase64 = (value: string): string => {
-    const bytes = new TextEncoder().encode(value);
-    let binary = '';
-    const chunkSize = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-    }
-    return btoa(binary);
-};
 
 export const TabImportNilai: React.FC = () => {
     const { settings, onUpdateSettings, showToast, showAlert, currentUser } = useAppContext();
@@ -46,55 +36,55 @@ export const TabImportNilai: React.FC = () => {
 
         setIsProcessing(true);
         try {
-            const dataStrings: string[] = [];
             const filterOpts =
                 importSource === 'cloud' && filterPeriodOnly
                     ? { tahunAjaran: targetTahun, semester: targetSemester }
                     : undefined;
 
-            if (importSource === 'wa') {
-                const match = waInput.match(/RAPOR_V2_START([\s\S]*?)RAPOR_V2_END/);
-                if (!match || !match[1]) throw new Error('Format kode WA tidak valid.');
-                dataStrings.push(match[1]);
-            } else {
-                const cleanUrl = cloudScriptUrl.trim();
-                const cloudData = await fetchRaporFromCloud(cleanUrl, filterOpts);
-                const jsonString = JSON.stringify(cloudData);
-                const b64 = encodeUtf8ToBase64(jsonString);
-                dataStrings.push(b64);
-
-                if (cleanUrl && cleanUrl !== (settings.raporCloudConfig?.googleScriptUrl || '').trim()) {
-                    try {
-                        await onUpdateSettings({
-                            ...settings,
-                            raporCloudConfig: {
-                                ...(settings.raporCloudConfig || {}),
-                                googleScriptUrl: cleanUrl,
-                                submissionMethod: settings.raporCloudConfig?.submissionMethod || 'hybrid',
-                                tabMode: settings.raporCloudConfig?.tabMode || 'per_rombel',
-                                updatedAt: new Date().toISOString()
-                            }
-                        });
-                    } catch {
-                        // non-fatal
-                    }
-                }
-            }
-
             let totalSuccess = 0;
             let totalErrors: string[] = [];
 
-            for (const str of dataStrings) {
-                const { successCount, errors } = await parseRaporDataV2(str, settings, filterOpts);
-                totalSuccess += successCount;
-                totalErrors = [...totalErrors, ...errors];
+            if (importSource === 'wa') {
+                const matches = Array.from(waInput.matchAll(/RAPOR_V2_START([\s\S]*?)RAPOR_V2_END/g));
+                if (matches.length === 0) {
+                    throw new Error('Format kode WA tidak ditemukan. Pastikan menempelkan teks yang memuat RAPOR_V2_START ... RAPOR_V2_END.');
+                }
+                for (const m of matches) {
+                    if (!m[1]) continue;
+                    const { successCount, errors } = await parseRaporDataV2(m[1], settings, filterOpts);
+                    totalSuccess += successCount;
+                    totalErrors = [...totalErrors, ...errors];
+                }
+            } else {
+                const cleanUrl = cloudScriptUrl.trim();
+                const cloudData = await fetchRaporFromCloud(cleanUrl, filterOpts);
+                const syncRes = await syncRaporStructuredData(cloudData, settings, filterOpts);
+                totalSuccess = syncRes.successCount;
+                totalErrors = syncRes.errors;
+
+                try {
+                    await onUpdateSettings({
+                        ...settings,
+                        raporCloudConfig: {
+                            ...(settings.raporCloudConfig || {}),
+                            googleScriptUrl: cleanUrl,
+                            submissionMethod: settings.raporCloudConfig?.submissionMethod || 'hybrid',
+                            tabMode: settings.raporCloudConfig?.tabMode || 'per_rombel',
+                            lastSyncedAt: new Date().toISOString(),
+                            lastSyncedStudents: syncRes.successCount,
+                            updatedAt: new Date().toISOString()
+                        }
+                    });
+                } catch {
+                    // non-fatal
+                }
             }
 
             if (totalSuccess > 0) {
                 showToast(`Berhasil menyimpan & menggabungkan ${totalSuccess} data nilai santri.`, 'success');
                 setWaInput('');
             } else if (totalErrors.length === 0) {
-                showToast('Tidak ada data nilai baru pada periode yang dipilih.', 'info');
+                showToast('Tidak ada perubahan nilai baru pada periode yang dipilih.', 'info');
             }
             if (totalErrors.length > 0) {
                 showAlert('Beberapa Error Terjadi', totalErrors.join('\n'));

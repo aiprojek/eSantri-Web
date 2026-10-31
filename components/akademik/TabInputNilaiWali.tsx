@@ -238,13 +238,30 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         showToast('Kunci rapor rombel ini dibuka sementara (Status: Terverifikasi). Silakan lakukan revisi nilai.', 'info');
     };
 
-    // Filter active non-deleted students in the active selection
+    // Filter active non-deleted students in the active selection (with Rombel -> Kelas -> Jenjang hierarchy fallback)
     const studentsInRombel = useMemo(() => {
         let list = santriList.filter(s => !s.deleted && s.status === 'Aktif');
 
+        const resolveEffectiveKelasId = (s: typeof santriList[number]): number => {
+            if (s.rombelId) {
+                const r = settings.rombel.find(rm => rm.id === s.rombelId);
+                if (r?.kelasId) return r.kelasId;
+            }
+            return s.kelasId || 0;
+        };
+
+        const resolveEffectiveJenjangId = (s: typeof santriList[number]): number => {
+            const kId = resolveEffectiveKelasId(s);
+            if (kId) {
+                const k = settings.kelas.find(kl => kl.id === kId);
+                if (k?.jenjangId) return k.jenjangId;
+            }
+            return s.jenjangId || 0;
+        };
+
         if (canManageAllRombel) {
-            if (adminJenjangId) list = list.filter(s => s.jenjangId === adminJenjangId);
-            if (adminKelasId) list = list.filter(s => s.kelasId === adminKelasId);
+            if (adminJenjangId) list = list.filter(s => resolveEffectiveJenjangId(s) === adminJenjangId);
+            if (adminKelasId) list = list.filter(s => resolveEffectiveKelasId(s) === adminKelasId);
             if (activeRombelId) list = list.filter(s => s.rombelId === activeRombelId);
         } else {
             if (!activeRombelId) return [];
@@ -255,7 +272,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
             if (a.rombelId !== b.rombelId) return a.rombelId - b.rombelId;
             return a.namaLengkap.localeCompare(b.namaLengkap);
         });
-    }, [activeRombelId, adminJenjangId, adminKelasId, santriList, canManageAllRombel]);
+    }, [activeRombelId, adminJenjangId, adminKelasId, santriList, canManageAllRombel, settings.rombel, settings.kelas]);
 
     // Get template & input keys
     const template = useMemo(() => {
@@ -464,10 +481,15 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
             let existing = (await query).filter(r => !r.deleted);
 
             if (!activeRombelId && adminJenjangId) {
-                existing = existing.filter(r => r.jenjangId === adminJenjangId);
-                if (adminKelasId) {
-                    existing = existing.filter(r => r.kelasId === adminKelasId);
-                }
+                existing = existing.filter(r => {
+                    const rm = r.rombelId ? settings.rombel.find(x => x.id === r.rombelId) : undefined;
+                    const effKelasId = rm?.kelasId || r.kelasId || 0;
+                    const kl = effKelasId ? settings.kelas.find(x => x.id === effKelasId) : undefined;
+                    const effJenjangId = kl?.jenjangId || r.jenjangId || 0;
+                    if (effJenjangId !== adminJenjangId) return false;
+                    if (adminKelasId && effKelasId !== adminKelasId) return false;
+                    return true;
+                });
             }
             setExistingPeriodRecords(existing);
 
@@ -739,6 +761,22 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
             mergedGradesSnapshot[student.id] = studentGrades;
             const existing = existingBySantri.get(student.id);
 
+            const prevStudentBaseline = previousBaselineGrades?.[student.id] || {};
+            const hasExplicitClearedKey = (...kList: string[]): boolean => {
+                return kList.some(k => {
+                    const cur = studentGrades[k];
+                    if (cur !== undefined && String(cur).trim() === '') return true;
+                    if (
+                        prevStudentBaseline[k] !== undefined &&
+                        String(prevStudentBaseline[k]).trim() !== '' &&
+                        (cur === undefined || String(cur).trim() === '')
+                    ) {
+                        return true;
+                    }
+                    return false;
+                });
+            };
+
             const findKeyVal = (...kList: string[]): number | undefined => {
                 for (const k of kList) {
                     if (studentGrades[k] !== undefined && String(studentGrades[k]).trim() !== '') {
@@ -750,18 +788,22 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
             };
 
             const agg = customPresensiAggregates?.[student.id];
+            const sakitKeys = ['SAKIT', 'sakit', 'S', 'ABSENSI_SAKIT', 'JML_SAKIT'];
+            const izinKeys = ['IZIN', 'izin', 'I', 'ABSENSI_IZIN', 'JML_IZIN'];
+            const alphaKeys = ['ALPHA', 'alpha', 'ALPA', 'alpa', 'A', 'ABSENSI_ALPHA', 'JML_ALPHA'];
+
             const sakit =
                 agg !== undefined
                     ? agg.sakit
-                    : findKeyVal('SAKIT', 'sakit', 'S', 'ABSENSI_SAKIT') ?? (existing?.sakit || 0);
+                    : findKeyVal(...sakitKeys) ?? (hasExplicitClearedKey(...sakitKeys) ? 0 : (existing?.sakit || 0));
             const izin =
                 agg !== undefined
                     ? agg.izin
-                    : findKeyVal('IZIN', 'izin', 'I', 'ABSENSI_IZIN') ?? (existing?.izin || 0);
+                    : findKeyVal(...izinKeys) ?? (hasExplicitClearedKey(...izinKeys) ? 0 : (existing?.izin || 0));
             const alpha =
                 agg !== undefined
                     ? agg.alpha
-                    : findKeyVal('ALPHA', 'alpha', 'ALPA', 'alpa', 'A', 'ABSENSI_ALPHA') ?? (existing?.alpha || 0);
+                    : findKeyVal(...alphaKeys) ?? (hasExplicitClearedKey(...alphaKeys) ? 0 : (existing?.alpha || 0));
 
             const findTextVal = (...kList: string[]): string | undefined => {
                 for (const k of kList) {
@@ -772,11 +814,15 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                 return undefined;
             };
 
+            const catatanKeys = ['CATATAN_WALI_KELAS', 'catatanWaliKelas', 'CATATAN_WALI', 'catatan_wali', 'CATATAN'];
+            const keputusanKeys = ['KEPUTUSAN', 'keputusan', 'STATUS_NAIK'];
+
             const catatanWaliKelas =
-                findTextVal('CATATAN_WALI_KELAS', 'catatanWaliKelas', 'CATATAN_WALI', 'catatan_wali') ||
-                existing?.catatanWaliKelas ||
-                '';
-            const keputusan = findTextVal('KEPUTUSAN', 'keputusan') || existing?.keputusan || '';
+                findTextVal(...catatanKeys) ??
+                (hasExplicitClearedKey(...catatanKeys) ? '' : (existing?.catatanWaliKelas || ''));
+            const keputusan =
+                findTextVal(...keputusanKeys) ??
+                (hasExplicitClearedKey(...keputusanKeys) ? '' : (existing?.keputusan || ''));
 
             const tahfizhAgg = effectiveTahfizhMap?.[student.id];
             const tahfizhSnapshot =
@@ -789,14 +835,19 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                       }
                     : undefined;
 
+            const studentRombelObj = student.rombelId ? settings.rombel.find(r => r.id === student.rombelId) : undefined;
+            const resolvedKelasId = studentRombelObj?.kelasId || student.kelasId || 0;
+            const studentKelasObj = resolvedKelasId ? settings.kelas.find(k => k.id === resolvedKelasId) : undefined;
+            const resolvedJenjangId = studentKelasObj?.jenjangId || student.jenjangId || 0;
+
             const record: RaporRecord = {
                 id: existing?.id || Date.now() + Math.floor(Math.random() * 10000),
                 santriId: student.id,
                 tahunAjaran,
                 semester,
                 rombelId: student.rombelId,
-                jenjangId: student.jenjangId,
-                kelasId: student.kelasId,
+                jenjangId: resolvedJenjangId,
+                kelasId: resolvedKelasId,
                 nilai: existing?.nilai || [],
                 tahfizhGanjil: semester === 'Ganjil' ? tahfizhSnapshot || existing?.tahfizhGanjil : existing?.tahfizhGanjil,
                 tahfizhGenap: semester === 'Genap' ? tahfizhSnapshot || existing?.tahfizhGenap : existing?.tahfizhGenap,

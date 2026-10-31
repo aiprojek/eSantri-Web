@@ -1473,16 +1473,24 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
         return baseRombels.filter(r => kelasInJenjang.includes(r.kelasId));
     }, [filterJenjang, settings, isWaliKelas, allowedWaliRombelIds]);
 
-    // Base active students according to Jenjang, Rombel filter & RBAC
+    // Base active students according to Jenjang, Rombel filter & RBAC (with Rombel -> Kelas -> Jenjang hierarchy fallback)
     const baseSantriList = useMemo(() => {
+        const targetJId = filterJenjang ? parseInt(filterJenjang, 10) : 0;
+        const targetRId = printRombel ? parseInt(printRombel, 10) : 0;
         return santriList.filter(s => {
             if (s.deleted || s.status !== 'Aktif') return false;
             if (isWaliKelas && !allowedWaliRombelIds.has(s.rombelId)) return false;
-            if (filterJenjang && s.jenjangId !== parseInt(filterJenjang)) return false;
-            if (printRombel && s.rombelId !== parseInt(printRombel)) return false;
+            if (targetJId) {
+                const rm = s.rombelId ? settings.rombel.find(r => r.id === s.rombelId) : undefined;
+                const effKelasId = rm?.kelasId || s.kelasId || 0;
+                const kl = effKelasId ? settings.kelas.find(k => k.id === effKelasId) : undefined;
+                const effJenjangId = kl?.jenjangId || s.jenjangId || 0;
+                if (effJenjangId !== targetJId) return false;
+            }
+            if (targetRId && s.rombelId !== targetRId) return false;
             return true;
         });
-    }, [santriList, filterJenjang, printRombel, isWaliKelas, allowedWaliRombelIds]);
+    }, [santriList, filterJenjang, printRombel, isWaliKelas, allowedWaliRombelIds, settings.rombel, settings.kelas]);
 
     // Compute Leger Calculations per Rombel + Parallel Cohort Rankings (Tingkat Kelas, Marhalah/Jenjang, Global)
     useEffect(() => {

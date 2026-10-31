@@ -1,11 +1,30 @@
 
 
 
-import { Santri, PondokSettings, RaporRecord, NilaiMapel, RaporTemplate, GridCell, RaporInputMode } from '../types';
+import { Santri, PondokSettings, RaporRecord, NilaiMapel, RaporTemplate, GridCell, RaporInputMode, MataPelajaran } from '../types';
 import { db } from '../db';
 import { getTemplateSheets } from './raporExcelService';
 import { classifyRaporInputField } from './raporCalculationService';
-import { parseExcelCellCoord, parseExcelRangeCoord } from '../utils/raporFormulaUtils';
+import {
+    parseExcelCellCoord,
+    parseExcelRangeCoord,
+    inspectSheetRowKkm,
+    findMapelInMasterPool,
+    computeDefaultKkmForPool,
+    buildMasterKkmLookupMap,
+    extractMapelLookupCandidates
+} from '../utils/raporFormulaUtils';
+
+// --- HELPER: FILTER NON-MEANINGFUL LABELS (SKIP NUMBERS, KKM, BULLETS, FORMULAS) ---
+const isMeaningfulCellLabel = (raw?: string): boolean => {
+    if (!raw) return false;
+    const t = raw.trim();
+    if (!t || t.startsWith('$') || t.startsWith('=')) return false;
+    if (/^(?:[+-]?[0-9٠-٩]+(?:[.,][0-9٠-٩]+)?%?|[0-9٠-٩]{1,3}[.)\-]|[IVXLCDM]{1,4}[.)]|[.:\-/#()]+)$/i.test(t)) {
+        return false;
+    }
+    return /[A-Za-z\u0600-\u06FF]/.test(t);
+};
 
 // --- HELPER: RESOLVE MASTER CELL IN MERGED GRID ---
 const resolveMasterGridCell = (cells: GridCell[][], row: number, col: number): GridCell | null => {
@@ -28,17 +47,60 @@ const resolveMasterGridCell = (cells: GridCell[][], row: number, col: number): G
 };
 
 // --- HELPER: EXPAND EXCEL CELL & RANGE COORDINATES TO $KEY / INLINE EXPRESSIONS ---
-const expandSheetFormulaCoords = (rawExpr: string, sheetCells: GridCell[][], depth = 0): string => {
+interface ExpandFormulaContext {
+    mataPelajaran?: MataPelajaran[];
+    preferredJenjangId?: number;
+    formulaRow?: number;
+    formulaCol?: number;
+}
+
+const expandSheetFormulaCoords = (
+    rawExpr: string,
+    sheetCells: GridCell[][],
+    depth = 0,
+    ctx?: ExpandFormulaContext
+): string => {
     let body = (rawExpr || '').trim();
     if (body.startsWith('=')) body = body.substring(1).trim();
     if (!body || depth > 6 || !sheetCells || sheetCells.length === 0) return body;
 
     const maxRows = sheetCells.length;
     const maxCols = sheetCells.reduce((m, r) => Math.max(m, r ? r.length : 0), 0);
+    const mataPelajaran = ctx?.mataPelajaran || [];
+    const preferredJenjangId = ctx?.preferredJenjangId;
+    const defaultKkm = computeDefaultKkmForPool(mataPelajaran, preferredJenjangId);
+
+    const resolveDynamicKkmToken = (r: number, c: number, explicitSlug?: string): string => {
+        if (explicitSlug) {
+            const matched = findMapelInMasterPool(explicitSlug, mataPelajaran, preferredJenjangId);
+            const fallbackVal = matched && typeof matched.kkm === 'number' && isFinite(matched.kkm) ? matched.kkm : defaultKkm;
+            return `KKM(${JSON.stringify(explicitSlug)}, ${fallbackVal})`;
+        }
+        const rowInfo = inspectSheetRowKkm({
+            sheetCells,
+            row: r,
+            col: c,
+            mataPelajaran,
+            preferredJenjangId
+        });
+        const query = rowInfo.detectedLabel || rowInfo.detectedInputKey || '';
+        const fallbackVal = rowInfo.kkmValue ?? rowInfo.defaultKkm;
+        return `KKM(${JSON.stringify(query)}, ${fallbackVal})`;
+    };
 
     const cellToExprToken = (r: number, c: number, forRange = false): string | null => {
         const master = resolveMasterGridCell(sheetCells, r, c);
         if (!master) return forRange ? null : '0';
+
+        const rawVal = (master.value ?? '').trim();
+        // Resolve $KKM / $MAPEL_KKM / $KKM_STANDAR / $KKM_<MAPEL> cells before treating as generic text/variable
+        if (/^\$(?:KKM|MAPEL_KKM|KKM_STANDAR)$/i.test(rawVal)) {
+            return resolveDynamicKkmToken(master.row ?? r, master.col ?? c);
+        }
+        const kkmSlugMatch = rawVal.match(/^\$KKM_([A-Za-z0-9_]+)$/i);
+        if (kkmSlugMatch && !/^STANDAR$/i.test(kkmSlugMatch[1])) {
+            return resolveDynamicKkmToken(master.row ?? r, master.col ?? c, kkmSlugMatch[1]);
+        }
 
         const trimmedKey = master.key?.trim();
         if (trimmedKey && (master.type === 'input' || master.type === 'dropdown' || master.type === 'formula')) {
@@ -46,11 +108,15 @@ const expandSheetFormulaCoords = (rawExpr: string, sheetCells: GridCell[][], dep
         }
 
         if (master.type === 'formula' && master.value) {
-            const inner = expandSheetFormulaCoords(master.value, sheetCells, depth + 1);
+            const inner = expandSheetFormulaCoords(master.value, sheetCells, depth + 1, {
+                mataPelajaran,
+                preferredJenjangId,
+                formulaRow: master.row ?? r,
+                formulaCol: master.col ?? c
+            });
             return inner ? `(${inner})` : '0';
         }
 
-        const rawVal = (master.value ?? '').trim();
         if (!rawVal) return forRange ? null : '0';
         if (/^\$[A-Za-z0-9_]+$/.test(rawVal)) return rawVal;
 
@@ -64,11 +130,75 @@ const expandSheetFormulaCoords = (rawExpr: string, sheetCells: GridCell[][], dep
 
     // Split outside string literals so quoted text is untouched
     const segments = body.split(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g);
-    return segments.map((seg, idx) => {
+    let reassembled = segments.map((seg, idx) => {
         if (idx % 2 === 1) return seg; // quoted string literal
 
+        let processed = seg;
+
+        // 0a. Pre-resolve =KKM(...) / NILAI_KKM(...) / STANDAR_KKM(...) when referencing a cell coord or $KEY
+        processed = processed.replace(/\b(?:KKM|NILAI_KKM|STANDAR_KKM)\s*\(([^()]*)\)/gi, (_full, rawArgs: string) => {
+            const parts = rawArgs.split(/[;,]/).map(s => s.trim()).filter(Boolean);
+            if (parts.length === 0) {
+                return resolveDynamicKkmToken(ctx?.formulaRow ?? 0, ctx?.formulaCol ?? 0);
+            }
+            const firstArg = parts[0];
+            const explicitFallback = parts[1];
+            const coord = parseExcelCellCoord(firstArg);
+            if (coord && coord.r < maxRows && coord.c < maxCols) {
+                const targetCell = resolveMasterGridCell(sheetCells, coord.r, coord.c);
+                const rowInfo = inspectSheetRowKkm({
+                    sheetCells,
+                    row: targetCell?.row ?? coord.r,
+                    col: targetCell?.col ?? coord.c,
+                    mataPelajaran,
+                    preferredJenjangId
+                });
+                let subjectQuery = '';
+                if (targetCell && targetCell.type === 'label' && isMeaningfulCellLabel(targetCell.value)) {
+                    subjectQuery = targetCell.value.trim();
+                } else {
+                    subjectQuery = rowInfo.detectedLabel || targetCell?.key?.trim() || rowInfo.detectedInputKey || '';
+                }
+                const matched = subjectQuery ? findMapelInMasterPool(subjectQuery, mataPelajaran, preferredJenjangId) : undefined;
+                const fb = explicitFallback || String(matched?.kkm ?? rowInfo.kkmValue ?? defaultKkm);
+                return `KKM(${JSON.stringify(subjectQuery)}, ${fb})`;
+            }
+            if (/^\$[A-Za-z0-9_]+$/.test(firstArg)) {
+                const keyName = firstArg.slice(1);
+                const matched = findMapelInMasterPool(keyName, mataPelajaran, preferredJenjangId);
+                const fb = explicitFallback || String(matched?.kkm ?? defaultKkm);
+                return `KKM(${JSON.stringify(keyName)}, ${fb})`;
+            }
+            return explicitFallback ? `KKM(${firstArg}, ${explicitFallback})` : `KKM(${firstArg}, ${defaultKkm})`;
+        });
+
+        // 0b. Pre-resolve =RATA2_KELAS(...) / RERATA_KELAS(...) / AVERAGE_KELAS(...) / NRK(...) to column key string
+        processed = processed.replace(/\b(?:RATA2_KELAS|RERATA_KELAS|AVERAGE_KELAS|AVG_CLASS|NRK)\s*\(([^()]*)\)/gi, (_full, rawArgs: string) => {
+            const firstArg = (rawArgs.split(/[;,]/)[0] || '').trim();
+            if (!firstArg) return '0';
+            const coord = parseExcelCellCoord(firstArg);
+            if (coord && coord.r < maxRows && coord.c < maxCols) {
+                const targetCell = resolveMasterGridCell(sheetCells, coord.r, coord.c);
+                const keyName = targetCell?.key?.trim();
+                if (keyName) return `RATA2_KELAS(${JSON.stringify(keyName)})`;
+                return '0';
+            }
+            if (/^\$[A-Za-z0-9_]+$/.test(firstArg)) {
+                return `RATA2_KELAS(${JSON.stringify(firstArg.slice(1))})`;
+            }
+            return `RATA2_KELAS(${firstArg})`;
+        });
+
+        // 0c. Inline $KKM / $KKM_<MAPEL> tags written directly inside a formula expression
+        processed = processed.replace(/\$(?:KKM|MAPEL_KKM|KKM_STANDAR)\b/gi, () =>
+            resolveDynamicKkmToken(ctx?.formulaRow ?? 0, ctx?.formulaCol ?? 0)
+        );
+        processed = processed.replace(/\$KKM_([A-Za-z0-9_]+)\b/gi, (_m, slug: string) =>
+            resolveDynamicKkmToken(ctx?.formulaRow ?? 0, ctx?.formulaCol ?? 0, slug)
+        );
+
         // 1. Expand range coordinates like D6:D15 or $D$6:$D$15
-        let processed = seg.replace(/\$?[A-Za-z]{1,2}\$?\d{1,3}\s*:\s*\$?[A-Za-z]{1,2}\$?\d{1,3}/g, (match) => {
+        processed = processed.replace(/\$?[A-Za-z]{1,2}\$?\d{1,3}\s*:\s*\$?[A-Za-z]{1,2}\$?\d{1,3}/g, (match) => {
             const range = parseExcelRangeCoord(match);
             if (!range) return match;
             const tokens: string[] = [];
@@ -97,6 +227,16 @@ const expandSheetFormulaCoords = (rawExpr: string, sheetCells: GridCell[][], dep
 
         return processed;
     }).join('');
+
+    // Second pass for KKM("Literal Subject") where string literal was originally in odd segment
+    reassembled = reassembled.replace(/\b(?:KKM|NILAI_KKM|STANDAR_KKM)\s*\(\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*\)/gi, (_m, lit: string) => {
+        const unquoted = lit.slice(1, -1);
+        const matched = findMapelInMasterPool(unquoted, mataPelajaran, preferredJenjangId);
+        const fb = matched?.kkm ?? defaultKkm;
+        return `KKM(${lit}, ${fb})`;
+    });
+
+    return reassembled;
 };
 
 // --- HELPER: SPLIT TOP-LEVEL FORMULA ARGUMENTS ---
@@ -153,6 +293,19 @@ const convertFormulaToJs = (expression: string): string => {
         // Replace $KEY with function call
         js = js.replace(/\$([a-zA-Z0-9_]+)\b/g, "getValue('$1', rowId)");
 
+        // Excel Boolean Constants
+        js = js.replace(/\bTRUE\b/gi, 'true');
+        js = js.replace(/\bFALSE\b/gi, 'false');
+
+        // Class Cohort Average & KKM Functions (must run before generic RATA2/AVERAGE)
+        js = js.replace(/\b(?:RATA2_KELAS|RERATA_KELAS|AVERAGE_KELAS|AVG_CLASS|NRK)\s*\(/gi, 'rata2Kelas(rowId, ');
+        js = js.replace(/\b(?:KKM|NILAI_KKM|STANDAR_KKM)\s*\(/gi, 'excelKkm(rowId, ');
+
+        // Conditional Aggregation Functions (must run before generic COUNT/AVERAGE)
+        js = js.replace(/\bAVERAGEIF\s*\(/gi, 'excelAverageIf(');
+        js = js.replace(/\bCOUNTIF\s*\(/gi, 'excelCountIf(');
+        js = js.replace(/\bCOUNT\s*\(/gi, 'excelCount(');
+
         // Numeric & Aggregation Functions
         js = js.replace(/\b(?:RATA2|AVERAGE|AVG|RERATA)\s*\(/gi, 'average(');
         js = js.replace(/\b(?:SUM|JUMLAH|TOTAL)\s*\(/gi, 'sum(');
@@ -166,7 +319,9 @@ const convertFormulaToJs = (expression: string): string => {
         js = js.replace(/\bINT\s*\(/gi, 'Math.floor(');
         js = js.replace(/\b(?:FIXED|DESIMAL)\s*\(/gi, 'excelFixed(');
 
-        // Logic Functions
+        // Logic Functions (IFERROR & IFS before IF)
+        js = js.replace(/\bIFERROR\s*\(/gi, 'excelIfError(');
+        js = js.replace(/\bIFS\s*\(/gi, 'excelIfs(');
         js = js.replace(/\b(?:IF|JIKA)\s*\(/gi, 'excelIf(');
         js = js.replace(/\b(?:AND|DAN)\s*\(/gi, 'excelAnd(');
         js = js.replace(/\b(?:OR|ATAU)\s*\(/gi, 'excelOr(');
@@ -176,9 +331,11 @@ const convertFormulaToJs = (expression: string): string => {
         js = js.replace(/\b(?:PREDIKAT|HURUF|TAQDIR)\s*\(/gi, 'excelPredikat(');
         js = js.replace(/\bTERBILANG\s*\(/gi, 'terbilang(');
         js = js.replace(/\b(?:ARAB|ANGKA_ARAB)\s*\(/gi, 'angkaKeArab(');
+        js = js.replace(/\bCONCAT_SPASI\s*\(/gi, 'excelConcatSpasi(');
         js = js.replace(/\b(?:CONCATENATE|CONCAT|GABUNG)\s*\(/gi, 'excelConcat(');
         js = js.replace(/\b(?:UPPER|BESAR|KAPITAL)\s*\(/gi, 'excelUpper(');
         js = js.replace(/\b(?:LOWER|KECIL)\s*\(/gi, 'excelLower(');
+        js = js.replace(/\bPROPER\s*\(/gi, 'excelProper(');
 
         // Prevent inline nested RANK crash in row context
         js = js.replace(/\b(?:RANK|PERINGKAT)\s*\(/gi, '0 * (');
@@ -246,13 +403,15 @@ export const compileTemplateInteractiveSchema = (
     template: RaporTemplate,
     settings: PondokSettings,
     sheetId: string = 'all',
-    defaultRankingScope: 'rombel' | 'kelas' | 'jenjang' | 'global' = 'rombel'
+    defaultRankingScope: 'rombel' | 'kelas' | 'jenjang' | 'global' = 'rombel',
+    targetJenjangId?: number
 ): CompiledTemplateSchema => {
     const allSheets = getTemplateSheets(template);
     const targetSheets = sheetId && sheetId !== 'all'
         ? allSheets.filter(s => s.id === sheetId)
         : allSheets;
 
+    const effectiveJenjangId = targetJenjangId || template.jenjangId;
     const interactiveCells: FormInteractiveCell[] = [];
     const formulaCells: FormInteractiveCell[] = [];
     const rankConfigs: RankConfig[] = [];
@@ -276,18 +435,28 @@ export const compileTemplateInteractiveSchema = (
                         seenKeys.add(trimmedKey);
 
                         let label = trimmedKey;
-                        const labelCellLeft = [...rowCells]
+                        const meaningfulLeftSingleRow = [...rowCells]
                             .reverse()
-                            .find(ch => ch && ch.col < cell.col && ch.type === 'label' && ch.value && ch.value.trim() !== '' && !ch.value.startsWith('$'));
+                            .find(ch => ch && !ch.hidden && ch.col < cell.col && ch.type === 'label' && (ch.rowSpan || 1) === 1 && isMeaningfulCellLabel(ch.value));
+                        const meaningfulLeftAny = meaningfulLeftSingleRow || [...rowCells]
+                            .reverse()
+                            .find(ch => ch && !ch.hidden && ch.col < cell.col && ch.type === 'label' && isMeaningfulCellLabel(ch.value));
+                        const meaningfulRightRtl = meaningfulLeftAny || rowCells
+                            .find(ch => ch && !ch.hidden && ch.col > cell.col && ch.type === 'label' && (ch.rowSpan || 1) === 1 && isMeaningfulCellLabel(ch.value));
 
-                        if (labelCellLeft) {
-                            label = labelCellLeft.value.trim();
-                        } else if (cell.value && cell.value.trim() !== '' && !cell.value.startsWith('$') && cell.type !== 'formula') {
+                        if (meaningfulRightRtl) {
+                            label = meaningfulRightRtl.value.trim();
+                        } else if (cell.type !== 'formula' && isMeaningfulCellLabel(cell.value)) {
                             label = cell.value.trim();
                         }
 
                         const expandedFormula = cell.type === 'formula' && cell.value
-                            ? expandSheetFormulaCoords(cell.value, sheet.cells)
+                            ? expandSheetFormulaCoords(cell.value, sheet.cells, 0, {
+                                  mataPelajaran: settings.mataPelajaran || [],
+                                  preferredJenjangId: effectiveJenjangId,
+                                  formulaRow: r,
+                                  formulaCol: c
+                              })
                             : cell.value;
 
                         const classification = cell.type !== 'formula'
@@ -297,7 +466,7 @@ export const compileTemplateInteractiveSchema = (
                                 type: cell.type,
                                 inputMode: cell.inputMode,
                                 mataPelajaran: settings.mataPelajaran || [],
-                                jenjangId: template.jenjangId
+                                jenjangId: effectiveJenjangId
                             })
                             : undefined;
 
@@ -470,20 +639,47 @@ export const generateRaporFormHtml = (
         throw new Error("Target Rombel, Kelas, Rentang Kelas, atau Jenjang harus dipilih.");
     }
 
+    // Resolve effective Jenjang ID from Rombel -> Kelas -> Jenjang or config fallback
+    const resolvedConfigJenjangId = (() => {
+        if (config.rombelId && config.rombelId > 0) {
+            const rObj = settings.rombel.find(r => Number(r.id) === Number(config.rombelId));
+            const kObj = rObj ? settings.kelas.find(k => Number(k.id) === Number(rObj.kelasId)) : undefined;
+            if (kObj?.jenjangId) return Number(kObj.jenjangId);
+        }
+        if (config.kelasId && config.kelasId > 0) {
+            const kObj = settings.kelas.find(k => Number(k.id) === Number(config.kelasId));
+            if (kObj?.jenjangId) return Number(kObj.jenjangId);
+        }
+        if (config.jenjangId && config.jenjangId > 0) return Number(config.jenjangId);
+        return config.template.jenjangId ? Number(config.template.jenjangId) : undefined;
+    })();
+
     // 3. Extract sheets and interactive cells via shared compiler
     const compiledSchema = compileTemplateInteractiveSchema(
         config.template,
         settings,
         config.sheetId || 'all',
-        defaultRankingScope
+        defaultRankingScope,
+        resolvedConfigJenjangId
     );
     const targetSheets = compiledSchema.sheets;
     const interactiveCells = compiledSchema.interactiveCells;
     const formulaCells = compiledSchema.formulaCells;
     const rankConfigs = compiledSchema.rankConfigs;
+    const hasClassAvgFormula = formulaCells.some(fc => (fc.formulaJs || '').includes('rata2Kelas('));
+
+    // Build Jenjang-aware KKM dictionary for standalone HTML runtime
+    const kkmLookupByJenjang: Record<string, Record<string, number>> = {};
+    const kkmDefaultByJenjang: Record<string, number> = {};
+    (settings.jenjang || []).forEach(j => {
+        kkmLookupByJenjang[String(j.id)] = buildMasterKkmLookupMap(settings.mataPelajaran || [], Number(j.id));
+        kkmDefaultByJenjang[String(j.id)] = computeDefaultKkmForPool(settings.mataPelajaran || [], Number(j.id));
+    });
+    const kkmLookupGlobal = buildMasterKkmLookupMap(settings.mataPelajaran || [], resolvedConfigJenjangId);
+    const kkmDefaultGlobal = computeDefaultKkmForPool(settings.mataPelajaran || [], resolvedConfigJenjangId);
 
     const formulaScripts = formulaCells.map(c => {
-        const jsExpression = convertFormulaToJs(c.formulaValue || '');
+        const jsExpression = c.formulaJs || convertFormulaToJs(c.formulaValue || '');
         const decLiteral = c.decimalPlaces !== undefined && c.decimalPlaces !== null ? c.decimalPlaces : 'null';
         return `
         try {
@@ -516,13 +712,17 @@ export const generateRaporFormHtml = (
                     badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-200";
                     headerBg = "bg-emerald-50/40";
                 }
+                const kkmBadgeHtml = cell.isNumericScore && cell.kkm
+                    ? `<span class="text-[8px] font-bold px-1 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200">KKM ${cell.kkm}</span>`
+                    : '';
                 
                 return `
                 <th data-sheet="${cell.sheetId}" class="table-col-cell p-2 border border-slate-300 text-xs font-bold text-center min-w-[130px] ${headerBg}">
                     <div class="font-bold text-slate-800 leading-tight mb-1 text-[11px]">${cell.label}</div>
-                    <div class="flex items-center justify-center gap-1">
+                    <div class="flex items-center justify-center gap-1 flex-wrap">
                         <span class="font-mono text-[9px] text-slate-500 font-semibold bg-white/80 px-1 py-0.5 rounded border border-slate-200">${cell.key}</span>
                         <span class="text-[8px] font-black uppercase px-1 py-0.5 rounded border ${badgeClass}">${cell.type}</span>
+                        ${kkmBadgeHtml}
                     </div>
                     ${showMultiSheetBadges ? `<div class="text-[8px] text-slate-400 font-normal mt-0.5 truncate max-w-[120px] mx-auto">${cell.sheetName}</div>` : ''}
                 </th>
@@ -612,12 +812,12 @@ export const generateRaporFormHtml = (
 
             let inputWidget = '';
             if (col.type === 'input') {
-                inputWidget = `<input type="text" id="${cardFieldId}" oninput="syncFromCard(${s.id}, '${col.key}', this.value)" placeholder="Ketik nilai..." class="w-full border-2 border-slate-200 rounded-xl p-3 text-base font-bold text-slate-800 focus:border-teal-500 focus:bg-teal-50/20 outline-none transition-all shadow-xs">`;
+                inputWidget = `<input type="text" id="${cardFieldId}" oninput="syncFromCard(${s.id}, '${col.key}', this.value)" placeholder="Ketik nilai..." class="w-full border-2 border-slate-200 rounded-xl p-3 text-base font-bold text-slate-800 focus:border-teal-500 focus:bg-teal-50/20 outline-none transition-all shadow-sm">`;
             } else if (col.type === 'dropdown') {
                 const optionsHtml = col.options ? col.options.map(opt => `<option value="${opt}">${opt}</option>`).join('') : '';
-                inputWidget = `<select id="${cardFieldId}" onchange="syncFromCard(${s.id}, '${col.key}', this.value)" class="w-full border-2 border-emerald-200 bg-emerald-50/40 rounded-xl p-3 text-base font-bold text-emerald-950 focus:border-emerald-500 outline-none shadow-xs"><option value="">-- Pilih Nilai --</option>${optionsHtml}</select>`;
+                inputWidget = `<select id="${cardFieldId}" onchange="syncFromCard(${s.id}, '${col.key}', this.value)" class="w-full border-2 border-emerald-200 bg-emerald-50/40 rounded-xl p-3 text-base font-bold text-emerald-950 focus:border-emerald-500 outline-none shadow-sm"><option value="">-- Pilih Nilai --</option>${optionsHtml}</select>`;
             } else if (col.type === 'formula') {
-                inputWidget = `<input type="text" id="${cardFieldId}" readonly tabindex="-1" value="-" class="w-full border-2 border-amber-200 bg-amber-50 rounded-xl p-3 text-base font-black text-amber-950 text-center outline-none shadow-xs">`;
+                inputWidget = `<input type="text" id="${cardFieldId}" readonly tabindex="-1" value="-" class="w-full border-2 border-amber-200 bg-amber-50 rounded-xl p-3 text-base font-black text-amber-950 text-center outline-none shadow-sm">`;
             }
 
             return `
@@ -625,9 +825,10 @@ export const generateRaporFormHtml = (
                 <div class="flex justify-between items-start gap-2">
                     <div>
                         <label class="text-xs font-bold text-slate-800 leading-snug block">${col.label}</label>
-                        <div class="flex items-center gap-1.5 mt-0.5">
+                        <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
                             <span class="font-mono text-[9px] text-slate-400 font-semibold">${col.key}</span>
-                            ${showMultiSheetBadges ? `<span class="text-[9px] text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-100">${col.sheetName}</span>` : ''}
+                            ${col.isNumericScore && col.kkm ? `<span class="text-[9px] text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200 font-bold">KKM ${col.kkm}</span>` : ''}
+                            ${showMultiSheetBadges ? `<span class="text-[9px] text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">${col.sheetName}</span>` : ''}
                         </div>
                     </div>
                     ${typeBadge}
@@ -927,9 +1128,15 @@ export const generateRaporFormHtml = (
 
     <script>
         const santriList = ${JSON.stringify(santriMetaArray)};
+        const santriById = new Map(santriList.map(s => [Number(s.id), s]));
         const santriIds = santriList.map(s => s.id);
         const rankConfigs = ${rankConfigsScript};
         const defaultRankingScope = "${defaultRankingScope}";
+        const hasClassAvgFormula = ${hasClassAvgFormula ? 'true' : 'false'};
+        const kkmLookupByJenjang = ${JSON.stringify(kkmLookupByJenjang)};
+        const kkmLookupGlobal = ${JSON.stringify(kkmLookupGlobal)};
+        const kkmDefaultByJenjang = ${JSON.stringify(kkmDefaultByJenjang)};
+        const kkmDefaultGlobal = ${kkmDefaultGlobal};
         const storageKey = "${localStorageKey}";
         let currentCardIndex = 0;
         let currentActiveSheet = 'all';
@@ -1066,12 +1273,105 @@ export const generateRaporFormHtml = (
         }
         function terbilang(n) { if (isNaN(n) || n === '') return ''; var num = Math.round(Number(n)); var words = ["nol", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"]; if (num < 0) return "minus " + terbilang(-num); if (num < 12) return words[num]; if (num < 20) return terbilang(num - 10) + " belas"; if (num < 100) return terbilang(Math.floor(num / 10)) + " puluh" + (num % 10 === 0 ? "" : " " + terbilang(num % 10)); if (num < 200) return "seratus" + (num % 100 === 0 ? "" : " " + terbilang(num % 100)); if (num < 1000) return terbilang(Math.floor(num / 100)) + " ratus" + (num % 100 === 0 ? "" : " " + terbilang(num % 100)); return num.toString(); }
         function excelIf(c, t, f) { return c ? t : f; }
+        function excelIfs(...args) {
+            for (let i = 0; i + 1 < args.length; i += 2) {
+                if (args[i]) return args[i + 1];
+            }
+            return '';
+        }
+        function excelIfError(val, fallback = '-') {
+            if (val === null || val === undefined || (typeof val === 'number' && (!isFinite(val) || isNaN(val)))) return fallback;
+            return val;
+        }
         function excelAnd(...args) { return args.every(Boolean); }
         function excelOr(...args) { return args.some(Boolean); }
         function excelNot(v) { return !Boolean(v); }
         function excelConcat(...args) { return args.map(a => (a === null || a === undefined) ? '' : String(a)).join(''); }
+        function excelConcatSpasi(...args) { return args.map(a => (a === null || a === undefined) ? '' : String(a).trim()).filter(Boolean).join(' '); }
         function excelUpper(v) { return String(v ?? '').toUpperCase(); }
         function excelLower(v) { return String(v ?? '').toLowerCase(); }
+        function excelProper(v) {
+            return String(v ?? '').toLowerCase().replace(/(?:^|\\s|[-'/])\\S/g, ch => ch.toUpperCase());
+        }
+        function matchExcelCriteria(val, criteria) {
+            const crit = String(criteria ?? '').trim();
+            const m = crit.match(/^(>=|<=|!=|<>|>|<|=)\\s*(.*)$/);
+            const op = m ? m[1] : '=';
+            const rhsRaw = m ? m[2].trim() : crit;
+            const lhsNum = typeof val === 'number' ? val : Number(String(val ?? '').replace(',', '.'));
+            const rhsNum = Number(rhsRaw.replace(',', '.'));
+            const bothNum = !isNaN(lhsNum) && !isNaN(rhsNum) && rhsRaw !== '';
+            if (bothNum) {
+                if (op === '>') return lhsNum > rhsNum;
+                if (op === '>=') return lhsNum >= rhsNum;
+                if (op === '<') return lhsNum < rhsNum;
+                if (op === '<=') return lhsNum <= rhsNum;
+                if (op === '!=' || op === '<>') return Math.abs(lhsNum - rhsNum) > 1e-9;
+                return Math.abs(lhsNum - rhsNum) <= 1e-9;
+            }
+            const lhsStr = String(val ?? '').trim().toLowerCase();
+            const rhsStr = rhsRaw.replace(/^["']|["']$/g, '').trim().toLowerCase();
+            if (op === '!=' || op === '<>') return lhsStr !== rhsStr;
+            return lhsStr === rhsStr;
+        }
+        function excelCount(...args) {
+            return args.filter(a => typeof a === 'number' && !isNaN(a) && a > 0).length;
+        }
+        function excelCountIf(...args) {
+            if (args.length < 2) return 0;
+            const criteria = args[args.length - 1];
+            return args.slice(0, -1).filter(v => matchExcelCriteria(v, criteria)).length;
+        }
+        function excelAverageIf(...args) {
+            if (args.length < 2) return 0;
+            const criteria = args[args.length - 1];
+            const matched = args.slice(0, -1).filter(v => typeof v === 'number' && !isNaN(v) && matchExcelCriteria(v, criteria));
+            if (matched.length === 0) return 0;
+            return matched.reduce((a, b) => a + b, 0) / matched.length;
+        }
+        function normMapelKeyJs(raw) {
+            return String(raw ?? '')
+                .trim()
+                .replace(/^\\$+/g, '')
+                .replace(/^KKM_+/i, '')
+                .replace(/^[0-9٠-٩]{1,2}\\s*[.)\\-:]\\s*/, '')
+                .replace(/['’‘\\u0060]/g, '')
+                .toUpperCase()
+                .replace(/[^A-Z0-9\\u0600-\\u06FF]+/g, '_')
+                .replace(/^_+|_+$/g, '');
+        }
+        function excelKkm(rowId, subjectOrKey, fallbackVal) {
+            const sMeta = santriById.get(Number(rowId));
+            const jKey = sMeta && sMeta.jenjangId ? String(sMeta.jenjangId) : '';
+            const jDict = (jKey && kkmLookupByJenjang[jKey]) ? kkmLookupByJenjang[jKey] : null;
+            const q = normMapelKeyJs(subjectOrKey);
+            if (q) {
+                if (jDict && jDict[q] !== undefined) return jDict[q];
+                if (kkmLookupGlobal[q] !== undefined) return kkmLookupGlobal[q];
+            }
+            const fbNum = Number(fallbackVal);
+            if (!isNaN(fbNum) && fbNum > 0) return fbNum;
+            if (jKey && kkmDefaultByJenjang[jKey]) return kkmDefaultByJenjang[jKey];
+            return kkmDefaultGlobal || 70;
+        }
+        function rata2Kelas(rowId, colKey) {
+            const key = String(colKey ?? '').trim().replace(/^\\$+/g, '');
+            if (!key) return 0;
+            const sMeta = santriById.get(Number(rowId));
+            const targetRombel = sMeta ? Number(sMeta.rombelId || 0) : 0;
+            const cohort = targetRombel > 0 ? santriList.filter(s => Number(s.rombelId) === targetRombel) : santriList;
+            const vals = [];
+            cohort.forEach(s => {
+                const el = document.getElementById('val_' + s.id + '_' + key) || document.getElementById('card_val_' + s.id + '_' + key);
+                if (!el) return;
+                const raw = String(el.value ?? '').trim();
+                if (raw === '' || raw === '-') return;
+                const num = Number(raw.replace(',', '.'));
+                if (!isNaN(num) && isFinite(num)) vals.push(num);
+            });
+            if (vals.length === 0) return 0;
+            return vals.reduce((a, b) => a + b, 0) / vals.length;
+        }
 
         function calculateRanks() { 
             if (rankConfigs.length === 0) return; 
@@ -1114,10 +1414,20 @@ export const generateRaporFormHtml = (
             ${formulaScripts}
         }
 
-        function calculateRow(rowId) { 
+        function calculateRow(rowId, skipCohortPropagation = false) { 
             // 2-pass evaluation so chained formula cells (e.g. RATA_RATA -> PREDIKAT) stay synchronized
             runRowFormulasOnce(rowId);
             runRowFormulasOnce(rowId);
+            if (hasClassAvgFormula && !skipCohortPropagation) {
+                const sMeta = santriById.get(Number(rowId));
+                const rId = sMeta ? Number(sMeta.rombelId || 0) : 0;
+                santriList.forEach(peer => {
+                    if (peer.id !== rowId && (rId === 0 || Number(peer.rombelId) === rId)) {
+                        runRowFormulasOnce(peer.id);
+                        runRowFormulasOnce(peer.id);
+                    }
+                });
+            }
             calculateRanks(); 
         }
 
@@ -1408,16 +1718,22 @@ export const generateRaporFormHtml = (
                 const res = await fetch(url, { method: 'GET' });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const raw = await res.json();
-                const rows = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : []);
+                const rawRows = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : []);
+                const rows = [...rawRows].sort((a, b) => {
+                    const ta = a && a.Timestamp ? new Date(a.Timestamp).getTime() : 0;
+                    const tb = b && b.Timestamp ? new Date(b.Timestamp).getTime() : 0;
+                    if (isNaN(ta) || isNaN(tb)) return 0;
+                    return ta - tb;
+                });
                 const inputOnlySet = new Set(${JSON.stringify(inputOnlyKeys)});
                 const targetTahun = ${JSON.stringify(config.tahunAjaran)};
                 const targetSemester = ${JSON.stringify(config.semester)};
                 const targetTemplateId = ${JSON.stringify(config.template.id)};
-                let appliedCount = 0;
+                const touchedStudents = new Set();
 
                 rows.forEach(item => {
                     if (item.TahunAjaran && String(item.TahunAjaran) !== targetTahun) return;
-                    if (item.Semester && String(item.Semester) !== targetSemester) return;
+                    if (item.Semester && String(item.Semester).toLowerCase() !== targetSemester.toLowerCase()) return;
                     if (item.TemplateID && String(item.TemplateID) !== targetTemplateId) return;
                     const sid = Number(item.SantriID);
                     if (!sid || !santriIds.includes(sid)) return;
@@ -1426,8 +1742,19 @@ export const generateRaporFormHtml = (
                         parsed = typeof item.DataJSON === 'string' ? JSON.parse(item.DataJSON) : (item.DataJSON || {});
                     } catch(err) { parsed = {}; }
                     let touched = false;
+                    if (parsed.__cleared && typeof parsed.__cleared === 'object') {
+                        Object.keys(parsed.__cleared).forEach(ck => {
+                            if (!inputOnlySet.has(ck)) return;
+                            const el = document.getElementById('val_' + sid + '_' + ck);
+                            const cardEl = document.getElementById('card_val_' + sid + '_' + ck);
+                            if (el) el.value = '';
+                            if (cardEl) cardEl.value = '';
+                            if (loadedBaselineBySantri[sid]) delete loadedBaselineBySantri[sid][ck];
+                            touched = true;
+                        });
+                    }
                     Object.entries(parsed).forEach(([k, val]) => {
-                        if (!inputOnlySet.has(k)) return;
+                        if (k === '__cleared' || !inputOnlySet.has(k)) return;
                         if (val === '' || val === null || val === undefined) return;
                         const el = document.getElementById('val_' + sid + '_' + k);
                         const cardEl = document.getElementById('card_val_' + sid + '_' + k);
@@ -1437,10 +1764,11 @@ export const generateRaporFormHtml = (
                         markLoadedBaseline(sid, k, strVal);
                         touched = true;
                     });
-                    if (touched) appliedCount++;
+                    if (touched) touchedStudents.add(sid);
                 });
 
-                santriIds.forEach(id => calculateRow(id));
+                santriIds.forEach(id => calculateRow(id, true));
+                const appliedCount = touchedStudents.size;
                 if (appliedCount > 0) {
                     showFormToast('Berhasil memuat nilai terbaru dari Cloud untuk ' + appliedCount + ' santri.', 'success');
                 } else {
@@ -1940,10 +2268,13 @@ export const syncRaporStructuredData = async (
             }
 
             let mergedInThisRecord = 0;
+            const clearedUpperSet = new Set<string>();
             if (Array.isArray(rec.clearedKeys) && rec.clearedKeys.length > 0) {
                 rec.clearedKeys.forEach((ck: string) => {
                     const cleanCk = String(ck || '').trim();
-                    if (cleanCk && Object.prototype.hasOwnProperty.call(customData, cleanCk)) {
+                    if (!cleanCk) return;
+                    clearedUpperSet.add(cleanCk.toUpperCase());
+                    if (Object.prototype.hasOwnProperty.call(customData, cleanCk)) {
                         delete customData[cleanCk];
                         mergedInThisRecord++;
                     }
@@ -1955,12 +2286,13 @@ export const syncRaporStructuredData = async (
                     const val = rec.data[key];
                     if (val !== '' && val !== null && val !== undefined) {
                         customData[key] = String(val);
+                        clearedUpperSet.delete(key.trim().toUpperCase());
                         mergedInThisRecord++;
                     }
                 });
             }
 
-            if (mergedInThisRecord === 0 && existing && !existing.deleted) {
+            if (mergedInThisRecord === 0 && clearedUpperSet.size === 0 && existing && !existing.deleted) {
                 continue;
             }
 
@@ -1978,6 +2310,9 @@ export const syncRaporStructuredData = async (
                         if (!isNaN(parsed) && parsed >= 0) return parsed;
                     }
                 }
+                if (keys.some(k => clearedUpperSet.has(k.toUpperCase()))) {
+                    return 0;
+                }
                 return fallback;
             };
 
@@ -1987,6 +2322,9 @@ export const syncRaporStructuredData = async (
                     if (candidate !== undefined && candidate !== null && String(candidate).trim() !== '') {
                         return String(candidate);
                     }
+                }
+                if (keys.some(k => clearedUpperSet.has(k.toUpperCase()))) {
+                    return '';
                 }
                 return fallback;
             };

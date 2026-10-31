@@ -1335,8 +1335,8 @@ const PsbFormViewer: React.FC<{
     }
 
     return (
-        <div className="h-full relative overflow-y-auto no-print custom-scrollbar">
-            <form onSubmit={handleSubmit} className="p-6 md:p-10 max-w-3xl mx-auto space-y-10">
+        <div className="h-full relative overflow-y-auto print:h-auto print:overflow-visible custom-scrollbar">
+            <form onSubmit={handleSubmit} className="p-6 md:p-10 max-w-3xl mx-auto space-y-10 print:p-4 print:max-w-none print:space-y-6">
                 <header className="text-center mb-8 border-b pb-6">
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-teal-900 mb-2 uppercase tracking-wide">
                         {currentConfig.tahunAjaranAktif ? 'Pendaftaran Santri Baru' : 'Formulir Pendaftaran'}

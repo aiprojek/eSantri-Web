@@ -171,8 +171,23 @@ const getUnifiedPreviewPrintStyles = () => `
             padding: 0 !important;
             background: #ffffff !important;
             width: 100% !important;
+            filter: none !important;
+            -webkit-filter: none !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            text-rendering: geometricPrecision !important;
+            -webkit-font-smoothing: antialiased !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+        }
+        *, *::before, *::after {
+            box-shadow: none !important;
+            -webkit-box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            -webkit-filter: none !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
         }
         .no-print {
             display: none !important;

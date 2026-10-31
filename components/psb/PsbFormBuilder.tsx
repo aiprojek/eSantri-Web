@@ -55,6 +55,8 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     const [showScriptHelper, setShowScriptHelper] = useState(false);
     const [copiedScript, setCopiedScript] = useState(false);
     const [manualZoom, setManualZoom] = useState(1);
+    const [printPaperSize, setPrintPaperSize] = useState<'A4' | 'F4'>('A4');
+    const [printScaleMode, setPrintScaleMode] = useState<'auto' | 'fit_1_page' | '95' | '90' | '85' | '80' | '75'>('fit_1_page');
     const [mobileTab, setMobileTab] = useState<'config' | 'preview'>('config');
 
     const styles: {id: PsbDesignStyle, label: string}[] = [
@@ -438,7 +440,16 @@ function doPost(e) {
 }
 `;
 
-    const generateHtml = (isForPreview = false) => {
+    const generateHtml = (
+        isForPreview = false,
+        printOptions?: {
+            paperSize?: 'A4' | 'F4';
+            scaleMode?: 'auto' | 'fit_1_page' | '95' | '90' | '85' | '80' | '75';
+            fitScale?: number;
+            naturalWidthPx?: number;
+            hostStylesHtml?: string;
+        }
+    ) => {
         const standaloneStyles = getStandaloneDocumentStylesSync();
         const style = localConfig.designStyle || 'classic';
         const targetJenjang = settings.jenjang.find((j) => j.id === localConfig.targetJenjangId);
@@ -532,10 +543,10 @@ function doPost(e) {
             if (groupFields.length === 0) return [];
             
             let header = '';
-            if (style === 'classic') header = `<h3 class="bg-[#1B4D3E] text-[#D4AF37] px-6 py-2 font-bold uppercase text-sm mb-6 inline-block rounded-r-full break-after-avoid print:bg-gray-200 print:text-black print:border print:border-black font-serif tracking-widest shadow-sm">${group.title}</h3>`;
+            if (style === 'classic') header = `<h3 class="bg-[#1B4D3E] text-[#D4AF37] px-6 py-2 font-bold uppercase text-sm mb-6 inline-block rounded-r-full break-after-avoid print:bg-gray-100 print:text-black print:border print:border-black print:shadow-none font-serif tracking-widest shadow-sm">${group.title}</h3>`;
             else if (style === 'modern') header = `<h3 class="text-blue-600 font-bold text-lg mb-4 flex items-center gap-2 border-b pb-1 break-after-avoid print:text-black print:border-black"><span class="bg-blue-100 p-1.5 rounded text-sm print:hidden"><i class="bi bi-caret-right-fill"></i></span> ${group.title}</h3>`;
             else if (style === 'bold') header = `<h3 class="text-xl font-bold text-gray-800 border-l-4 border-red-700 pl-3 mb-4 break-after-avoid print:text-black print:border-black">${group.title}</h3>`;
-            else if (style === 'dark') header = `<h3 class="text-white font-serif text-xl border-b border-slate-700 pb-2 mb-4 print:text-black print:border-gray-400 break-after-avoid">${group.title}</h3>`;
+            else if (style === 'dark') header = `<h3 class="text-white font-serif text-xl border-b border-slate-700 pb-2 mb-4 print:text-black print:border-gray-700 break-after-avoid">${group.title}</h3>`;
             else if (style === 'ceria') header = `<div class="flex items-center gap-3 mb-4 break-after-avoid"><div class="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 text-lg print:hidden"><i class="bi bi-star-fill"></i></div><h3 class="font-bold text-gray-700 text-lg print:text-black">${group.title}</h3></div>`;
 
             const fieldsHtml = groupFields.map(f => {
@@ -580,7 +591,7 @@ function doPost(e) {
                             <span class="text-[11px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded font-mono border border-teal-200 print:hidden"><i class="bi bi-markdown mr-1"></i>Markdown</span>
                         </div>
                         ${hintHtml}
-                        <div class="border border-gray-300 rounded-lg overflow-hidden bg-white shadow-2xs">
+                        <div class="border border-gray-300 rounded-lg overflow-hidden bg-white shadow-2xs print:shadow-none print:border-black">
                             <div class="flex items-center gap-1.5 p-1.5 bg-gray-100 border-b border-gray-200 text-xs no-print">
                                 <button type="button" onclick="insertMd('field_${f.key}', '**', '**')" class="px-2 py-0.5 font-bold bg-white border rounded hover:bg-gray-50" title="Tebal">B</button>
                                 <button type="button" onclick="insertMd('field_${f.key}', '*', '*')" class="px-2 py-0.5 italic bg-white border rounded hover:bg-gray-50" title="Miring">I</button>
@@ -641,7 +652,7 @@ function doPost(e) {
                         <span class="text-[11px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded font-mono border border-teal-200 print:hidden"><i class="bi bi-markdown mr-1"></i>Markdown</span>
                     </div>
                     ${hintHtml}
-                    <div class="border border-gray-300 rounded-lg overflow-hidden bg-white shadow-2xs">
+                    <div class="border border-gray-300 rounded-lg overflow-hidden bg-white shadow-2xs print:shadow-none print:border-black">
                         <div class="flex items-center gap-1.5 p-1.5 bg-gray-100 border-b border-gray-200 text-xs no-print">
                             <button type="button" onclick="insertMd('custom_${field.id}', '**', '**')" class="px-2 py-0.5 font-bold bg-white border rounded hover:bg-gray-50" title="Tebal">B</button>
                             <button type="button" onclick="insertMd('custom_${field.id}', '*', '*')" class="px-2 py-0.5 italic bg-white border rounded hover:bg-gray-50" title="Miring">I</button>
@@ -710,9 +721,9 @@ function doPost(e) {
                 ? "bg-white min-h-screen p-6 sm:p-8 font-sans m-0"
                 : "bg-zinc-100 min-h-screen py-10 font-sans print:bg-white";
             wrapperClass = isForPreview 
-                ? "w-full max-w-2xl mx-auto p-6 sm:p-8 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+                ? "w-full max-w-2xl mx-auto p-6 sm:p-8 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] print:shadow-none print:border-none"
                 : "bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mx-auto max-w-2xl p-8 border-2 border-black print:shadow-none print:border-none";
-            headerHtml = `<div class="mb-10 border-b-4 border-black pb-4"><h1 class="text-4xl font-black uppercase tracking-tighter">${settings.namaPonpes}</h1><p class="text-lg font-bold bg-black text-white inline-block px-2 transform -skew-x-12">PENERIMAAN SANTRI BARU • TA ${psbYearDisplay}</p></div>`;
+            headerHtml = `<div class="mb-10 border-b-4 border-black pb-4"><h1 class="text-4xl font-black uppercase tracking-tighter">${settings.namaPonpes}</h1><p class="text-lg font-bold bg-black text-white inline-block px-2 transform -skew-x-12 print:transform-none">PENERIMAAN SANTRI BARU • TA ${psbYearDisplay}</p></div>`;
         } else if (style === 'dark') {
             bodyClass = isForPreview 
                 ? "bg-slate-900 min-h-screen p-6 sm:p-10 font-sans text-slate-200 m-0"
@@ -783,7 +794,7 @@ function doPost(e) {
 
         if (submissionMethod === 'whatsapp') {
              modalHtml = `
-             <div id="waModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+             <div id="waModal" class="no-print print:hidden fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
                  <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-left border border-gray-100 my-8">
                      <div class="flex items-center gap-3 mb-4">
                          <div class="w-12 h-12 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center text-2xl shrink-0">
@@ -897,7 +908,7 @@ function proceedWaSubmit(){
 </script>`;
         } else if (submissionMethod === 'google_sheet') {
              modalHtml = `
-             <div id="gsSuccessModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+             <div id="gsSuccessModal" class="no-print print:hidden fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
                  <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-center border border-gray-100 my-8">
                      <div class="w-14 h-14 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center text-3xl mx-auto mb-3">
                          <i class="bi bi-check-circle-fill"></i>
@@ -1029,7 +1040,7 @@ function closeGsSuccessModal(){
 </script>`;
         } else {
              modalHtml = `
-             <div id="hybridModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+             <div id="hybridModal" class="no-print print:hidden fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
                  <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-left border border-gray-100 my-8">
                      <div id="hybridInitialContent">
                          <div class="flex items-center gap-3 mb-4">
@@ -1278,18 +1289,33 @@ function finishHybridSubmit(){
         </script>
         `;
 
+        const effectivePaper = printOptions?.paperSize || printPaperSize || 'A4';
+        const effectiveScaleMode = printOptions?.scaleMode || 'auto';
+        const isFitOnePage = effectiveScaleMode === 'fit_1_page' && typeof printOptions?.fitScale === 'number';
+        const fitScaleVal = isFitOnePage ? Math.min(1, Math.max(0.32, printOptions!.fitScale!)) : 1;
+        const manualPercentScale = ['95', '90', '85', '80', '75'].includes(effectiveScaleMode)
+            ? Number(effectiveScaleMode) / 100
+            : 1;
+        const pageWcm = effectivePaper === 'F4' ? 21.5 : 21;
+        const pageHcm = effectivePaper === 'F4' ? 33 : 29.7;
+        const safeHcm = Number((pageHcm - 0.05).toFixed(2));
+        const pageSizeCss = effectivePaper === 'F4' ? '21.5cm 33cm' : 'A4 portrait';
+        const naturalWidthPx = printOptions?.naturalWidthPx || (effectivePaper === 'F4' ? 722 : 703);
+        const useHostStyles = Boolean(printOptions?.hostStylesHtml);
+
         return `<!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pendaftaran ${settings.namaPonpes}</title>
-    <!-- Fonts & Icons CDN -->
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+    <title>Formulir PSB - ${settings.namaPonpes}</title>
+    <!-- Fonts & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <!-- Tailwind CSS CDN -->
+    ${useHostStyles ? printOptions!.hostStylesHtml : `<!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -1303,7 +1329,7 @@ function finishHybridSubmit(){
                 }
             }
         };
-    </script>
+    </script>`}
     <style>
         ${standaloneStyles}
         /* Theme Fallbacks & Specific Overrides */
@@ -1311,22 +1337,101 @@ function finishHybridSubmit(){
         .font-serif { font-family: "Playfair Display", Georgia, serif !important; }
         .font-sans { font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif !important; }
         
-        @media print {
-            @page { size: A4; margin: 0; }
-            body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .no-print { display: none !important; }
-            .printable-content-wrapper { box-shadow: none !important; margin: 0 !important; }
-        }
         .screen-only { display: block; }
         .print-only { display: none; }
+
         @media print {
-            .screen-only { display: none; }
-            .print-only { display: block; }
+            @page {
+                size: ${pageSizeCss};
+                margin: ${isFitOnePage ? '0' : '10mm 12mm'};
+            }
+            html, body {
+                background: #ffffff !important;
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                min-height: 0 !important;
+                height: auto !important;
+                filter: none !important;
+                -webkit-filter: none !important;
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+                text-rendering: geometricPrecision !important;
+                -webkit-font-smoothing: antialiased !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            *, *::before, *::after {
+                box-shadow: none !important;
+                -webkit-box-shadow: none !important;
+                text-shadow: none !important;
+                filter: none !important;
+                -webkit-filter: none !important;
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+                transition: none !important;
+                animation: none !important;
+            }
+            .no-print, .screen-only { display: none !important; }
+            .print-only { display: block !important; }
+            .printable-content-wrapper {
+                box-shadow: none !important;
+                margin: 0 !important;
+                transform: none !important;
+            }
+            #psb-standalone-sheet {
+                background: #ffffff !important;
+                color: #000000 !important;
+                box-shadow: none !important;
+                border: none !important;
+                border-radius: 0 !important;
+                margin: 0 !important;
+                max-width: none !important;
+                width: 100% !important;
+                padding: 0 !important;
+                overflow: visible !important;
+            }
+            ${isFitOnePage ? `
+            .psb-vector-fit-page {
+                display: block !important;
+                position: relative !important;
+                width: ${pageWcm}cm !important;
+                height: ${safeHcm}cm !important;
+                max-height: ${safeHcm}cm !important;
+                padding: 0.9cm 1.1cm !important;
+                margin: 0 auto !important;
+                box-sizing: border-box !important;
+                overflow: hidden !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                background: #ffffff !important;
+            }
+            .psb-vector-fit-viewport {
+                position: relative !important;
+                width: ${Math.round(naturalWidthPx * fitScaleVal)}px !important;
+                height: 100% !important;
+                margin: 0 auto !important;
+                overflow: visible !important;
+            }
+            #psb-standalone-sheet {
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: ${naturalWidthPx}px !important;
+                transform: scale(${fitScaleVal}) !important;
+                transform-origin: top left !important;
+            }
+            ` : manualPercentScale < 1 ? `
+            #psb-standalone-sheet {
+                zoom: ${manualPercentScale} !important;
+            }
+            ` : ''}
         }
     </style>
 </head>
 <body class="${bodyClass}">
-<div class="${wrapperClass}">${headerHtml}<form id="psbForm" onsubmit="event.preventDefault();"><div class="mb-6 break-inside-avoid"><label class="block font-bold mb-1 text-gray-700 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenjang Pendidikan</label><div class="font-bold text-lg p-2 bg-gray-50 border-b border-gray-300 print:border-none print:bg-transparent print:p-0 print:text-black ${style === 'classic' ? 'bg-transparent border-b-2 border-gray-300' : ''}">${jenjangName}</div><input type="hidden" name="jenjangId" value="${localConfig.targetJenjangId||''}" /></div>${activeFieldsHtml}${localConfig.requiredDocuments.length>0?`<div class="mt-8 mb-6 p-4 border rounded-lg break-inside-avoid ${style === 'classic' ? 'border-[#1B4D3E]/30 bg-[#f0fdf4]/30' : ''}"><h4 class="font-bold mb-3 ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Checklist Persyaratan Berkas (Bawa Fisik)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${docsHtml}</div></div>`:''}${customFieldsHtml}<div class="mt-8 no-print space-y-3"><button type="button" id="submit-btn" onclick="submitForm()" class="w-full flex justify-center items-center gap-2 ${buttonColor} text-white font-bold py-3 rounded-lg transition shadow-md"><i class="${buttonIcon} text-xl"></i> ${buttonText}</button><p class="text-xs text-center text-gray-500 mt-2">${buttonSubtext}</p></div><div class="mt-8 pt-4 border-t text-center text-xs text-gray-500"><div>Tahun Ajaran ${localConfig.tahunAjaranAktif || new Date().getFullYear()}</div><div class="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div></div></form>${closeDiv}</div><script>
+<div class="psb-vector-fit-page"><div class="psb-vector-fit-viewport"><div id="psb-standalone-sheet" class="${wrapperClass}">${headerHtml}<form id="psbForm" onsubmit="event.preventDefault();"><div class="mb-6 break-inside-avoid"><label class="block font-bold mb-1 text-gray-700 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenjang Pendidikan</label><div class="font-bold text-lg p-2 bg-gray-50 border-b border-gray-300 print:border-none print:bg-transparent print:p-0 print:text-black ${style === 'classic' ? 'bg-transparent border-b-2 border-gray-300' : ''}">${jenjangName}</div><input type="hidden" name="jenjangId" value="${localConfig.targetJenjangId||''}" /></div>${activeFieldsHtml}${localConfig.requiredDocuments.length>0?`<div class="mt-8 mb-6 p-4 border rounded-lg break-inside-avoid print:border-black print:bg-white ${style === 'classic' ? 'border-[#1B4D3E]/30 bg-[#f0fdf4]/30' : ''}"><h4 class="font-bold mb-3 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Checklist Persyaratan Berkas (Bawa Fisik)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${docsHtml}</div></div>`:''}${customFieldsHtml}<div class="mt-8 no-print space-y-3"><button type="button" id="submit-btn" onclick="submitForm()" class="w-full flex justify-center items-center gap-2 ${buttonColor} text-white font-bold py-3 rounded-lg transition shadow-md"><i class="${buttonIcon} text-xl"></i> ${buttonText}</button><p class="text-xs text-center text-gray-500 mt-2">${buttonSubtext}</p></div><div class="mt-8 pt-4 border-t border-gray-300 text-center text-xs text-gray-600"><div>Tahun Ajaran ${localConfig.tahunAjaranAktif || new Date().getFullYear()}</div><div class="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div></div></form>${closeDiv}</div></div></div><script>
 function insertMd(elemId, before, after) {
     after = after || '';
     var el = document.getElementById(elemId);
@@ -1353,29 +1458,155 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
     };
 
     const handleDownloadPdf = () => {
-        const html = generateHtml();
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-            printWindow.document.write(html);
-            printWindow.document.close();
+        // Collect already-compiled host styles so vector printing never races against external CDN scripts
+        let hostStylesHtml = '';
+        document.querySelectorAll('style, link[rel="stylesheet"]').forEach(node => {
+            hostStylesHtml += node.outerHTML;
+        });
+
+        const naturalWidthPx = printPaperSize === 'F4' ? 729 : 710; // ~19.3cm / ~18.8cm printable width at 96dpi
+        const availableHeightPx = printPaperSize === 'F4' ? 1175 : 1050; // printable height inside 0.9cm top/bottom padding
+
+        const launchVectorIframePrint = (computedFitScale?: number) => {
+            const html = generateHtml(false, {
+                paperSize: printPaperSize,
+                scaleMode: printScaleMode,
+                fitScale: computedFitScale,
+                naturalWidthPx,
+                hostStylesHtml
+            });
+
+            const iframe = document.createElement('iframe');
+            iframe.style.position = 'fixed';
+            iframe.style.left = '0';
+            iframe.style.top = '0';
+            iframe.style.width = printPaperSize === 'F4' ? '215mm' : '210mm';
+            iframe.style.height = printPaperSize === 'F4' ? '330mm' : '297mm';
+            iframe.style.border = '0';
+            iframe.style.opacity = '0';
+            iframe.style.pointerEvents = 'none';
+            iframe.style.zIndex = '-9999';
+            document.body.appendChild(iframe);
+
+            const doc = iframe.contentWindow?.document;
+            if (!doc) {
+                document.body.removeChild(iframe);
+                showToast('Gagal menyiapkan dokumen cetak formulir.', 'error');
+                return;
+            }
+
+            doc.open();
+            doc.write(html);
+            doc.close();
+
             let printTriggered = false;
             const triggerOnce = () => {
                 if (printTriggered) return;
                 printTriggered = true;
-                printWindow.focus();
-                printWindow.print();
-            };
-            printWindow.onload = () => {
-                setTimeout(triggerOnce, 800);
-            };
-            // Fallback just in case onload already fired
-            setTimeout(() => {
-                if (printWindow.document.readyState === 'complete') {
-                    triggerOnce();
+                try {
+                    iframe.contentWindow?.focus();
+                    iframe.contentWindow?.print();
+                } catch (err) {
+                    console.error('Print error:', err);
                 }
-            }, 1800);
+            };
+
+            const waitForAssets = () => {
+                const win = iframe.contentWindow;
+                const idoc = win?.document;
+                if (!win || !idoc) {
+                    triggerOnce();
+                    return;
+                }
+                const imgs = Array.from(idoc.images || []);
+                const imgPromises = imgs.map(img =>
+                    img.complete
+                        ? Promise.resolve()
+                        : new Promise<void>(resolve => {
+                              img.addEventListener('load', () => resolve(), { once: true });
+                              img.addEventListener('error', () => resolve(), { once: true });
+                          })
+                );
+                const fontPromise = idoc.fonts?.ready ? idoc.fonts.ready.catch(() => {}) : Promise.resolve();
+                Promise.all([Promise.all(imgPromises), fontPromise]).then(() => {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            setTimeout(triggerOnce, 150);
+                        });
+                    });
+                });
+            };
+
+            if (doc.readyState === 'complete') {
+                waitForAssets();
+            } else {
+                iframe.onload = waitForAssets;
+            }
+            setTimeout(triggerOnce, 3000);
+            setTimeout(() => {
+                if (document.body.contains(iframe)) {
+                    document.body.removeChild(iframe);
+                }
+            }, 60000);
+        };
+
+        if (printScaleMode === 'fit_1_page') {
+            // Measure exact print-mode height in an offscreen measurement iframe (hiding .no-print buttons, showing .print-only boxes)
+            const measureIframe = document.createElement('iframe');
+            measureIframe.style.position = 'fixed';
+            measureIframe.style.left = '-9999px';
+            measureIframe.style.top = '0';
+            measureIframe.style.width = `${naturalWidthPx}px`;
+            measureIframe.style.height = '1200px';
+            measureIframe.style.visibility = 'hidden';
+            measureIframe.style.pointerEvents = 'none';
+            document.body.appendChild(measureIframe);
+
+            const mDoc = measureIframe.contentWindow?.document;
+            if (!mDoc) {
+                document.body.removeChild(measureIframe);
+                launchVectorIframePrint(0.75);
+                return;
+            }
+
+            const measureHtml = generateHtml(true, {
+                paperSize: printPaperSize,
+                scaleMode: 'auto',
+                naturalWidthPx,
+                hostStylesHtml: `${hostStylesHtml}<style>
+                    html, body { margin: 0 !important; padding: 0 !important; width: ${naturalWidthPx}px !important; background: #fff !important; }
+                    .no-print, .screen-only { display: none !important; }
+                    .print-only { display: block !important; }
+                    #psb-standalone-sheet { padding: 0 !important; margin: 0 !important; max-width: none !important; width: ${naturalWidthPx}px !important; border: none !important; box-shadow: none !important; }
+                </style>`
+            });
+
+            mDoc.open();
+            mDoc.write(measureHtml);
+            mDoc.close();
+
+            const finishMeasure = () => {
+                const fontReady = mDoc.fonts?.ready ? mDoc.fonts.ready.catch(() => {}) : Promise.resolve();
+                fontReady.then(() => {
+                    requestAnimationFrame(() => {
+                        const sheetEl = mDoc.getElementById('psb-standalone-sheet');
+                        const rawHeight = sheetEl ? sheetEl.scrollHeight : (mDoc.body?.scrollHeight || availableHeightPx);
+                        if (document.body.contains(measureIframe)) {
+                            document.body.removeChild(measureIframe);
+                        }
+                        const ratio = rawHeight > 0 ? Math.min(1, Number(((availableHeightPx / rawHeight) * 0.985).toFixed(4))) : 1;
+                        launchVectorIframePrint(ratio);
+                    });
+                });
+            };
+
+            if (mDoc.readyState === 'complete') {
+                finishMeasure();
+            } else {
+                measureIframe.onload = finishMeasure;
+            }
         } else {
-            showToast("Pop-up diblokir. Izinkan pop-up untuk mencetak.", "error");
+            launchVectorIframePrint();
         }
     };
 
@@ -1876,13 +2107,13 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                     </div>
 
                     <div className="flex items-center flex-wrap justify-end gap-2">
-                        {/* Zoom Controls */}
-                        <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                        {/* Zoom Controls (Preview Layar) */}
+                        <div className="flex items-center bg-gray-100 rounded-lg p-1" title="Zoom Tampilan Layar">
                             <button
                                 type="button"
                                 onClick={() => setManualZoom(z => Math.max(0.4, Number((z - 0.1).toFixed(2))))}
                                 className="h-7 w-7 hover:bg-white rounded text-gray-700 transition flex items-center justify-center cursor-pointer"
-                                title="Perkecil (Zoom Out)"
+                                title="Perkecil Pratinjau Layar"
                             >
                                 <i className="bi bi-dash"></i>
                             </button>
@@ -1893,18 +2124,55 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                                 type="button"
                                 onClick={() => setManualZoom(z => Math.min(2, Number((z + 0.1).toFixed(2))))}
                                 className="h-7 w-7 hover:bg-white rounded text-gray-700 transition flex items-center justify-center cursor-pointer"
-                                title="Perbesar (Zoom In)"
+                                title="Perbesar Pratinjau Layar"
                             >
                                 <i className="bi bi-plus"></i>
                             </button>
                             <button
                                 type="button"
+                                onClick={() => setManualZoom(0.82)}
+                                className={`ml-1 h-7 px-2 text-[11px] rounded transition cursor-pointer ${Math.abs(manualZoom - 0.82) < 0.02 ? 'bg-white text-teal-700 font-bold border border-teal-200' : 'hover:bg-white text-gray-600 border border-transparent hover:border-gray-200'}`}
+                                title="Muat Lebar Pratinjau Layar (Fit)"
+                            >
+                                Fit
+                            </button>
+                            <button
+                                type="button"
                                 onClick={() => setManualZoom(1)}
-                                className="ml-1 h-7 px-2 text-[11px] rounded hover:bg-white text-gray-600 border border-transparent hover:border-gray-200 transition cursor-pointer"
+                                className={`ml-0.5 h-7 px-2 text-[11px] rounded transition cursor-pointer ${manualZoom === 1 ? 'bg-white text-teal-700 font-bold border border-teal-200' : 'hover:bg-white text-gray-600 border border-transparent hover:border-gray-200'}`}
                                 title="Reset Ukuran Normal (100%)"
                             >
                                 100%
                             </button>
+                        </div>
+
+                        {/* Vector Print Paper & Scale Settings (tajam seperti Rapor) */}
+                        <div className="flex items-center gap-1 bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 text-xs">
+                            <i className="bi bi-aspect-ratio text-teal-700 text-xs"></i>
+                            <select
+                                value={printPaperSize}
+                                onChange={e => setPrintPaperSize(e.target.value as 'A4' | 'F4')}
+                                className="bg-transparent font-bold text-slate-700 text-xs outline-none cursor-pointer"
+                                title="Ukuran Kertas Cetak Formulir"
+                            >
+                                <option value="A4">A4</option>
+                                <option value="F4">F4</option>
+                            </select>
+                            <span className="text-slate-300">|</span>
+                            <select
+                                value={printScaleMode}
+                                onChange={e => setPrintScaleMode(e.target.value as any)}
+                                className="bg-transparent font-bold text-indigo-900 text-xs outline-none cursor-pointer"
+                                title="Skala Cetak Vektor (Tajam seperti Rapor)"
+                            >
+                                <option value="fit_1_page">Fit 1 Halaman</option>
+                                <option value="auto">100% (Otomatis)</option>
+                                <option value="95">Skala 95%</option>
+                                <option value="90">Skala 90%</option>
+                                <option value="85">Skala 85%</option>
+                                <option value="80">Skala 80%</option>
+                                <option value="75">Skala 75%</option>
+                            </select>
                         </div>
 
                         <button
@@ -1930,7 +2198,7 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                             type="button"
                             onClick={handleDownloadPdf}
                             className="bg-gray-700 hover:bg-gray-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition cursor-pointer"
-                            title="Cetak atau Simpan PDF"
+                            title="Cetak atau Simpan PDF Vektor Tajam"
                         >
                             <i className="bi bi-printer"></i>
                             <span className="hidden sm:inline">Cetak / PDF</span>
@@ -1948,7 +2216,7 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                 </div>
 
                 {/* Preview Canvas with single paper sheet */}
-                <div id="preview-area" className="flex-grow overflow-auto p-3 sm:p-6 flex justify-center items-start bg-gray-200/50 backdrop-blur-xs">
+                <div id="preview-area" className="flex-grow overflow-auto p-3 sm:p-6 flex justify-center items-start bg-gray-200/50">
                     <div 
                         className="printable-content-wrapper origin-top transition-transform duration-200 w-full max-w-[210mm] shadow-xl rounded-xl border border-gray-300 bg-white overflow-hidden"
                         style={{ transform: `scale(${manualZoom})`, transformOrigin: 'top center' }}

@@ -68,7 +68,10 @@ const renderPageCanvas = async (page: HTMLElement) => {
             const reportPages = clonedDoc.querySelectorAll('.printable-content-wrapper > div');
             reportPages.forEach((p) => {
                 p.classList.remove('shadow-lg');
-                (p as HTMLElement).style.boxShadow = 'none';
+                const htmlEl = p as HTMLElement;
+                htmlEl.style.boxShadow = 'none';
+                htmlEl.style.filter = 'none';
+                htmlEl.style.backdropFilter = 'none';
             });
         }
     });
@@ -386,11 +389,13 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     const clonedElement = element.cloneNode(true) as HTMLElement;
     clonedElement.style.transform = 'none';
     clonedElement.style.transition = 'none';
+    clonedElement.style.filter = 'none';
+    clonedElement.style.backdropFilter = 'none';
     clonedElement
         .querySelectorAll('[data-rapor-measure-only="true"]')
         .forEach((node) => node.remove());
 
-    const raporPages = Array.from(clonedElement.querySelectorAll<HTMLElement>('.rapor-exact-page'));
+    const raporPages = Array.from(clonedElement.querySelectorAll<HTMLElement>('.rapor-exact-page, .psb-exact-page'));
     const hasPortraitRapor = raporPages.some(
         (p) => (p.getAttribute('data-print-orientation') || 'portrait') !== 'landscape'
     );
@@ -399,7 +404,7 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     );
     const hasMixedRaporOrientations = hasPortraitRapor && hasLandscapeRapor;
 
-    // Normalize page-break markers across all discrete Rapor pages in DOM order
+    // Normalize page-break markers across all discrete Rapor / PSB exact pages in DOM order
     if (raporPages.length > 0) {
         raporPages.forEach((pageEl, idx) => {
             const isLast = idx === raporPages.length - 1;
@@ -505,11 +510,17 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     styles += `
     <style>
         @media print {
-            body { 
+            html, body { 
                 -webkit-print-color-adjust: exact !important; 
                 print-color-adjust: exact !important; 
-                background-color: white !important; 
-                -webkit-filter: opacity(1) !important;
+                background: #ffffff !important;
+                background-color: #ffffff !important; 
+                filter: none !important;
+                -webkit-filter: none !important;
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+                text-rendering: geometricPrecision !important;
+                -webkit-font-smoothing: antialiased !important;
                 margin: 0 !important;
                 padding: 0 !important;
             }
@@ -527,11 +538,14 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 size: ${paperSize === 'F4' ? `${portraitHeight}cm ${portraitWidth}cm` : `${paperSize} landscape`};
             }
             ` : ''}
-            * {
+            *, *::before, *::after {
                 box-shadow: none !important;
                 -webkit-box-shadow: none !important;
                 text-shadow: none !important;
                 filter: none !important;
+                -webkit-filter: none !important;
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
             }
             /* Force pure normal-flow block containers for all Rapor ancestors so browser pagination never drops sibling formats */
             #rapor-preview-container,
@@ -577,11 +591,12 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 page-break-inside: auto !important;
                 break-inside: auto !important;
             }
-            /* Exact Paginated Rapor Sheets & Fit to 1 Page Rules */
+            /* Exact Paginated Rapor & PSB Sheets & Fit to 1 Page Rules */
             .printable-content-wrapper.rapor-fit-1-page,
             .rapor-fit-1-page,
             .printable-content-wrapper.rapor-exact-page,
-            .rapor-exact-page {
+            .rapor-exact-page,
+            .psb-exact-page {
                 display: block !important;
                 position: relative !important;
                 width: ${pageWidth}cm !important;
@@ -595,27 +610,32 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 break-inside: avoid !important;
                 box-sizing: border-box !important;
                 overflow: hidden !important;
+                background: #ffffff !important;
             }
             .printable-content-wrapper.rapor-exact-page[data-print-orientation="portrait"],
-            .rapor-exact-page[data-print-orientation="portrait"] {
+            .rapor-exact-page[data-print-orientation="portrait"],
+            .psb-exact-page[data-print-orientation="portrait"] {
                 width: ${portraitWidth}cm !important;
                 height: ${safePortraitHeight}cm !important;
                 max-height: ${safePortraitHeight}cm !important;
                 ${hasMixedRaporOrientations ? 'page: rapor-portrait;' : ''}
             }
             .printable-content-wrapper.rapor-exact-page[data-print-orientation="landscape"],
-            .rapor-exact-page[data-print-orientation="landscape"] {
+            .rapor-exact-page[data-print-orientation="landscape"],
+            .psb-exact-page[data-print-orientation="landscape"] {
                 width: ${portraitHeight}cm !important;
                 height: ${safeLandscapeHeight}cm !important;
                 max-height: ${safeLandscapeHeight}cm !important;
                 ${hasMixedRaporOrientations ? 'page: rapor-landscape;' : ''}
             }
-            .rapor-scaled-viewport {
+            .rapor-scaled-viewport,
+            .psb-scaled-viewport {
                 overflow: visible !important;
                 position: relative !important;
             }
             .rapor-fit-1-page.page-break-after,
-            .rapor-exact-page.page-break-after {
+            .rapor-exact-page.page-break-after,
+            .psb-exact-page.page-break-after {
                 page-break-after: always !important;
                 break-after: page !important;
             }
@@ -776,14 +796,14 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 overflow: visible !important;
             }
 
-            .psb-print-form-sheet {
+            .psb-print-form-sheet:not(.psb-exact-page-inner) {
                 display: block !important;
                 width: 100% !important;
                 max-width: 100% !important;
                 height: auto !important;
                 min-height: 0 !important;
                 margin: 0 !important;
-                padding: 0.8cm 1cm !important;
+                padding: 0 !important;
                 box-shadow: none !important;
                 border: none !important;
                 border-radius: 0 !important;
@@ -792,7 +812,7 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 overflow: visible !important;
             }
 
-            .psb-print-form-sheet:not(:last-child) {
+            .psb-print-form-sheet:not(.psb-exact-page-inner):not(:last-child) {
                 page-break-after: always !important;
                 break-after: page !important;
             }
@@ -868,7 +888,7 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 break-after: auto !important;
             }
 
-            /* Universal and complete shadow removal for clean print */
+            /* Universal and complete shadow & filter removal for clean vector print */
             *, *::before, *::after,
             .rounded-lg, .rounded-xl, .rounded-2xl,
             .shadow-2xs, .shadow-xs, .shadow-sm, .shadow, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl, .shadow-inner {
@@ -876,6 +896,9 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 -webkit-box-shadow: none !important;
                 text-shadow: none !important;
                 filter: none !important;
+                -webkit-filter: none !important;
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
             }
             * { transition: none !important; animation: none !important; }
         }

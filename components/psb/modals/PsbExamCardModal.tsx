@@ -217,10 +217,22 @@ export const PsbExamCardModal: React.FC<PsbExamCardModalProps> = ({
                                             <img
                                                 src={settings.logoPonpesUrl || settings.logoYayasanUrl}
                                                 alt="Logo"
-                                                className="w-16 h-16 object-contain shrink-0"
+                                                width={64}
+                                                height={64}
+                                                className="psb-kop-logo w-16 h-16 object-contain shrink-0"
+                                                style={{
+                                                    width: '64px',
+                                                    height: '64px',
+                                                    maxWidth: '64px',
+                                                    maxHeight: '64px',
+                                                    objectFit: 'contain'
+                                                }}
                                             />
                                         ) : (
-                                            <div className="w-16 h-16 rounded-full bg-teal-800 text-white flex items-center justify-center text-2xl font-black shrink-0">
+                                            <div
+                                                className="psb-kop-logo w-16 h-16 rounded-full bg-teal-800 text-white flex items-center justify-center text-2xl font-black shrink-0"
+                                                style={{ width: '64px', height: '64px' }}
+                                            >
                                                 <i className="bi bi-building"></i>
                                             </div>
                                         )}
@@ -258,7 +270,16 @@ export const PsbExamCardModal: React.FC<PsbExamCardModalProps> = ({
                                                 <img
                                                     src={qrCodeUrl}
                                                     alt="QR Code Registrasi"
+                                                    width={96}
+                                                    height={96}
                                                     className="w-24 h-24 object-contain rounded"
+                                                    style={{
+                                                        width: '96px',
+                                                        height: '96px',
+                                                        maxWidth: '96px',
+                                                        maxHeight: '96px',
+                                                        objectFit: 'contain'
+                                                    }}
                                                 />
                                             ) : (
                                                 <div className="w-24 h-24 bg-gray-100 flex items-center justify-center text-gray-400 text-xs text-center p-1">

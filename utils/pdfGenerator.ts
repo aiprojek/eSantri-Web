@@ -817,6 +817,25 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 break-after: page !important;
             }
 
+            .psb-kop-logo {
+                width: 64px !important;
+                height: 64px !important;
+                max-width: 64px !important;
+                max-height: 64px !important;
+                object-fit: contain !important;
+                flex-shrink: 0 !important;
+            }
+
+            .psb-pasfoto-box {
+                width: 90px !important;
+                height: 120px !important;
+                min-width: 90px !important;
+                max-width: 90px !important;
+                max-height: 120px !important;
+                overflow: hidden !important;
+                flex-shrink: 0 !important;
+            }
+
             #psb-exam-card {
                 display: block !important;
                 width: 100% !important;

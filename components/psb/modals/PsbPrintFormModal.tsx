@@ -151,10 +151,22 @@ const PsbApplicantFormContent: React.FC<{
                     <img
                         src={settings.logoPonpesUrl || settings.logoYayasanUrl}
                         alt="Logo"
-                        className="w-18 h-18 object-contain shrink-0"
+                        width={64}
+                        height={64}
+                        className="psb-kop-logo w-16 h-16 object-contain shrink-0"
+                        style={{
+                            width: '64px',
+                            height: '64px',
+                            maxWidth: '64px',
+                            maxHeight: '64px',
+                            objectFit: 'contain'
+                        }}
                     />
                 ) : (
-                    <div className="w-18 h-18 rounded-full bg-teal-800 text-white flex items-center justify-center text-2xl font-black shrink-0">
+                    <div
+                        className="psb-kop-logo w-16 h-16 rounded-full bg-teal-800 text-white flex items-center justify-center text-2xl font-black shrink-0"
+                        style={{ width: '64px', height: '64px' }}
+                    >
                         <i className="bi bi-building"></i>
                     </div>
                 )}
@@ -225,9 +237,25 @@ const PsbApplicantFormContent: React.FC<{
                 </div>
 
                 {/* Foto 3x4 Box */}
-                <div className="w-24 h-30 border border-dashed border-slate-600 rounded bg-white flex flex-col items-center justify-center text-center p-1 shrink-0 overflow-hidden">
+                <div
+                    className="psb-pasfoto-box w-24 h-32 border border-dashed border-slate-600 rounded bg-white flex flex-col items-center justify-center text-center p-1 shrink-0 overflow-hidden"
+                    style={{
+                        width: '90px',
+                        height: '120px',
+                        minWidth: '90px',
+                        maxWidth: '90px',
+                        maxHeight: '120px'
+                    }}
+                >
                     {pasFotoUrl ? (
-                        <img src={pasFotoUrl} alt="Pas Foto" className="w-full h-full object-cover rounded-xs" />
+                        <img
+                            src={pasFotoUrl}
+                            alt="Pas Foto"
+                            width={82}
+                            height={112}
+                            className="w-full h-full object-cover rounded-sm"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
                     ) : (
                         <div className="text-slate-500 flex flex-col items-center">
                             <i className="bi bi-person-bounding-box text-2xl mb-1"></i>
@@ -893,7 +921,7 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
 
                     <div className="flex flex-wrap items-center gap-2">
                         {/* Ukuran Kertas & Skala Vektor (seperti Rapor) */}
-                        <div className="flex items-center gap-1.5 bg-white border border-teal-200 rounded-lg px-2.5 py-1.5 shadow-2xs">
+                        <div className="flex items-center gap-1.5 bg-white border border-teal-200 rounded-lg px-2.5 py-1.5 shadow-sm">
                             <i className="bi bi-file-earmark-medical text-teal-700"></i>
                             <select
                                 value={paperSize}
@@ -925,7 +953,7 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
                         {!isBulk && (
                             <button
                                 onClick={() => handleSendWa(firstPendaftar)}
-                                className="px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
+                                className="px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
                                 title="Kirim Bukti Pendaftaran via WA"
                             >
                                 <i className="bi bi-whatsapp"></i> Kirim Bukti WA
@@ -933,7 +961,7 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
                         )}
                         <button
                             onClick={handlePrint}
-                            className="px-4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-bold flex items-center gap-1.5 transition-colors shadow-xs"
+                            className="px-4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-bold flex items-center gap-1.5 transition-colors shadow-sm"
                             title={`Cetak Formulir ke Kertas ${paperSize} (Vektor Tajam)`}
                         >
                             <i className="bi bi-printer-fill"></i>{' '}

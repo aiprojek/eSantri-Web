@@ -280,6 +280,36 @@ export const raporPanduan: PanduanSectionData = {
                         </div>
                     </div>
 
+                    {/* Integrasi KKM Data Master & Deteksi Mapel Manual */}
+                    <div className="p-3.5 bg-amber-50/80 rounded-xl border border-amber-200 space-y-2 text-xs">
+                        <strong className="text-amber-950 flex items-center gap-1.5 font-bold">
+                            <i className="bi bi-bullseye text-amber-600"></i> Integrasi KKM Otomatis dari Data Master &amp; Deteksi Nama Mapel Manual
+                        </strong>
+                        <p className="text-gray-700 leading-relaxed">
+                            Standar KKM di Rapor kini terhubung langsung dengan <strong>Data Master &gt; Akademik &amp; Kurikulum &gt; Mata Pelajaran</strong> (difilter cerdas sesuai Jenjang, Kelas, dan Rombel aktif) baik ketika tabel dibuat otomatis maupun diketik manual:
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-[11px]">
+                            <div className="p-2.5 bg-white rounded-lg border border-amber-200 space-y-1">
+                                <strong className="text-amber-900 block">1. Kolom KKM Dinamis (<code>$KKM</code>)</strong>
+                                <p className="text-gray-600 leading-relaxed">
+                                    Saat memakai <strong>Generate dari Kurikulum</strong>, kolom KKM otomatis menggunakan mode <strong>KKM Dinamis (<code>$KKM</code>)</strong>. Jika suatu saat angka KKM di Data Master diubah, seluruh tampilan Rapor, Leger, dan Cetak langsung ikut diperbarui tanpa mengedit ulang grid.
+                                </p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-amber-200 space-y-1">
+                                <strong className="text-amber-900 block">2. Deteksi Mapel Ketikan Manual</strong>
+                                <p className="text-gray-600 leading-relaxed">
+                                    Walaupun nama mata pelajaran ditulis manual oleh user (misal <code>1. Fiqih Ibadah</code>, nama kitab <code>Al-Jurumiyah</code>, singkatan/kode mapel, variasi ejaan <em>Fiqih/Fikih</em>, atau kode input <code>$NAHWU</code>), tag <code>$KKM</code> &amp; rumus <code>=KKM(B6)</code> otomatis memindai baris tersebut dan mencocokkan KKM-nya ke Data Master. Jika mapel kustom belum terdaftar di Data Master, sistem otomatis memakai KKM standar rata-rata jenjang/kelas.
+                                </p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-amber-200 space-y-1">
+                                <strong className="text-amber-900 block">3. Indikator Live di Panel Properti</strong>
+                                <p className="text-gray-600 leading-relaxed">
+                                    Klik sel berisi <code>$KKM</code> atau <code>=KKM(...)</code> di <strong>Desain Rapor</strong> untuk melihat kartu diagnostik <strong>Integrasi KKM Data Master</strong> pada panel kanan — menampilkan mata pelajaran Data Master apa yang berhasil dikenali pada baris itu beserta angka KKM-nya.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Tag Kurikulum Merdeka */}
                     <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 space-y-2 text-xs">
                         <strong className="text-gray-900 flex items-center gap-1.5 font-bold">
@@ -371,8 +401,14 @@ export const raporPanduan: PanduanSectionData = {
                                         <td className="p-2">Mengubah angka Latin menjadi angka Arab Timur (contoh: <code>85</code> &rarr; <code>٨٥</code>).</td>
                                     </tr>
                                     <tr>
-                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=IF(D6&gt;=75, &quot;Tuntas&quot;, &quot;Remidi&quot;)</td>
-                                        <td className="p-2">Logika perbandingan syarat (mendukung <code>&gt;=</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>=</code>, <code>&lt;&gt;</code>; alias: <code>=JIKA(...)</code>).</td>
+                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=KKM(B6) / =KKM()</td>
+                                        <td className="p-2">
+                                            Mengambil <strong>standar KKM resmi dari Data Master</strong> untuk mata pelajaran pada sel <code>B6</code> (atau tanpa argumen <code>=KKM()</code> untuk mendeteksi otomatis mapel di baris yang sama). Mendukung nama mapel manual, nama kitab, kode mapel, maupun variabel seperti <code>=KKM($FIQIH)</code>, serta nilai cadangan opsional <code>=KKM(B6, 75)</code> bila mapel kustom belum ada di Data Master (alias: <code>=NILAI_KKM(...)</code>, <code>=STANDAR_KKM(...)</code>).
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=IF(D6&gt;=KKM(B6), &quot;Tuntas&quot;, &quot;Remidi&quot;)</td>
+                                        <td className="p-2">Logika perbandingan syarat terhadap KKM dinamis Data Master maupun angka tetap seperti <code>=IF(D6&gt;=75, &quot;Tuntas&quot;, &quot;Remidi&quot;)</code> (mendukung <code>&gt;=</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>=</code>, <code>&lt;&gt;</code>; alias: <code>=JIKA(...)</code>).</td>
                                     </tr>
                                     <tr>
                                         <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=RANK($TOTAL_NILAI, &quot;rombel&quot;)</td>
@@ -542,7 +578,13 @@ export const raporPanduan: PanduanSectionData = {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] pt-1">
+                            <div className="p-2.5 bg-white rounded-lg border border-amber-200">
+                                <strong className="text-amber-900 block mb-0.5">Kode Pemanggil KKM Data Master</strong>
+                                <p className="text-gray-600 leading-relaxed">
+                                    <code>$KKM</code> / <code>$MAPEL_KKM</code> (deteksi otomatis mapel di baris tersebut, termasuk mapel ketikan manual), <code>$KKM_STANDAR</code> (rata-rata KKM standar kelas/jenjang), serta <code>$KKM_&lt;MAPEL&gt;</code> spesifik per mapel (contoh: <code>$KKM_FIQIH</code>, <code>$KKM_NAHWU</code>, <code>$KKM_MATEMATIKA</code>).
+                                </p>
+                            </div>
                             <div className="p-2.5 bg-white rounded-lg border border-gray-200">
                                 <strong className="text-gray-800 block mb-0.5">Biodata Santri, Halaqah &amp; Kehadiran</strong>
                                 <p className="text-gray-600 leading-relaxed">

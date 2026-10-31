@@ -572,7 +572,16 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                                     <img
                                         src={settings.logoPonpesUrl || settings.logoYayasanUrl}
                                         alt="Logo Pondok"
+                                        width={56}
+                                        height={56}
                                         className="w-14 h-14 object-contain absolute left-0 top-0 hidden sm:block print:block"
+                                        style={{
+                                            width: '56px',
+                                            height: '56px',
+                                            maxWidth: '56px',
+                                            maxHeight: '56px',
+                                            objectFit: 'contain'
+                                        }}
                                         referrerPolicy="no-referrer"
                                     />
                                 )}

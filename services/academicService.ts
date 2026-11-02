@@ -270,6 +270,126 @@ const splitTopLevelArgs = (inner: string): string[] => {
     return args;
 };
 
+// --- HELPER: REWRITE EXCEL COMPARISON & CONCAT OPERATORS SAFELY ---
+const rewriteExcelOperatorsRecursive = (expr: string): string => {
+    const trimmed = expr.trim();
+    if (!trimmed) return trimmed;
+
+    // 1. Recursively rewrite inside balanced parentheses (...)
+    let withParensRewritten = '';
+    let i = 0;
+    let quote: '"' | "'" | null = null;
+    while (i < trimmed.length) {
+        const ch = trimmed[i];
+        if (quote) {
+            withParensRewritten += ch;
+            if (ch === quote && trimmed[i - 1] !== '\\') quote = null;
+            i++;
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            withParensRewritten += ch;
+            i++;
+            continue;
+        }
+        if (ch === '(') {
+            let depth = 0;
+            let iq: '"' | "'" | null = null;
+            let closeIdx = -1;
+            for (let j = i; j < trimmed.length; j++) {
+                const jc = trimmed[j];
+                if (iq) {
+                    if (jc === iq && trimmed[j - 1] !== '\\') iq = null;
+                    continue;
+                }
+                if (jc === '"' || jc === "'") {
+                    iq = jc;
+                    continue;
+                }
+                if (jc === '(') depth++;
+                else if (jc === ')') {
+                    depth--;
+                    if (depth === 0) {
+                        closeIdx = j;
+                        break;
+                    }
+                }
+            }
+            if (closeIdx !== -1) {
+                const innerRaw = trimmed.slice(i + 1, closeIdx);
+                if (innerRaw.trim() === '') {
+                    withParensRewritten += '()';
+                } else {
+                    const innerArgs = splitTopLevelArgs(innerRaw).map(a => rewriteExcelOperatorsRecursive(a));
+                    withParensRewritten += `(${innerArgs.join(', ')})`;
+                }
+                i = closeIdx + 1;
+                continue;
+            }
+        }
+        withParensRewritten += ch;
+        i++;
+    }
+
+    // 2. Rewrite top-level relational operators (>=, <=, <>, !=, ==, =, >, <) into excelCmp(lhs, op, rhs)
+    const relOps = ['>=', '<=', '<>', '!=', '==', '=', '>', '<'] as const;
+    for (const op of relOps) {
+        let q: '"' | "'" | null = null;
+        let d = 0;
+        for (let k = 0; k <= withParensRewritten.length - op.length; k++) {
+            const c = withParensRewritten[k];
+            if (q) {
+                if (c === q && withParensRewritten[k - 1] !== '\\') q = null;
+                continue;
+            }
+            if (c === '"' || c === "'") { q = c; continue; }
+            if (c === '(') { d++; continue; }
+            if (c === ')') { d = Math.max(0, d - 1); continue; }
+            if (d === 0 && withParensRewritten.slice(k, k + op.length) === op) {
+                if (op === '=' && (withParensRewritten[k - 1] === '>' || withParensRewritten[k - 1] === '<' || withParensRewritten[k - 1] === '!' || withParensRewritten[k + 1] === '=')) {
+                    continue;
+                }
+                if ((op === '>' || op === '<') && (withParensRewritten[k + 1] === '=' || withParensRewritten[k + 1] === '>' || withParensRewritten[k - 1] === '<')) {
+                    continue;
+                }
+                const lhs = rewriteExcelOperatorsRecursive(withParensRewritten.slice(0, k));
+                const rhs = rewriteExcelOperatorsRecursive(withParensRewritten.slice(k + op.length));
+                return `excelCmp(${lhs}, '${op}', ${rhs})`;
+            }
+        }
+    }
+
+    // 3. Rewrite top-level Excel string concatenation '&' into excelConcat(...)
+    const concatParts: string[] = [];
+    let curPart = '';
+    let cq: '"' | "'" | null = null;
+    let cd = 0;
+    for (let k = 0; k < withParensRewritten.length; k++) {
+        const c = withParensRewritten[k];
+        if (cq) {
+            curPart += c;
+            if (c === cq && withParensRewritten[k - 1] !== '\\') cq = null;
+            continue;
+        }
+        if (c === '"' || c === "'") { cq = c; curPart += c; continue; }
+        if (c === '(') { cd++; curPart += c; continue; }
+        if (c === ')') { cd = Math.max(0, cd - 1); curPart += c; continue; }
+        if (cd === 0 && c === '&' && withParensRewritten[k - 1] !== '&' && withParensRewritten[k + 1] !== '&') {
+            concatParts.push(curPart.trim());
+            curPart = '';
+            continue;
+        }
+        curPart += c;
+    }
+    if (concatParts.length > 0) {
+        concatParts.push(curPart.trim());
+        return `excelConcat(${concatParts.map(p => rewriteExcelOperatorsRecursive(p)).join(', ')})`;
+    }
+
+    return withParensRewritten;
+};
+
 // --- HELPER: CONVERT EXCEL SYNTAX TO JS ---
 const convertFormulaToJs = (expression: string): string => {
     let raw = (expression || '').trim();
@@ -277,34 +397,33 @@ const convertFormulaToJs = (expression: string): string => {
         raw = raw.substring(1).trim();
     }
 
-    const segments = raw.split(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g);
+    const prewritten = rewriteExcelOperatorsRecursive(raw);
+    const segments = prewritten.split(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g);
     return segments.map((seg, idx) => {
         if (idx % 2 === 1) return seg; // preserve string literals
 
         let js = seg;
         // Support Indonesian semicolon argument separator
         js = js.replace(/;/g, ',');
-        // Excel comparison operators
-        js = js.replace(/<>/g, '!=');
-        js = js.replace(/(?<![<>!=])=(?!=)/g, '==');
-        // Excel string concatenation operator &
-        js = js.replace(/(?<!&)&(?!&)/g, " + '' + ");
 
         // Replace $KEY with function call
         js = js.replace(/\$([a-zA-Z0-9_]+)\b/g, "getValue('$1', rowId)");
 
         // Excel Boolean Constants
-        js = js.replace(/\bTRUE\b/gi, 'true');
-        js = js.replace(/\bFALSE\b/gi, 'false');
+        js = js.replace(/\b(?:TRUE|BENAR)\b/gi, 'true');
+        js = js.replace(/\b(?:FALSE|SALAH)\b/gi, 'false');
 
         // Class Cohort Average & KKM Functions (must run before generic RATA2/AVERAGE)
-        js = js.replace(/\b(?:RATA2_KELAS|RERATA_KELAS|AVERAGE_KELAS|AVG_CLASS|NRK)\s*\(/gi, 'rata2Kelas(rowId, ');
+        js = js.replace(/\b(?:RATA2_KELAS|RERATA_KELAS|RATA_KELAS|AVERAGE_KELAS|AVG_KELAS|AVG_CLASS|NRK)\s*\(/gi, 'rata2Kelas(rowId, ');
         js = js.replace(/\b(?:KKM|NILAI_KKM|STANDAR_KKM)\s*\(/gi, 'excelKkm(rowId, ');
 
-        // Conditional Aggregation Functions (must run before generic COUNT/AVERAGE)
-        js = js.replace(/\bAVERAGEIF\s*\(/gi, 'excelAverageIf(');
-        js = js.replace(/\bCOUNTIF\s*\(/gi, 'excelCountIf(');
-        js = js.replace(/\bCOUNT\s*\(/gi, 'excelCount(');
+        // Conditional & Blank-Check Aggregation Functions (must run before generic COUNT/AVERAGE)
+        js = js.replace(/\b(?:ISBLANK|KOSONG)\s*\(/gi, 'excelIsBlank(');
+        js = js.replace(/\b(?:COUNTBLANK|HITUNG_KOSONG)\s*\(/gi, 'excelCountBlank(');
+        js = js.replace(/\b(?:COUNTA|HITUNG_ISI)\s*\(/gi, 'excelCountA(');
+        js = js.replace(/\b(?:AVERAGEIF|RATA2_JIKA|RERATA_JIKA)\s*\(/gi, 'excelAverageIf(');
+        js = js.replace(/\b(?:COUNTIF|HITUNG_JIKA)\s*\(/gi, 'excelCountIf(');
+        js = js.replace(/\b(?:COUNT|HITUNG)\s*\(/gi, 'excelCount(');
 
         // Numeric & Aggregation Functions
         js = js.replace(/\b(?:RATA2|AVERAGE|AVG|RERATA)\s*\(/gi, 'average(');
@@ -320,22 +439,22 @@ const convertFormulaToJs = (expression: string): string => {
         js = js.replace(/\b(?:FIXED|DESIMAL)\s*\(/gi, 'excelFixed(');
 
         // Logic Functions (IFERROR & IFS before IF)
-        js = js.replace(/\bIFERROR\s*\(/gi, 'excelIfError(');
+        js = js.replace(/\b(?:IFERROR|JIKA_ERROR)\s*\(/gi, 'excelIfError(');
         js = js.replace(/\bIFS\s*\(/gi, 'excelIfs(');
         js = js.replace(/\b(?:IF|JIKA)\s*\(/gi, 'excelIf(');
         js = js.replace(/\b(?:AND|DAN)\s*\(/gi, 'excelAnd(');
         js = js.replace(/\b(?:OR|ATAU)\s*\(/gi, 'excelOr(');
-        js = js.replace(/\b(?:NOT|TIDAK)\s*\(/gi, 'excelNot(');
+        js = js.replace(/\b(?:NOT|TIDAK|BUKAN)\s*\(/gi, 'excelNot(');
 
         // Predikat, Terbilang, Arabic & Text Functions
         js = js.replace(/\b(?:PREDIKAT|HURUF|TAQDIR)\s*\(/gi, 'excelPredikat(');
         js = js.replace(/\bTERBILANG\s*\(/gi, 'terbilang(');
         js = js.replace(/\b(?:ARAB|ANGKA_ARAB)\s*\(/gi, 'angkaKeArab(');
-        js = js.replace(/\bCONCAT_SPASI\s*\(/gi, 'excelConcatSpasi(');
+        js = js.replace(/\b(?:CONCAT_SPASI|GABUNG_SPASI|TEXTJOIN_SPASI)\s*\(/gi, 'excelConcatSpasi(');
         js = js.replace(/\b(?:CONCATENATE|CONCAT|GABUNG)\s*\(/gi, 'excelConcat(');
         js = js.replace(/\b(?:UPPER|BESAR|KAPITAL)\s*\(/gi, 'excelUpper(');
         js = js.replace(/\b(?:LOWER|KECIL)\s*\(/gi, 'excelLower(');
-        js = js.replace(/\bPROPER\s*\(/gi, 'excelProper(');
+        js = js.replace(/\b(?:PROPER|JUDUL|TITLE|CAPITALIZE)\s*\(/gi, 'excelProper(');
 
         // Prevent inline nested RANK crash in row context
         js = js.replace(/\b(?:RANK|PERINGKAT)\s*\(/gi, '0 * (');
@@ -1176,47 +1295,54 @@ export const generateRaporFormHtml = (
             }, actionUrl ? 9000 : 4500);
         }
 
+        function excelIsBlank(v) {
+            return v === null || v === undefined || String(v).trim() === '' || String(v).trim() === '-';
+        }
         function getValue(key, rowId) { 
             const el = document.getElementById('val_' + rowId + '_' + key) || document.getElementById('card_val_' + rowId + '_' + key); 
-            if (!el) return 0; 
+            if (!el) return null; 
             const raw = String(el.value ?? '').trim(); 
-            if (raw === '') return 0; 
+            if (raw === '' || raw === '-') return null; 
             const normalized = raw.indexOf(',') !== -1 && raw.indexOf('.') === -1 ? raw.replace(',', '.') : raw;
             if (!isNaN(Number(normalized)) && normalized !== '') return Number(normalized); 
             return raw; 
         }
-        function average(...args) { const validArgs = args.filter(a => typeof a === 'number' && !isNaN(a)); if (validArgs.length === 0) return 0; return validArgs.reduce((a,b)=>a+b,0)/validArgs.length; }
-        function sum(...args) { return args.reduce((a, b) => a + (typeof b === 'number' && !isNaN(b) ? b : 0), 0); }
-        function excelMin(...args) { const valid = args.filter(a => typeof a === 'number' && !isNaN(a)); return valid.length === 0 ? 0 : Math.min(...valid); }
-        function excelMax(...args) { const valid = args.filter(a => typeof a === 'number' && !isNaN(a)); return valid.length === 0 ? 0 : Math.max(...valid); }
+        function average(...args) { const validArgs = args.filter(a => typeof a === 'number' && !isNaN(a)); if (validArgs.length === 0) return null; return validArgs.reduce((a,b)=>a+b,0)/validArgs.length; }
+        function sum(...args) { const validArgs = args.filter(a => typeof a === 'number' && !isNaN(a)); if (validArgs.length === 0) return null; return validArgs.reduce((a, b) => a + b, 0); }
+        function excelMin(...args) { const valid = args.filter(a => typeof a === 'number' && !isNaN(a)); return valid.length === 0 ? null : Math.min(...valid); }
+        function excelMax(...args) { const valid = args.filter(a => typeof a === 'number' && !isNaN(a)); return valid.length === 0 ? null : Math.max(...valid); }
         function excelRound(num, digits = 0) {
+            if (excelIsBlank(num)) return null;
             const n = Number(num);
             const d = Math.max(0, Math.min(10, Math.trunc(Number(digits) || 0)));
-            if (!isFinite(n)) return 0;
+            if (!isFinite(n)) return null;
             const factor = Math.pow(10, d);
             const rounded = Math.floor(Math.abs(n) * factor + 0.5 + 1e-12) / factor;
             return n < 0 ? -rounded : rounded;
         }
         function excelRoundUp(num, digits = 0) {
+            if (excelIsBlank(num)) return null;
             const n = Number(num);
             const d = Math.max(0, Math.min(10, Math.trunc(Number(digits) || 0)));
-            if (!isFinite(n)) return 0;
+            if (!isFinite(n)) return null;
             const factor = Math.pow(10, d);
             const ceiled = Math.ceil(Math.abs(n) * factor - 1e-12) / factor;
             return n < 0 ? -ceiled : ceiled;
         }
         function excelRoundDown(num, digits = 0) {
+            if (excelIsBlank(num)) return null;
             const n = Number(num);
             const d = Math.max(0, Math.min(10, Math.trunc(Number(digits) || 0)));
-            if (!isFinite(n)) return 0;
+            if (!isFinite(n)) return null;
             const factor = Math.pow(10, d);
             const floored = Math.floor(Math.abs(n) * factor + 1e-12) / factor;
             return n < 0 ? -floored : floored;
         }
         function excelFixed(num, digits = 2) {
+            if (excelIsBlank(num)) return '-';
             const n = Number(num);
             const d = Math.max(0, Math.min(6, Math.trunc(Number(digits ?? 2))));
-            if (!isFinite(n)) return (0).toFixed(d);
+            if (!isFinite(n)) return '-';
             return excelRound(n, d).toFixed(d);
         }
         function formatFormulaOutput(val, decimalPlaces) {
@@ -1232,23 +1358,24 @@ export const generateRaporFormHtml = (
             return Number.isInteger(r2) ? String(r2) : String(Number(r2.toFixed(2)));
         }
         function excelPredikat(score, mode = 'huruf') {
-            const n = Number(score);
+            if (excelIsBlank(score)) return '-';
+            const n = Number(String(score).replace(',', '.'));
             if (isNaN(n) || !isFinite(n)) return '-';
             const m = String(mode || 'huruf').toLowerCase().trim();
             const tier = n >= 90 ? 0 : n >= 80 ? 1 : n >= 70 ? 2 : n >= 60 ? 3 : 4;
             if (m === 'indo' || m === 'indonesia' || m === 'deskripsi') {
                 return ['Sangat Baik', 'Baik', 'Cukup', 'Kurang', 'Sangat Kurang'][tier];
             }
-            if (m === 'taqdir' || m === 'arab_latin' || m === 'latin') {
+            if (m === 'taqdir' || m === 'arab_latin' || m === 'latin' || m === 'pesantren') {
                 return ['Mumtaz', 'Jayyid Jiddan', 'Jayyid', 'Maqbul', 'Rasib'][tier];
             }
-            if (m === 'arab') {
+            if (m === 'arab' || m === 'arab_script') {
                 return ['ممتاز', 'جيد جدا', 'جيد', 'مقبول', 'راسب'][tier];
             }
             return ['A', 'B', 'C', 'D', 'E'][tier];
         }
         function angkaKeArab(val) {
-            if (val === null || val === undefined || val === '') return '';
+            if (excelIsBlank(val)) return '-';
             const digits = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
             const s = String(val);
             let out = '';
@@ -1271,21 +1398,84 @@ export const generateRaporFormHtml = (
             }
             return out;
         }
-        function terbilang(n) { if (isNaN(n) || n === '') return ''; var num = Math.round(Number(n)); var words = ["nol", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"]; if (num < 0) return "minus " + terbilang(-num); if (num < 12) return words[num]; if (num < 20) return terbilang(num - 10) + " belas"; if (num < 100) return terbilang(Math.floor(num / 10)) + " puluh" + (num % 10 === 0 ? "" : " " + terbilang(num % 10)); if (num < 200) return "seratus" + (num % 100 === 0 ? "" : " " + terbilang(num % 100)); if (num < 1000) return terbilang(Math.floor(num / 100)) + " ratus" + (num % 100 === 0 ? "" : " " + terbilang(num % 100)); return num.toString(); }
-        function excelIf(c, t, f) { return c ? t : f; }
+        function terbilang(n) {
+            if (excelIsBlank(n)) return '-';
+            const parsed = Number(String(n).replace(',', '.'));
+            if (isNaN(parsed) || !isFinite(parsed)) return '-';
+            var num = Math.round(parsed);
+            var words = ["Nol", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
+            if (num < 0) return "Minus " + terbilang(-num);
+            if (num < 12) return words[num];
+            if (num < 20) return terbilang(num - 10) + " Belas";
+            if (num < 100) return terbilang(Math.floor(num / 10)) + " Puluh" + (num % 10 === 0 ? "" : " " + terbilang(num % 10));
+            if (num < 200) return "Seratus" + (num % 100 === 0 ? "" : " " + terbilang(num % 100));
+            if (num < 1000) return terbilang(Math.floor(num / 100)) + " Ratus" + (num % 100 === 0 ? "" : " " + terbilang(num % 100));
+            return num.toString();
+        }
+        function excelCmp(lhs, op, rhs) {
+            const lEmpty = excelIsBlank(lhs);
+            const rEmpty = excelIsBlank(rhs);
+            const lStr = lEmpty ? '' : String(lhs).trim();
+            const rStr = rEmpty ? '' : String(rhs).trim();
+            const lNum = !lEmpty ? Number(lStr.replace(',', '.')) : NaN;
+            const rNum = !rEmpty ? Number(rStr.replace(',', '.')) : NaN;
+            const lIsNum = !lEmpty && !isNaN(lNum) && isFinite(lNum);
+            const rIsNum = !rEmpty && !isNaN(rNum) && isFinite(rNum);
+            if (lIsNum && rIsNum) {
+                if (op === '>=') return lNum >= rNum;
+                if (op === '<=') return lNum <= rNum;
+                if (op === '>') return lNum > rNum;
+                if (op === '<') return lNum < rNum;
+                if (op === '!=' || op === '<>') return Math.abs(lNum - rNum) > 1e-9;
+                return Math.abs(lNum - rNum) <= 1e-9;
+            }
+            if ((op === '>=' || op === '<=' || op === '>' || op === '<') && ((lIsNum && rEmpty) || (rIsNum && lEmpty))) {
+                return null;
+            }
+            if (lEmpty && rEmpty) {
+                return (op === '!=' || op === '<>') ? false : true;
+            }
+            if (lEmpty !== rEmpty) {
+                return (op === '!=' || op === '<>') ? true : false;
+            }
+            const lLow = lStr.toLowerCase();
+            const rLow = rStr.toLowerCase();
+            if (op === '!=' || op === '<>') return lLow !== rLow;
+            if (op === '>') return lLow.localeCompare(rLow) > 0;
+            if (op === '<') return lLow.localeCompare(rLow) < 0;
+            if (op === '>=') return lLow.localeCompare(rLow) >= 0;
+            if (op === '<=') return lLow.localeCompare(rLow) <= 0;
+            return lLow === rLow;
+        }
+        function excelIf(c, t, f) {
+            if (c === null) return (f === '' || f === '-') ? f : '-';
+            return c ? t : (f !== undefined ? f : '');
+        }
         function excelIfs(...args) {
             for (let i = 0; i + 1 < args.length; i += 2) {
+                if (args[i] === null) return '-';
                 if (args[i]) return args[i + 1];
             }
-            return '';
+            return '-';
         }
         function excelIfError(val, fallback = '-') {
-            if (val === null || val === undefined || (typeof val === 'number' && (!isFinite(val) || isNaN(val)))) return fallback;
+            if (val === null || val === undefined || val === '' || val === '-' || (typeof val === 'number' && (!isFinite(val) || isNaN(val)))) return fallback;
             return val;
         }
-        function excelAnd(...args) { return args.every(Boolean); }
-        function excelOr(...args) { return args.some(Boolean); }
-        function excelNot(v) { return !Boolean(v); }
+        function excelAnd(...args) {
+            if (args.some(a => a === false)) return false;
+            if (args.some(a => a === null)) return null;
+            return args.every(Boolean);
+        }
+        function excelOr(...args) {
+            if (args.some(a => a === true)) return true;
+            if (args.some(a => a === null)) return null;
+            return args.some(Boolean);
+        }
+        function excelNot(v) {
+            if (v === null) return null;
+            return !Boolean(v);
+        }
         function excelConcat(...args) { return args.map(a => (a === null || a === undefined) ? '' : String(a)).join(''); }
         function excelConcatSpasi(...args) { return args.map(a => (a === null || a === undefined) ? '' : String(a).trim()).filter(Boolean).join(' '); }
         function excelUpper(v) { return String(v ?? '').toUpperCase(); }
@@ -1297,11 +1487,14 @@ export const generateRaporFormHtml = (
             const crit = String(criteria ?? '').trim();
             const m = crit.match(/^(>=|<=|!=|<>|>|<|=)\\s*(.*)$/);
             const op = m ? m[1] : '=';
-            const rhsRaw = m ? m[2].trim() : crit;
-            const lhsNum = typeof val === 'number' ? val : Number(String(val ?? '').replace(',', '.'));
-            const rhsNum = Number(rhsRaw.replace(',', '.'));
-            const bothNum = !isNaN(lhsNum) && !isNaN(rhsNum) && rhsRaw !== '';
-            if (bothNum) {
+            const rhsRaw = m ? m[2].trim().replace(/^["']|["']$/g, '') : crit.replace(/^["']|["']$/g, '');
+            const valEmpty = excelIsBlank(val);
+            const rhsEmpty = rhsRaw === '' || rhsRaw === '-';
+            const lhsNum = !valEmpty ? (typeof val === 'number' ? val : Number(String(val).replace(',', '.'))) : NaN;
+            const rhsNum = !rhsEmpty ? Number(rhsRaw.replace(',', '.')) : NaN;
+            const lhsIsNum = !valEmpty && !isNaN(lhsNum) && isFinite(lhsNum);
+            const rhsIsNum = !rhsEmpty && !isNaN(rhsNum) && isFinite(rhsNum);
+            if (lhsIsNum && rhsIsNum) {
                 if (op === '>') return lhsNum > rhsNum;
                 if (op === '>=') return lhsNum >= rhsNum;
                 if (op === '<') return lhsNum < rhsNum;
@@ -1309,13 +1502,24 @@ export const generateRaporFormHtml = (
                 if (op === '!=' || op === '<>') return Math.abs(lhsNum - rhsNum) > 1e-9;
                 return Math.abs(lhsNum - rhsNum) <= 1e-9;
             }
+            if ((op === '>' || op === '>=' || op === '<' || op === '<=') && rhsIsNum && !lhsIsNum) {
+                return false;
+            }
+            if (valEmpty && rhsEmpty) return (op === '!=' || op === '<>') ? false : true;
+            if (valEmpty !== rhsEmpty) return (op === '!=' || op === '<>') ? true : false;
             const lhsStr = String(val ?? '').trim().toLowerCase();
-            const rhsStr = rhsRaw.replace(/^["']|["']$/g, '').trim().toLowerCase();
+            const rhsStr = rhsRaw.trim().toLowerCase();
             if (op === '!=' || op === '<>') return lhsStr !== rhsStr;
             return lhsStr === rhsStr;
         }
         function excelCount(...args) {
-            return args.filter(a => typeof a === 'number' && !isNaN(a) && a > 0).length;
+            return args.filter(a => typeof a === 'number' && !isNaN(a)).length;
+        }
+        function excelCountA(...args) {
+            return args.filter(a => !excelIsBlank(a)).length;
+        }
+        function excelCountBlank(...args) {
+            return args.filter(a => excelIsBlank(a)).length;
         }
         function excelCountIf(...args) {
             if (args.length < 2) return 0;
@@ -1323,10 +1527,10 @@ export const generateRaporFormHtml = (
             return args.slice(0, -1).filter(v => matchExcelCriteria(v, criteria)).length;
         }
         function excelAverageIf(...args) {
-            if (args.length < 2) return 0;
+            if (args.length < 2) return null;
             const criteria = args[args.length - 1];
             const matched = args.slice(0, -1).filter(v => typeof v === 'number' && !isNaN(v) && matchExcelCriteria(v, criteria));
-            if (matched.length === 0) return 0;
+            if (matched.length === 0) return null;
             return matched.reduce((a, b) => a + b, 0) / matched.length;
         }
         function normMapelKeyJs(raw) {
@@ -1356,7 +1560,7 @@ export const generateRaporFormHtml = (
         }
         function rata2Kelas(rowId, colKey) {
             const key = String(colKey ?? '').trim().replace(/^\\$+/g, '');
-            if (!key) return 0;
+            if (!key) return null;
             const sMeta = santriById.get(Number(rowId));
             const targetRombel = sMeta ? Number(sMeta.rombelId || 0) : 0;
             const cohort = targetRombel > 0 ? santriList.filter(s => Number(s.rombelId) === targetRombel) : santriList;
@@ -1369,7 +1573,7 @@ export const generateRaporFormHtml = (
                 const num = Number(raw.replace(',', '.'));
                 if (!isNaN(num) && isFinite(num)) vals.push(num);
             });
-            if (vals.length === 0) return 0;
+            if (vals.length === 0) return null;
             return vals.reduce((a, b) => a + b, 0) / vals.length;
         }
 
@@ -1385,16 +1589,17 @@ export const generateRaporFormHtml = (
                     else if (scope === 'jenjang') gKey = 'jenjang_' + s.jenjangId;
                     
                     if (!groups[gKey]) groups[gKey] = [];
-                    const val = typeof cfg.evalSource === 'function' ? cfg.evalSource(s.id) : 0;
-                    groups[gKey].push({ id: s.id, val });
+                    const rawVal = typeof cfg.evalSource === 'function' ? cfg.evalSource(s.id) : null;
+                    const hasScore = rawVal !== null && rawVal !== undefined && rawVal !== '' && rawVal !== '-' && !isNaN(Number(rawVal));
+                    groups[gKey].push({ id: s.id, val: hasScore ? Number(rawVal) : null, hasScore });
                 });
 
                 Object.values(groups).forEach(studentGroup => {
-                    const sorted = [...studentGroup].sort((a,b) => b.val - a.val);
+                    const scoredOnly = studentGroup.filter(item => item.hasScore).sort((a,b) => b.val - a.val);
                     const rankMap = {};
-                    sorted.forEach((item, index) => {
-                        if (index > 0 && Math.abs(item.val - sorted[index - 1].val) < 1e-9) {
-                            rankMap[item.id] = rankMap[sorted[index - 1].id];
+                    scoredOnly.forEach((item, index) => {
+                        if (index > 0 && Math.abs(item.val - scoredOnly[index - 1].val) < 1e-9) {
+                            rankMap[item.id] = rankMap[scoredOnly[index - 1].id];
                         } else {
                             rankMap[item.id] = index + 1;
                         }
@@ -1402,7 +1607,8 @@ export const generateRaporFormHtml = (
                     studentGroup.forEach(item => {
                         const targetEl = document.getElementById('val_' + item.id + '_' + cfg.targetKey);
                         const cardTargetEl = document.getElementById('card_val_' + item.id + '_' + cfg.targetKey);
-                        const rankVal = (cfg.limit > 0 && rankMap[item.id] > cfg.limit) ? "" : rankMap[item.id];
+                        const rk = rankMap[item.id];
+                        const rankVal = !rk ? "-" : ((cfg.limit > 0 && rk > cfg.limit) ? "-" : rk);
                         if (targetEl) targetEl.value = rankVal;
                         if (cardTargetEl) cardTargetEl.value = rankVal;
                     });

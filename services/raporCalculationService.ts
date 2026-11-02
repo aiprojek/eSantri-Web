@@ -537,9 +537,9 @@ export const buildRombelLegerData = (params: {
     });
 
     // 2. Assign standard rankings (ranked by total score descending; tied scores get the same rank)
-    // Only rank students who have at least one grade filled; others get rank 0 / unranked
+    // Only rank students who have at least one numeric grade filled; others get rank 0 / unranked
     const studentsWithScores = studentRows
-        .filter(s => s.totalNilai > 0)
+        .filter(s => Object.keys(s.numericGrades).length > 0)
         .sort((a, b) => b.totalNilai - a.totalNilai);
 
     const rankMap = new Map<number, number>();
@@ -553,7 +553,7 @@ export const buildRombelLegerData = (params: {
 
     const students: StudentLegerRow[] = studentRows.map(row => ({
         ...row,
-        ranking: rankMap.get(row.santri.id) || (row.totalNilai > 0 ? 1 : 0)
+        ranking: rankMap.get(row.santri.id) || 0
     }));
 
     // 3. Subject Stats (Highest, Lowest, Average per subject)
@@ -589,7 +589,7 @@ export const buildRombelLegerData = (params: {
     });
 
     // 4. Class summary
-    const studentsWithAvg = students.filter(s => s.rataRata > 0);
+    const studentsWithAvg = students.filter(s => Object.keys(s.numericGrades).length > 0);
     const classAverage = studentsWithAvg.length > 0
         ? Math.round(((studentsWithAvg.reduce((acc, s) => acc + s.rataRata, 0) / studentsWithAvg.length) + Number.EPSILON) * decFactor) / decFactor
         : 0;
@@ -699,6 +699,7 @@ export const exportLegerToExcel = async (params: {
 
     // Rows for each student
     rombelData.students.forEach((row, idx) => {
+        const hasAnyNumericScore = Object.keys(row.numericGrades).length > 0;
         const studentRow = [
             idx + 1,
             row.santri.nis || '',
@@ -706,9 +707,9 @@ export const exportLegerToExcel = async (params: {
             row.santri.namaLengkap,
             row.santri.jenisKelamin || '-',
             ...rombelData.gradeKeys.map(k => row.numericGrades[k.key] ?? (row.grades[k.key] || '')),
-            row.totalNilai > 0 ? Number((Math.round((row.totalNilai + Number.EPSILON) * decFactor) / decFactor).toFixed(decimalPlaces)) : '',
-            row.rataRata > 0 ? Number((Math.round((row.rataRata + Number.EPSILON) * decFactor) / decFactor).toFixed(decimalPlaces)) : '',
-            row.rataRata > 0 ? row.predikat.predikat : '',
+            hasAnyNumericScore ? Number((Math.round((row.totalNilai + Number.EPSILON) * decFactor) / decFactor).toFixed(decimalPlaces)) : '',
+            hasAnyNumericScore ? Number((Math.round((row.rataRata + Number.EPSILON) * decFactor) / decFactor).toFixed(decimalPlaces)) : '',
+            hasAnyNumericScore ? row.predikat.predikat : '',
             row.ranking > 0 ? row.ranking : '',
             row.sakit,
             row.izin,
@@ -731,11 +732,11 @@ export const exportLegerToExcel = async (params: {
         'RATA-RATA KELAS',
         '',
         ...rombelData.gradeKeys.map(k => {
-            const avg = rombelData.subjectStats[k.key]?.average;
-            return avg ? Number((Math.round((avg + Number.EPSILON) * decFactor) / decFactor).toFixed(decimalPlaces)) : '';
+            const stat = rombelData.subjectStats[k.key];
+            return stat && stat.count > 0 ? Number((Math.round((stat.average + Number.EPSILON) * decFactor) / decFactor).toFixed(decimalPlaces)) : '';
         }),
         '',
-        rombelData.classAverage
+        rombelData.students.some(s => Object.keys(s.numericGrades).length > 0)
             ? Number((Math.round((rombelData.classAverage + Number.EPSILON) * decFactor) / decFactor).toFixed(decimalPlaces))
             : '',
         '',
@@ -756,8 +757,11 @@ export const exportLegerToExcel = async (params: {
         '',
         'NILAI TERTINGGI',
         '',
-        ...rombelData.gradeKeys.map(k => rombelData.subjectStats[k.key]?.highest || ''),
-        rombelData.classHighest || '',
+        ...rombelData.gradeKeys.map(k => {
+            const stat = rombelData.subjectStats[k.key];
+            return stat && stat.count > 0 ? stat.highest : '';
+        }),
+        rombelData.students.some(s => Object.keys(s.numericGrades).length > 0) ? rombelData.classHighest : '',
         '',
         '',
         '',
@@ -777,8 +781,11 @@ export const exportLegerToExcel = async (params: {
         '',
         'NILAI TERENDAH',
         '',
-        ...rombelData.gradeKeys.map(k => rombelData.subjectStats[k.key]?.lowest || ''),
-        rombelData.classLowest || '',
+        ...rombelData.gradeKeys.map(k => {
+            const stat = rombelData.subjectStats[k.key];
+            return stat && stat.count > 0 ? stat.lowest : '';
+        }),
+        rombelData.students.some(s => Object.keys(s.numericGrades).length > 0) ? rombelData.classLowest : '',
         '',
         '',
         '',

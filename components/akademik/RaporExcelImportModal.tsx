@@ -155,6 +155,11 @@ export const RaporExcelImportModal: React.FC<RaporExcelImportModalProps> = ({
                         </button>
                     </div>
 
+                    <div className="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 leading-relaxed">
+                        <i className="bi bi-info-circle-fill text-teal-600 mr-1.5"></i>
+                        <strong className="text-slate-800">Ketentuan Mapel Belum Diajarkan:</strong> Isi sel Excel dengan tanda strip <code className="px-1 py-0.5 bg-white border border-slate-300 rounded font-mono font-bold text-teal-800">-</code> agar terhitung <strong>Lengkap 100%</strong> tanpa membagi rata-rata. Sel kosong akan dilewati (belum dinilai), sedangkan angka <code className="px-1 py-0.5 bg-white border border-slate-300 rounded font-mono font-bold text-rose-700">0</code> dibaca sebagai nilai nol murni.
+                    </div>
+
                     {/* File Dropzone */}
                     <div
                         onClick={() => fileInputRef.current?.click()}

@@ -30,7 +30,12 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { findStrictTeacherTtdAsset, reconcileDigitalAssetsWithSettings } from '../../utils/digitalAssetUtils';
-import { buildRombelLegerData, StudentLegerRow } from '../../services/raporCalculationService';
+import {
+    assignCohortRankings,
+    buildRombelLegerData,
+    RankingBasis,
+    StudentLegerRow
+} from '../../services/raporCalculationService';
 import { getTemplateSheets } from '../../services/raporExcelService';
 import { RaporTitleEditModal } from './modals/RaporTitleEditModal';
 import { RaporWhatsAppModal } from './modals/RaporWhatsAppModal';
@@ -301,8 +306,10 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
         [rawTitle, sheetResolveContext]
     );
 
+    const hasStandaloneTitle = !showKop && shouldShowTitle && Boolean(resolvedTitle);
+
     const renderDocumentHeader = () => {
-        if (!showKop && !shouldShowBiodataHeader) return null;
+        if (!showKop && !hasStandaloneTitle && !shouldShowBiodataHeader) return null;
         return (
             <div>
                 {showKop && (
@@ -310,6 +317,18 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                         settings={settings}
                         title={shouldShowTitle ? resolvedTitle : undefined}
                     />
+                )}
+                {hasStandaloneTitle && resolvedTitle && (
+                    <div className="text-center mb-4 space-y-0.5">
+                        {resolvedTitle.split('\n').map((line, lIdx) => (
+                            <div
+                                key={lIdx}
+                                className={`${lIdx === 0 ? 'font-black text-sm text-slate-900 tracking-wide uppercase' : 'font-semibold text-xs text-slate-700'}`}
+                            >
+                                {line}
+                            </div>
+                        ))}
+                    </div>
                 )}
                 {shouldShowBiodataHeader && (
                     <div className="mb-3">
@@ -407,7 +426,7 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
         };
     }, [sheet, measureWidth, showKop, shouldShowTitle, resolvedTitle, shouldShowBiodataHeader, santri.id, sheetRowHeights]);
 
-    const fallbackHeaderH = (showKop ? 150 : 0) + (shouldShowBiodataHeader ? 65 : 0);
+    const fallbackHeaderH = (showKop ? 150 : (hasStandaloneTitle ? 48 : 0)) + (shouldShowBiodataHeader ? 65 : 0);
     const effectiveHeaderH = measuredMetrics ? measuredMetrics.headerHeight : fallbackHeaderH;
     const effectiveRowHeights = useMemo(
         () =>
@@ -971,7 +990,7 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
 };
 
 export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, initialContext }) => {
-    const { settings, onUpdateSettings, showToast, currentUser } = useAppContext();
+    const { settings, onUpdateSettings, showToast, showConfirmation, currentUser } = useAppContext();
     const { santriList } = useSantriContext();
     const isWaliKelas = currentUser?.role === 'wali_kelas';
     const canLockRapor = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
@@ -1056,6 +1075,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
     const [showKop, setShowKop] = useState<boolean>(true);
     const [marginMode, setMarginMode] = useState<'normal' | 'narrow' | 'none'>('normal');
     const [rankingDisplayLimit, setRankingDisplayLimit] = useState<RankingDisplayLimit>('all');
+    const [rankingBasis, setRankingBasis] = useState<RankingBasis>('auto');
     const [fitToPage, setFitToPage] = useState<boolean>(true);
     const [fitWidthPages, setFitWidthPages] = useState<PageFitCount>(1);
     const [fitHeightPages, setFitHeightPages] = useState<PageFitCount>(1);
@@ -1126,6 +1146,9 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                 setRepeatHeaderRows(normalized.repeatHeaderRows);
                 if (parsed.showKop !== undefined) setShowKop(parsed.showKop);
                 if (parsed.rankingDisplayLimit) setRankingDisplayLimit(parsed.rankingDisplayLimit);
+                if (parsed.rankingBasis === 'auto' || parsed.rankingBasis === 'rata_rata' || parsed.rankingBasis === 'total_nilai') {
+                    setRankingBasis(parsed.rankingBasis);
+                }
             }
         } catch {}
     }, []);
@@ -1142,10 +1165,11 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                 fitHeightPages,
                 repeatHeaderRows,
                 printScale,
-                rankingDisplayLimit
+                rankingDisplayLimit,
+                rankingBasis
             }));
         } catch {}
-    }, [paperSize, orientation, showKop, marginMode, fitToPage, fitWidthPages, fitHeightPages, repeatHeaderRows, printScale, rankingDisplayLimit]);
+    }, [paperSize, orientation, showKop, marginMode, fitToPage, fitWidthPages, fitHeightPages, repeatHeaderRows, printScale, rankingDisplayLimit, rankingBasis]);
 
     // Universal / Custom Issuance Date, Place & Calendar Format (Masehi / Hijriah / Gabungan)
     const [tanggalRapor, setTanggalRapor] = useState(settings.tanggalRaporDefault || formatLocalDate(new Date()));
@@ -1457,7 +1481,10 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
         const map = new Map<number, RaporRecord>();
         (livePeriodRecords || []).forEach(record => {
             if (!record.deleted) {
-                map.set(record.santriId, record);
+                const prev = map.get(record.santriId);
+                if (!prev || (record.lastModified || 0) >= (prev.lastModified || 0)) {
+                    map.set(record.santriId, record);
+                }
             }
         });
         return map;
@@ -1544,7 +1571,10 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                 const rombelData = buildRombelLegerData({
                     template: matchedTemplate,
                     santriList: rombelStudents,
-                    records: rombelRecords
+                    records: rombelRecords,
+                    mataPelajaran: settings.mataPelajaran,
+                    jenjangId: kelas?.jenjangId || matchedTemplate?.jenjangId,
+                    rankingBasis
                 });
 
                 newCohortMetaMap.set(rId, {
@@ -1559,20 +1589,10 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                 });
             });
 
-            // Hitung peringkat paralel per Tingkat Kelas, per Marhalah/Jenjang, dan Global Pondok
+            // Hitung peringkat paralel adil per Tingkat Kelas, per Marhalah/Jenjang, dan Global Pondok
+            // Otomatis beralih ke Rata-Rata jika jumlah mapel angka aktif antar santri/rombel berbeda (misal ada mapel bertanda '-')
             const assignGroupRanks = (rows: StudentLegerRow[]): Map<number, number> => {
-                const withScores = rows
-                    .filter(r => r.totalNilai > 0)
-                    .sort((a, b) => b.totalNilai - a.totalNilai || b.rataRata - a.rataRata);
-                const rMap = new Map<number, number>();
-                let curRank = 1;
-                for (let i = 0; i < withScores.length; i++) {
-                    if (i > 0 && withScores[i].totalNilai < withScores[i - 1].totalNilai) {
-                        curRank = i + 1;
-                    }
-                    rMap.set(withScores[i].santri.id, curRank);
-                }
-                return rMap;
+                return assignCohortRankings(rows, rankingBasis).rankMap;
             };
 
             const rowsByKelas = new Map<number, StudentLegerRow[]>();
@@ -1603,7 +1623,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                 const kRankMap = assignGroupRanks(kRows);
                 const kTotal = kRows.length;
                 kRows.forEach(r => {
-                    r.rankingKelas = kRankMap.get(r.santri.id) || (r.totalNilai > 0 ? 1 : 0);
+                    r.rankingKelas = kRankMap.get(r.santri.id) || 0;
                     r.totalSantriKelas = kTotal;
                 });
             });
@@ -1612,13 +1632,13 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                 const jRankMap = assignGroupRanks(jRows);
                 const jTotal = jRows.length;
                 jRows.forEach(r => {
-                    r.rankingJenjang = jRankMap.get(r.santri.id) || (r.totalNilai > 0 ? 1 : 0);
+                    r.rankingJenjang = jRankMap.get(r.santri.id) || 0;
                     r.totalSantriJenjang = jTotal;
                 });
             });
 
             allRows.forEach(r => {
-                r.rankingGlobal = globalRankMap.get(r.santri.id) || (r.totalNilai > 0 ? 1 : 0);
+                r.rankingGlobal = globalRankMap.get(r.santri.id) || 0;
             });
 
             setStudentLegerMap(newMap);
@@ -1626,7 +1646,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
         };
 
         calculateRombelData();
-    }, [santriList, baseSantriList, periodRecordsMap, selectedTemplateId, settings]);
+    }, [santriList, baseSantriList, periodRecordsMap, selectedTemplateId, settings, rankingBasis]);
 
     // Counts for status tabs
     const counts = useMemo(() => {
@@ -1737,20 +1757,27 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
     const currentPreviewEffectiveRankKelas = getEffectiveRanking(currentPreviewRow?.rankingKelas, rankingDisplayLimit);
     const currentPreviewEffectiveRankJenjang = getEffectiveRanking(currentPreviewRow?.rankingJenjang, rankingDisplayLimit);
     const currentPreviewEffectiveRankGlobal = getEffectiveRanking(currentPreviewRow?.rankingGlobal, rankingDisplayLimit);
+    const currentPreviewHasNumeric = currentPreviewRow ? Object.keys(currentPreviewRow.numericGrades).length > 0 : false;
+    const currentPreviewRombelCount = currentPreviewSantri
+        ? (santriList.filter(s => !s.deleted && s.status === 'Aktif' && s.rombelId === currentPreviewSantri.rombelId).length || 1)
+        : undefined;
     const currentPreviewCalculation = currentPreviewRow ? {
-        totalNilai: currentPreviewRow.totalNilai,
-        rataRata: currentPreviewRow.rataRata,
+        totalNilai: currentPreviewHasNumeric ? currentPreviewRow.totalNilai : undefined,
+        rataRata: currentPreviewHasNumeric ? currentPreviewRow.rataRata : undefined,
+        hasNumericScores: currentPreviewHasNumeric,
         ranking: currentPreviewEffectiveRank,
         rankingKelas: currentPreviewEffectiveRankKelas,
         rankingJenjang: currentPreviewEffectiveRankJenjang,
         rankingGlobal: currentPreviewEffectiveRankGlobal,
-        totalSantri: currentPreviewEffectiveRank ? (baseSantriList.filter(s => s.rombelId === currentPreviewSantri?.rombelId).length || 1) : undefined,
-        totalSantriKelas: currentPreviewEffectiveRankKelas ? currentPreviewRow.totalSantriKelas : undefined,
-        totalSantriJenjang: currentPreviewEffectiveRankJenjang ? currentPreviewRow.totalSantriJenjang : undefined,
-        predikat: currentPreviewRow.predikat.predikat,
+        totalSantri: currentPreviewRombelCount,
+        totalSantriKelas: currentPreviewRow.totalSantriKelas,
+        totalSantriJenjang: currentPreviewRow.totalSantriJenjang,
+        predikat: currentPreviewHasNumeric ? currentPreviewRow.predikat.predikat : undefined,
         classAverages: currentPreviewCohortMeta?.classAverages,
         classOverallAverage: currentPreviewCohortMeta?.classOverallAverage
     } : (currentPreviewCohortMeta ? {
+        hasNumericScores: false,
+        totalSantri: currentPreviewRombelCount,
         classAverages: currentPreviewCohortMeta.classAverages,
         classOverallAverage: currentPreviewCohortMeta.classOverallAverage
     } : undefined);
@@ -1794,25 +1821,29 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
         return targetSantri.map(santri => {
             const row = studentLegerMap.get(santri.id);
             const cohortMeta = rombelCohortMetaMap.get(santri.rombelId);
-            const rombelTotal = baseSantriList.filter(s => s.rombelId === santri.rombelId).length;
+            const rombelTotal = santriList.filter(s => !s.deleted && s.status === 'Aktif' && s.rombelId === santri.rombelId).length || 1;
             const effectiveRank = getEffectiveRanking(row?.ranking, limit);
             const effectiveRankKelas = getEffectiveRanking(row?.rankingKelas, limit);
             const effectiveRankJenjang = getEffectiveRanking(row?.rankingJenjang, limit);
             const effectiveRankGlobal = getEffectiveRanking(row?.rankingGlobal, limit);
+            const hasNumeric = row ? Object.keys(row.numericGrades).length > 0 : false;
             const calculation = row ? {
-                totalNilai: row.totalNilai,
-                rataRata: row.rataRata,
+                totalNilai: hasNumeric ? row.totalNilai : undefined,
+                rataRata: hasNumeric ? row.rataRata : undefined,
+                hasNumericScores: hasNumeric,
                 ranking: effectiveRank,
                 rankingKelas: effectiveRankKelas,
                 rankingJenjang: effectiveRankJenjang,
                 rankingGlobal: effectiveRankGlobal,
-                totalSantri: effectiveRank ? rombelTotal : undefined,
-                totalSantriKelas: effectiveRankKelas ? row.totalSantriKelas : undefined,
-                totalSantriJenjang: effectiveRankJenjang ? row.totalSantriJenjang : undefined,
-                predikat: row.predikat.predikat,
+                totalSantri: rombelTotal,
+                totalSantriKelas: row.totalSantriKelas,
+                totalSantriJenjang: row.totalSantriJenjang,
+                predikat: hasNumeric ? row.predikat.predikat : undefined,
                 classAverages: cohortMeta?.classAverages,
                 classOverallAverage: cohortMeta?.classOverallAverage
             } : (cohortMeta ? {
+                hasNumericScores: false,
+                totalSantri: rombelTotal,
                 classAverages: cohortMeta.classAverages,
                 classOverallAverage: cohortMeta.classOverallAverage
             } : undefined);
@@ -1826,15 +1857,15 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
         });
     };
 
-    // Sync batchData when rankingDisplayLimit changes during active batch print modal
+    // Sync batchData when rankingDisplayLimit or studentLegerMap changes during active batch print modal
     useEffect(() => {
         if (isBatchPrinting && batchData.length > 0) {
             const targetSantri = batchData.map(b => b.santri);
             setBatchData(buildBatchData(targetSantri, rankingDisplayLimit));
         }
-    }, [rankingDisplayLimit]);
+    }, [rankingDisplayLimit, studentLegerMap]);
 
-    // Batch Print Execution
+    // Batch Print Execution (with Incomplete Rapor Guard)
     const handleStartBatchPrint = () => {
         const targetSantri = selectedSantriIds.size > 0
             ? filteredSantriList.filter(s => selectedSantriIds.has(s.id))
@@ -1845,9 +1876,48 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
             return;
         }
 
-        const data = buildBatchData(targetSantri, rankingDisplayLimit);
-        setBatchData(data);
-        setIsBatchPrinting(true);
+        const openBatchNow = () => {
+            const data = buildBatchData(targetSantri, rankingDisplayLimit);
+            setBatchData(data);
+            setIsBatchPrinting(true);
+        };
+
+        const incompleteItems = targetSantri.filter(s => {
+            const row = studentLegerMap.get(s.id);
+            const status = row?.completenessStatus || (periodRecordsMap.has(s.id) ? 'Sebagian' : 'Kosong');
+            return status !== 'Lengkap';
+        });
+
+        if (incompleteItems.length > 0) {
+            const sampleNames = incompleteItems
+                .slice(0, 5)
+                .map(s => {
+                    const row = studentLegerMap.get(s.id);
+                    const status = row?.completenessStatus || (periodRecordsMap.has(s.id) ? 'Sebagian' : 'Kosong');
+                    const detail =
+                        status === 'Sebagian' && row
+                            ? `${row.filledCount}/${row.totalKeys} terisi`
+                            : 'Belum ada nilai';
+                    return `• ${s.namaLengkap} (${detail})`;
+                })
+                .join('\n');
+            const extraInfo =
+                incompleteItems.length > 5
+                    ? `\n...dan ${incompleteItems.length - 5} santri lainnya.`
+                    : '';
+
+            showConfirmation(
+                'Sebagian Nilai Rapor Belum Lengkap',
+                `Terdapat ${incompleteItems.length} dari ${targetSantri.length} santri yang nilainya masih berstatus Sebagian atau Kosong:\n\n${sampleNames}${extraInfo}\n\nCatatan: Mapel yang memang belum diajarkan sebaiknya diisi tanda "-" agar tidak dianggap kurang. Tetap lanjutkan membuka Cetak Massal?`,
+                () => {
+                    openBatchNow();
+                },
+                { confirmColor: 'amber', confirmText: 'Tetap Cetak Massal' }
+            );
+            return;
+        }
+
+        openBatchNow();
     };
 
     const selectedTemplate = useMemo(() => settings.raporTemplates?.find(t => t.id === selectedTemplateId), [selectedTemplateId, settings.raporTemplates]);
@@ -2495,6 +2565,24 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                                     <option value="none">Sembunyikan Ranking (Off)</option>
                                 </select>
                             </div>
+
+                            {/* Dasar Perhitungan Ranking */}
+                            {rankingDisplayLimit !== 'none' && (
+                                <div className="flex items-center gap-1.5 bg-teal-50/70 border border-teal-200/80 rounded-xl px-2.5 py-1 text-xs">
+                                    <i className="bi bi-bar-chart-steps text-teal-600 text-xs"></i>
+                                    <span className="font-bold text-teal-900 text-[11px] hidden sm:inline">Dasar Ranking:</span>
+                                    <select
+                                        value={rankingBasis}
+                                        onChange={e => setRankingBasis(e.target.value as RankingBasis)}
+                                        className="font-bold text-xs bg-transparent text-teal-950 focus:outline-none cursor-pointer"
+                                        title="Otomatis Adil akan memakai Rata-Rata Nilai jika jumlah mapel angka aktif antar santri/rombel berbeda (misal ada mapel bertanda '-')"
+                                    >
+                                        <option value="auto">Otomatis Adil</option>
+                                        <option value="rata_rata">Rata-Rata Nilai</option>
+                                        <option value="total_nilai">Total Nilai</option>
+                                    </select>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -2761,7 +2849,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                                                 })()}
 
                                                 {/* Rata-rata Score Badge */}
-                                                {row && row.rataRata > 0 && (
+                                                {row && Object.keys(row.numericGrades).length > 0 && (
                                                     <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0">
                                                         Rerata: {row.rataRataFormatted} ({row.predikat.predikat})
                                                     </span>
@@ -3631,12 +3719,14 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                     record={periodRecordsMap.get(whatsAppTargetSantri.id) || null}
                     calculation={(() => {
                         const row = studentLegerMap.get(whatsAppTargetSantri.id);
+                        const hasNumeric = row ? Object.keys(row.numericGrades).length > 0 : false;
                         return row ? {
-                            totalNilai: row.totalNilai,
-                            rataRata: row.rataRata,
+                            totalNilai: hasNumeric ? row.totalNilai : undefined,
+                            rataRata: hasNumeric ? row.rataRata : undefined,
+                            hasNumericScores: hasNumeric,
                             ranking: getEffectiveRanking(row.ranking, rankingDisplayLimit),
-                            totalSantri: baseSantriList.filter(s => s.rombelId === whatsAppTargetSantri?.rombelId).length || 1,
-                            predikat: row.predikat.predikat
+                            totalSantri: santriList.filter(s => !s.deleted && s.status === 'Aktif' && s.rombelId === whatsAppTargetSantri?.rombelId).length || 1,
+                            predikat: hasNumeric ? row.predikat.predikat : undefined
                         } : undefined;
                     })()}
                     settings={settings}

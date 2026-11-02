@@ -23,6 +23,7 @@ import {
 } from '../../utils/raporPageLayout';
 import {
     DYNAMIC_TAG_CATEGORIES,
+    isKnownDynamicSystemTag,
     isMediaTag,
     isTtdMediaCellValue,
     resolveCellMediaVisual,
@@ -66,7 +67,7 @@ import {
     getHijriDate,
     ensureHijriSuffix
 } from '../../utils/formatters';
-import { computeClassAveragesFromRecords, classifyRaporInputField } from '../../services/raporCalculationService';
+import { computeClassAveragesFromRecords, classifyRaporInputField, calculatePredikat } from '../../services/raporCalculationService';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { RaporExcelPasteModal } from './modals/RaporExcelPasteModal';
@@ -1604,8 +1605,151 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
         }
 
         const currentList = settings.raporTemplates || templates;
-        const savedTemplate = { ...finalTemplate, lastModified: new Date().toISOString() };
         const existingIdx = currentList.findIndex(t => t.id === finalTemplate.id);
+        let savedTemplate: RaporTemplate = { ...finalTemplate, lastModified: new Date().toISOString() };
+
+        let migratedRecordsCount = 0;
+        const renamedSummary: string[] = [];
+
+        if (existingIdx >= 0) {
+            const prevTpl = currentList[existingIdx];
+            const prevSheets = prevTpl.sheets && prevTpl.sheets.length > 0
+                ? prevTpl.sheets
+                : (prevTpl.cells ? [{ id: 'sheet_default', name: prevTpl.name, rowCount: prevTpl.rowCount, colCount: prevTpl.colCount, cells: prevTpl.cells }] : []);
+            const nextSheets = savedTemplate.sheets || [];
+
+            const nextAllKeysSet = new Set<string>();
+            nextSheets.forEach(sh => {
+                (sh.cells || []).forEach(row => {
+                    row.forEach(cell => {
+                        if (cell && !cell.hidden && cell.key && (cell.type === 'input' || cell.type === 'dropdown' || cell.type === 'formula')) {
+                            nextAllKeysSet.add(cell.key.trim());
+                        }
+                    });
+                });
+            });
+
+            const renamedKeyMap = new Map<string, string>();
+            nextSheets.forEach((nextSh, shIdx) => {
+                const prevSh = prevSheets.find(ps => ps.id === nextSh.id) || (prevSheets.length === 1 && nextSheets.length === 1 ? prevSheets[0] : prevSheets[shIdx]);
+                if (!prevSh || !prevSh.cells || !nextSh.cells) return;
+                const maxR = Math.min(prevSh.cells.length, nextSh.cells.length);
+                for (let r = 0; r < maxR; r++) {
+                    const pRow = prevSh.cells[r] || [];
+                    const nRow = nextSh.cells[r] || [];
+                    const maxC = Math.min(pRow.length, nRow.length);
+                    for (let c = 0; c < maxC; c++) {
+                        const pCell = pRow[c];
+                        const nCell = nRow[c];
+                        if (!pCell || !nCell || pCell.hidden || nCell.hidden) continue;
+                        const wasInteractive = pCell.type === 'input' || pCell.type === 'dropdown';
+                        const isInteractive = nCell.type === 'input' || nCell.type === 'dropdown';
+                        const oldK = pCell.key?.trim() || '';
+                        const newK = nCell.key?.trim() || '';
+                        if (wasInteractive && isInteractive && oldK && newK && oldK !== newK && !nextAllKeysSet.has(oldK)) {
+                            renamedKeyMap.set(oldK, newK);
+                        }
+                    }
+                }
+            });
+
+            if (renamedKeyMap.size > 0) {
+                // 1. Perbarui referensi rumus $OLD_KEY -> $NEW_KEY pada template ini agar rumus tetap sinkron
+                const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const updatedSheetsWithFormulas = (savedTemplate.sheets || []).map(sh => ({
+                    ...sh,
+                    cells: (sh.cells || []).map(row =>
+                        row.map(cell => {
+                            if (!cell || cell.type !== 'formula' || !cell.value) return cell;
+                            let nextVal = cell.value;
+                            renamedKeyMap.forEach((newK, oldK) => {
+                                const rx = new RegExp(`\\$${escapeRegex(oldK)}(?![A-Za-z0-9_])`, 'g');
+                                nextVal = nextVal.replace(rx, `$${newK}`);
+                            });
+                            return nextVal !== cell.value ? { ...cell, value: nextVal } : cell;
+                        })
+                    )
+                }));
+                savedTemplate = { ...savedTemplate, sheets: updatedSheetsWithFormulas };
+
+                // 2. Migrasikan customData pada db.raporRecords sesuai cakupan template
+                const otherTemplatesKeys = new Set<string>();
+                currentList.forEach((otherTpl, idx) => {
+                    if (idx === existingIdx) return;
+                    const oSheets = otherTpl.sheets && otherTpl.sheets.length > 0
+                        ? otherTpl.sheets
+                        : (otherTpl.cells ? [{ cells: otherTpl.cells }] : []);
+                    oSheets.forEach(os => {
+                        (os.cells || []).forEach(r =>
+                            r.forEach(c => {
+                                if (c?.key && (c.type === 'input' || c.type === 'dropdown')) {
+                                    otherTemplatesKeys.add(c.key.trim());
+                                }
+                            })
+                        );
+                    });
+                });
+
+                const allRecords = await db.raporRecords.toArray();
+                const rombelToJenjang = new Map<number, { kelasId: number; jenjangId: number }>();
+                settings.rombel.forEach(rm => {
+                    const kl = settings.kelas.find(k => k.id === rm.kelasId);
+                    rombelToJenjang.set(rm.id, { kelasId: rm.kelasId, jenjangId: kl?.jenjangId || 0 });
+                });
+
+                const recordsToUpdate: typeof allRecords = [];
+                const nowMs = Date.now();
+
+                for (const rec of allRecords) {
+                    if (!rec || rec.deleted || !rec.customData) continue;
+                    const rMeta = rec.rombelId ? rombelToJenjang.get(rec.rombelId) : undefined;
+                    const effKelasId = rec.kelasId || rMeta?.kelasId || 0;
+                    const effJenjangId = rec.jenjangId || rMeta?.jenjangId || 0;
+
+                    if (savedTemplate.rombelId && rec.rombelId !== savedTemplate.rombelId) continue;
+                    if (savedTemplate.kelasId && effKelasId !== savedTemplate.kelasId) continue;
+                    if (savedTemplate.jenjangId && effJenjangId !== savedTemplate.jenjangId) continue;
+
+                    let parsed: Record<string, any>;
+                    try {
+                        parsed = typeof rec.customData === 'string' ? JSON.parse(rec.customData) : { ...rec.customData };
+                    } catch {
+                        continue;
+                    }
+
+                    let changed = false;
+                    renamedKeyMap.forEach((newK, oldK) => {
+                        // Jika template bersifat umum (tanpa kunci jenjang) dan key lama masih dipakai template lain, jangan hapus key lama
+                        const keepOldCopy = !savedTemplate.jenjangId && !savedTemplate.kelasId && !savedTemplate.rombelId && otherTemplatesKeys.has(oldK);
+                        if (Object.prototype.hasOwnProperty.call(parsed, oldK)) {
+                            if (parsed[newK] === undefined || parsed[newK] === null || String(parsed[newK]).trim() === '') {
+                                parsed[newK] = parsed[oldK];
+                                changed = true;
+                            }
+                            if (!keepOldCopy) {
+                                delete parsed[oldK];
+                                changed = true;
+                            }
+                        }
+                    });
+
+                    if (changed) {
+                        recordsToUpdate.push({
+                            ...rec,
+                            customData: JSON.stringify(parsed),
+                            lastModified: nowMs
+                        });
+                    }
+                }
+
+                if (recordsToUpdate.length > 0) {
+                    await db.raporRecords.bulkPut(recordsToUpdate);
+                    migratedRecordsCount = recordsToUpdate.length;
+                }
+                renamedKeyMap.forEach((newK, oldK) => renamedSummary.push(`${oldK} → ${newK}`));
+            }
+        }
+
         let updated: RaporTemplate[];
         if (existingIdx >= 0) {
             updated = [...currentList];
@@ -1616,13 +1760,20 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
         await saveTemplatesToSettings(updated);
         setIsDirty(false);
 
+        const migrationNote =
+            migratedRecordsCount > 0
+                ? ` (${migratedRecordsCount} data nilai santri otomatis dimigrasikan: ${renamedSummary.slice(0, 3).join(', ')}${renamedSummary.length > 3 ? ', dst.' : ''})`
+                : renamedSummary.length > 0
+                ? ` (Kode variabel diperbarui: ${renamedSummary.slice(0, 3).join(', ')})`
+                : '';
+
         if (shouldClose) {
             setIsEditing(false);
             setActiveTemplate(null);
-            showToast('Template multi-sheet berhasil disimpan.', 'success');
+            showToast(`Template multi-sheet berhasil disimpan.${migrationNote}`, 'success');
         } else {
             setActiveTemplate(savedTemplate);
-            showToast('Desain template tersimpan! Anda dapat terus mengedit.', 'success');
+            showToast(`Desain template tersimpan!${migrationNote}`, 'success');
         }
     };
 
@@ -1731,6 +1882,8 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                 } else if (valStr.startsWith('$')) {
                                     const upVal = valStr.toUpperCase();
                                     if (
+                                        isMediaTag(valStr) ||
+                                        isKnownDynamicSystemTag(valStr) ||
                                         systemKeys.includes(upVal) ||
                                         upVal === '$KKM' ||
                                         upVal.startsWith('$KKM_') ||
@@ -1740,8 +1893,10 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                         upVal.startsWith('$RANK')
                                     ) {
                                         newCells[r][c].type = 'data';
-                                        newCells[r][c].value = upVal;
-                                        if (upVal === '$NAMA' || upVal === '$NIS' || upVal === '$ROMBEL' || upVal === '$PERINGKAT') {
+                                        newCells[r][c].value = (upVal === '$NILAI_KKM' || upVal === '$KBM')
+                                            ? '$KKM'
+                                            : (valStr.startsWith('$TTD_PENGAJAR:') ? valStr : upVal);
+                                        if (upVal === '$NAMA' || upVal === '$NAMA_LENGKAP' || upVal === '$NIS' || upVal === '$ROMBEL' || upVal === '$PERINGKAT') {
                                             hasBiodataInSheet = true;
                                         }
                                     } else {
@@ -1928,21 +2083,6 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
     };
 
     // --- INLINE CELL EDITING & EXCEL KEYBOARD NAVIGATION ---
-    const isKnownDynamicSystemTag = (raw: string): boolean => {
-        const up = raw.trim().toUpperCase();
-        if (!up.startsWith('$') || up.includes(' ')) return false;
-        if (up === '$KKM' || up.startsWith('$KKM_') || up.startsWith('$MAPEL_') || up.startsWith('$TTD_')) return true;
-        for (const cat of DYNAMIC_TAG_CATEGORIES) {
-            if (cat.tags.some(t => t.tag.toUpperCase() === up)) return true;
-        }
-        const aliases = [
-            '$TAHUNAJAR', '$TAHUN_AJAR', '$TAHUNAJARAN', '$TAHUN_AJARAN',
-            '$MARHALAH', '$JENJANG', '$TINGKAT', '$KELAS', '$ROMBEL', '$SEMESTER',
-            '$FASE', '$CAPAIAN_KOMPETENSI', '$P5', '$CATATAN_WALIKELAS', '$LOGO',
-            '$NILAI_KKM', '$STANDAR_KKM', '$KKM_DEFAULT', '$KKM_MARHALAH', '$KBM'
-        ];
-        return aliases.includes(up);
-    };
 
     const findMasterCell = (tpl: RaporTemplate, r: number, c: number): { r: number; c: number } => {
         const target = tpl.cells[r]?.[c];
@@ -8978,7 +9118,12 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                 const {
                     classAverages: realClassAverages,
                     classOverallAverage: realClassOverallAvg
-                } = computeClassAveragesFromRecords(previewCohortRecords, activeTemplate);
+                } = computeClassAveragesFromRecords(
+                    previewCohortRecords,
+                    activeTemplate,
+                    settings.mataPelajaran || [],
+                    activeTemplate.jenjangId
+                );
 
                 const previewClassAverages: Record<string, number> = { ...realClassAverages };
                 const isSimulationFallback = !selectedRealSantri || previewFallbackDummyGrades;
@@ -9007,22 +9152,35 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                     });
                 }
 
-                // Compute numeric summary from baseExtraVars for $TOTAL_NILAI & $RATA_RATA
+                // Compute numeric summary ONLY from true subject score inputs (excluding SAKIT/IZIN/ALPHA, notes, and '-' untaught)
                 const numericInputs: number[] = [];
                 activeSheets.forEach(sheetObj => {
                     sheetObj.cells.forEach(row => {
                         row.forEach(c => {
                             if (!c.hidden && c.type === 'input' && c.key) {
-                                const n = Number(baseExtraVars[c.key]);
-                                if (!isNaN(n) && String(baseExtraVars[c.key] ?? '').trim() !== '') {
+                                const cls = classifyRaporInputField({
+                                    key: c.key,
+                                    type: c.type,
+                                    inputMode: c.inputMode,
+                                    mataPelajaran: settings.mataPelajaran || [],
+                                    jenjangId: activeTemplate.jenjangId
+                                });
+                                if (!cls.isNumericScore) return;
+                                const rawStr = String(baseExtraVars[c.key] ?? '').trim();
+                                if (!rawStr || rawStr === '-') return;
+                                const n = Number(rawStr.replace(',', '.'));
+                                if (!isNaN(n) && isFinite(n)) {
                                     numericInputs.push(n);
                                 }
                             }
                         });
                     });
                 });
+                const hasPreviewNumeric = numericInputs.length > 0 || isSimulationFallback;
                 const sumVal = numericInputs.reduce((a, b) => a + b, 0);
-                const avgVal = numericInputs.length > 0 ? Number((sumVal / numericInputs.length).toFixed(1)) : 88;
+                const avgVal = numericInputs.length > 0
+                    ? Number((sumVal / numericInputs.length).toFixed(2))
+                    : (isSimulationFallback ? 88 : undefined);
                 const classAvgVals = Object.values(previewClassAverages).filter(v => typeof v === 'number' && v > 0 && v <= 100);
                 const computedClassOverallAvg = realClassOverallAvg > 0
                     ? realClassOverallAvg
@@ -9040,16 +9198,17 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                     targetDate: parseLocalDateSafe(settings.tanggalRaporDefault) || new Date(),
                     extraVars: baseExtraVars,
                     calculation: {
-                        totalNilai: sumVal || 850,
+                        totalNilai: numericInputs.length > 0 ? sumVal : (isSimulationFallback ? 850 : undefined),
                         rataRata: avgVal,
-                        ranking: 1,
-                        rankingKelas: 2,
-                        rankingJenjang: 4,
-                        rankingGlobal: 7,
+                        hasNumericScores: hasPreviewNumeric,
+                        ranking: hasPreviewNumeric ? 1 : undefined,
+                        rankingKelas: hasPreviewNumeric ? 2 : undefined,
+                        rankingJenjang: hasPreviewNumeric ? 4 : undefined,
+                        rankingGlobal: hasPreviewNumeric ? 7 : undefined,
                         totalSantri: Math.max(1, effectiveSantriOptions.length || 28),
                         totalSantriKelas: Math.max(2, (effectiveSantriOptions.length || 28) * 3),
                         totalSantriJenjang: Math.max(4, (effectiveSantriOptions.length || 28) * 9),
-                        predikat: avgVal >= 90 ? 'A' : avgVal >= 80 ? 'B' : 'C',
+                        predikat: avgVal !== undefined ? calculatePredikat(avgVal).predikat : undefined,
                         classAverages: previewClassAverages,
                         classOverallAverage: computedClassOverallAvg,
                         isSimulated: isSimulationFallback

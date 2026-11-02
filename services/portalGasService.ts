@@ -1,5 +1,7 @@
 import { db } from '../db';
 import { PondokSettings, PortalConfig } from '../types';
+import { extractTemplateKeys } from './raporExcelService';
+import { calculatePredikat, isSubjectGradeKey } from './raporCalculationService';
 
 interface PortalFetchResponse {
     success?: boolean;
@@ -65,6 +67,7 @@ export interface PortalRaporSummary {
     tahunAjaran: string;
     semester: string;
     rataRata: number;
+    hasNumericScores?: boolean;
     keputusan?: string;
     catatanWaliKelas?: string;
     mapel: Array<{ nama: string; nilai: number; predikat: string }>;
@@ -515,6 +518,7 @@ export const syncPortalBridgeToGas = async (settings: PondokSettings): Promise<{
 
     const jenjangMap = new Map((settings.jenjang || []).map((j) => [j.id, j.nama]));
     const kelasMap = new Map((settings.kelas || []).map((k) => [k.id, k.nama]));
+    const kelasObjMap = new Map((settings.kelas || []).map((k) => [k.id, k]));
     const rombelMap = new Map((settings.rombel || []).map((r) => [r.id, r]));
     const guruMap = new Map((settings.tenagaPengajar || []).map((g) => [g.id, g.nama]));
     const mapelMap = new Map((settings.mataPelajaran || []).map((m) => [m.id, m.nama]));
@@ -639,29 +643,120 @@ export const syncPortalBridgeToGas = async (settings: PondokSettings): Promise<{
             }));
 
             // Akademik: Rapor Terakhir & Catatan Prestasi/Pembinaan
+            const semesterOrder = (sem?: string) => {
+                const low = (sem || '').trim().toLowerCase();
+                if (low.includes('genap') || low === '2' || low === 'ii') return 2;
+                if (low.includes('ganjil') || low.includes('gasal') || low === '1' || low === 'i') return 1;
+                return 0;
+            };
             const santriRapors = raporRecords
                 .filter((r) => r.santriId === s.id && !(r as any).deleted)
-                .sort((a, b) => (b.tanggalRapor || '').localeCompare(a.tanggalRapor || '') || (b.lastModified || 0) - (a.lastModified || 0));
-            const latestRapor = santriRapors[0];
+                .sort((a, b) =>
+                    (b.tahunAjaran || '').localeCompare(a.tahunAjaran || '') ||
+                    semesterOrder(b.semester) - semesterOrder(a.semester) ||
+                    (b.lastModified || 0) - (a.lastModified || 0) ||
+                    (b.tanggalRapor || '').localeCompare(a.tanggalRapor || '')
+                );
+
             let raporTerakhir: PortalRaporSummary | null = null;
-            if (latestRapor) {
-                const nilaiList = Array.isArray(latestRapor.nilai) ? latestRapor.nilai : [];
-                const validScores = nilaiList.filter((n) => typeof n.nilaiAngka === 'number' && n.nilaiAngka > 0);
-                const rataRata = validScores.length > 0
-                    ? Math.round((validScores.reduce((acc, n) => acc + n.nilaiAngka, 0) / validScores.length) * 10) / 10
-                    : 0;
-                raporTerakhir = {
-                    tahunAjaran: latestRapor.tahunAjaran || settings.tahunAjaranAktif || '-',
-                    semester: latestRapor.semester || settings.semesterAktif || 'Ganjil',
-                    rataRata,
-                    keputusan: latestRapor.keputusan,
-                    catatanWaliKelas: latestRapor.catatanWaliKelas,
-                    mapel: nilaiList.slice(0, 12).map((n) => ({
+            for (const candidateRapor of santriRapors) {
+                const nilaiList = Array.isArray(candidateRapor.nilai) ? candidateRapor.nilai : [];
+                let parsedCustom: Record<string, any> = {};
+                if (candidateRapor.customData) {
+                    try {
+                        parsedCustom = typeof candidateRapor.customData === 'string'
+                            ? JSON.parse(candidateRapor.customData)
+                            : candidateRapor.customData;
+                    } catch {
+                        parsedCustom = {};
+                    }
+                }
+
+                const effRombelId = s.rombelId || candidateRapor.rombelId || 0;
+                const rObj = effRombelId ? rombelMap.get(effRombelId) : undefined;
+                const effKelasId = rObj?.kelasId || s.kelasId || candidateRapor.kelasId || 0;
+                const kObj = effKelasId ? kelasObjMap.get(effKelasId) : undefined;
+                const effJenjangId = kObj?.jenjangId || s.jenjangId || candidateRapor.jenjangId || 0;
+                const masterMapel = settings.mataPelajaran || [];
+                const resolvedJenjangArg = effJenjangId || undefined;
+
+                let mapelItems: Array<{ nama: string; nilai: number; predikat: string }> = [];
+                if (nilaiList.length > 0) {
+                    const validScores = nilaiList.filter((n) => typeof n.nilaiAngka === 'number' && !isNaN(n.nilaiAngka));
+                    mapelItems = validScores.map((n) => ({
                         nama: mapelMap.get(n.mapelId) || `Mapel #${n.mapelId}`,
                         nilai: n.nilaiAngka,
-                        predikat: n.predikat || '-',
-                    })),
-                };
+                        predikat: n.predikat || calculatePredikat(n.nilaiAngka).predikatHuruf,
+                    }));
+                } else if (Object.keys(parsedCustom).length > 0) {
+                    const templates = settings.raporTemplates || [];
+                    const matchedTpl =
+                        (effRombelId ? templates.find((t) => t.rombelId === effRombelId) : undefined) ||
+                        (effJenjangId && effKelasId ? templates.find((t) => t.jenjangId === effJenjangId && t.kelasId === effKelasId && !t.rombelId) : undefined) ||
+                        (effJenjangId ? templates.find((t) => t.jenjangId === effJenjangId && !t.kelasId && !t.rombelId) : undefined) ||
+                        templates.find((t) => !t.jenjangId) ||
+                        templates[0];
+
+                    const subjectCols = matchedTpl
+                        ? extractTemplateKeys(matchedTpl, 'all').filter((tk) =>
+                              isSubjectGradeKey(tk.key, tk.inputMode, tk.label, tk.type, masterMapel, resolvedJenjangArg)
+                          )
+                        : [];
+
+                    if (subjectCols.length > 0) {
+                        subjectCols.forEach((sc) => {
+                            const raw = parsedCustom[sc.key];
+                            if (raw === undefined || raw === null) return;
+                            const sv = String(raw).trim();
+                            if (sv === '' || sv === '-') return; // Skip untaught '-' or blank subjects
+                            const num = Number(sv.replace(',', '.'));
+                            if (!isNaN(num) && isFinite(num)) {
+                                mapelItems.push({
+                                    nama: sc.label || sc.key,
+                                    nilai: num,
+                                    predikat: calculatePredikat(num).predikatHuruf,
+                                });
+                            }
+                        });
+                    } else {
+                        Object.entries(parsedCustom).forEach(([k, raw]) => {
+                            if (!k || k.startsWith('_') || !isSubjectGradeKey(k, undefined, k, undefined, masterMapel, resolvedJenjangArg)) return;
+                            if (raw === undefined || raw === null) return;
+                            const sv = String(raw).trim();
+                            if (sv === '' || sv === '-') return;
+                            const num = Number(sv.replace(',', '.'));
+                            if (!isNaN(num) && isFinite(num) && num >= 0 && num <= 100) {
+                                mapelItems.push({
+                                    nama: k.replace(/_/g, ' '),
+                                    nilai: num,
+                                    predikat: calculatePredikat(num).predikatHuruf,
+                                });
+                            }
+                        });
+                    }
+                }
+
+                const hasNumericScores = mapelItems.length > 0;
+                const rataRata = hasNumericScores
+                    ? Math.round((mapelItems.reduce((acc, m) => acc + m.nilai, 0) / mapelItems.length) * 10) / 10
+                    : 0;
+                const rawKep = candidateRapor.keputusan || (parsedCustom.KEPUTUSAN ? String(parsedCustom.KEPUTUSAN).trim() : '');
+                const resolvedKeputusan = rawKep && rawKep !== '-' ? rawKep : undefined;
+                const rawCat = candidateRapor.catatanWaliKelas || (parsedCustom.CATATAN_WALI_KELAS ? String(parsedCustom.CATATAN_WALI_KELAS).trim() : '');
+                const resolvedCatatan = rawCat && rawCat !== '-' ? rawCat : undefined;
+
+                if (hasNumericScores || resolvedKeputusan || resolvedCatatan) {
+                    raporTerakhir = {
+                        tahunAjaran: candidateRapor.tahunAjaran || settings.tahunAjaranAktif || '-',
+                        semester: candidateRapor.semester || settings.semesterAktif || 'Ganjil',
+                        rataRata,
+                        hasNumericScores,
+                        keputusan: resolvedKeputusan,
+                        catatanWaliKelas: resolvedCatatan,
+                        mapel: mapelItems.slice(0, 16),
+                    };
+                    break;
+                }
             }
 
             const prestasiItems: PortalCatatanItem[] = (s.prestasi || []).slice(-3).reverse().map((pr) => ({

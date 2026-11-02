@@ -75,7 +75,20 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
                 .where('[tahunAjaran+semester]')
                 .equals([currentYearFilter, filterSemester])
                 .toArray();
-            return records.filter(r => !r.deleted);
+            const bySantri = new Map<number, RaporRecord>();
+            const unindexed: RaporRecord[] = [];
+            records.forEach(r => {
+                if (r.deleted) return;
+                if (!r.santriId) {
+                    unindexed.push(r);
+                    return;
+                }
+                const prev = bySantri.get(r.santriId);
+                if (!prev || (r.lastModified || 0) >= (prev.lastModified || 0)) {
+                    bySantri.set(r.santriId, r);
+                }
+            });
+            return [...Array.from(bySantri.values()), ...unindexed];
         },
         [currentYearFilter, filterSemester]
     );
@@ -195,7 +208,20 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
             return;
         }
         showConfirmation('Hapus Data Rapor?', 'Data nilai santri ini akan dihapus dari arsip aplikasi (serta dibersihkan dari Google Sheet GAS jika terhubung).', async () => {
-            await db.raporRecords.update(rec.id, { deleted: true, lastModified: Date.now() });
+            const now = Date.now();
+            if (rec.santriId && rec.tahunAjaran && rec.semester) {
+                const siblings = await db.raporRecords
+                    .where('[santriId+tahunAjaran+semester]')
+                    .equals([rec.santriId, rec.tahunAjaran, rec.semester])
+                    .toArray();
+                const idsToDelete = siblings.filter(s => !s.deleted).map(s => s.id);
+                if (!idsToDelete.includes(rec.id)) idsToDelete.push(rec.id);
+                await Promise.all(
+                    idsToDelete.map(id => db.raporRecords.update(id, { deleted: true, lastModified: now }))
+                );
+            } else {
+                await db.raporRecords.update(rec.id, { deleted: true, lastModified: now });
+            }
             const targetSantri = santriList.find(s => s.id === rec.santriId);
             deleteRaporRecordFromCloud({
                 settings,

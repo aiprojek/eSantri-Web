@@ -408,7 +408,7 @@ export const raporPanduan: PanduanSectionData = {
                                     </tr>
                                     <tr>
                                         <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=IF(D6&gt;=KKM(B6), &quot;Tuntas&quot;, &quot;Remidi&quot;)</td>
-                                        <td className="p-2">Logika perbandingan syarat terhadap KKM dinamis Data Master maupun angka tetap seperti <code>=IF(D6&gt;=75, &quot;Tuntas&quot;, &quot;Remidi&quot;)</code> (mendukung <code>&gt;=</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>=</code>, <code>&lt;&gt;</code>; alias: <code>=JIKA(...)</code>).</td>
+                                        <td className="p-2">Logika perbandingan syarat terhadap KKM dinamis Data Master maupun angka tetap seperti <code>=IF(D6&gt;=75, &quot;Tuntas&quot;, &quot;Remidi&quot;)</code> (mendukung <code>&gt;=</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>=</code>, <code>&lt;&gt;</code>; alias: <code>=JIKA(...)</code>). Jika sel nilai <code>D6</code> dikosongkan atau diisi strip <code>-</code>, rumus otomatis menghasilkan <code>-</code> (tidak memicu <em>Remidi</em> palsu).</td>
                                     </tr>
                                     <tr>
                                         <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=RANK($TOTAL_NILAI, &quot;rombel&quot;)</td>
@@ -416,6 +416,15 @@ export const raporPanduan: PanduanSectionData = {
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+                        <div className="mt-2.5 p-2.5 bg-white/90 rounded-lg border border-amber-200 text-[11px] text-gray-700 leading-relaxed space-y-1">
+                            <div className="font-bold text-amber-950 flex items-center gap-1.5">
+                                <i className="bi bi-shield-check text-amber-600"></i> Perilaku Cerdas Rumus terhadap Nilai Kosong vs Tanda Strip (<code>-</code>) vs Angka <code>0</code>:
+                            </div>
+                            <ul className="list-disc pl-4 space-y-0.5 text-gray-600">
+                                <li><strong>Sel Dikosongkan atau Diisi Strip <code>-</code> (Mapel Belum Diajarkan):</strong> Otomatis <strong>diabaikan dari pembagi</strong> <code>=RATA2</code>, <code>=RATA2_KELAS</code>, <code>$TOTAL_NILAI</code>, <code>$RATA_RATA</code>, <code>$PERINGKAT</code>, <code>=MIN</code>, <code>=MAX</code>, dan <code>=COUNT</code> sehingga rata-rata santri maupun kelas tidak anjlok. Rumus <code>=IF</code>, <code>=IFS</code>, <code>=PREDIKAT</code>, <code>=TERBILANG</code>, dan <code>=ARAB</code> otomatis menampilkan <code>-</code> (tidak memunculkan <em>Remidi</em> atau predikat <em>E / Rasib</em>), serta terbaca <code>TRUE</code> pada <code>=ISBLANK(D6)</code> dan dihitung oleh <code>=COUNTBLANK(...)</code>.</li>
+                                <li><strong>Sel Diisi Angka <code>0</code>:</strong> Diperlakukan sebagai <strong>skor ujian nol murni</strong> — ikut membagi rata-rata santri &amp; kelas serta memicu status <em>Remidi</em> pada <code>=IF</code>. <em>(Perbedaan lengkap antara dikosongkan vs tanda <code>-</code> untuk status Progres/Audit 100% dibahas pada Langkah 7).</em></li>
+                            </ul>
                         </div>
                     </div>
 
@@ -818,7 +827,7 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '7. Input Nilai Langsung & Leger Nilai (Desktop & Mobile)',
+            title: '7. Input Nilai, Aturan Pengosongan vs Tanda Strip ("-") & Leger Nilai',
             color: 'green',
             content: (
                 <div className="space-y-3 text-sm">
@@ -835,6 +844,7 @@ export const raporPanduan: PanduanSectionData = {
                                 <li><strong>2 Mode Input:</strong> Pilih <strong>Tabel Leger</strong> di laptop (mendukung tombol panah/Enter &amp; <em>paste</em> langsung blok sel dari Excel/Sheets) atau <strong>Form Kartu (Mobile)</strong> untuk pengisian nyaman di layar HP.</li>
                                 <li><strong>Tarik Eksternal &amp; Internal Terpadu:</strong> Tersedia tombol langsung <strong>Tarik Nilai GAS</strong> &amp; <strong>Import WA</strong> untuk mengambil setoran guru mapel, ditambah <strong>Tarik Presensi Otomatis</strong> (Sakit/Izin/Alfa), <strong>Tarik Data Tahfizh</strong>, serta <strong>Isi Cepat Catatan &amp; Keputusan</strong>.</li>
                                 <li><strong>Auto-Draft &amp; Pelindung Ketikan:</strong> Dilengkapi pemulihan draf lokal otomatis jika tab tertutup, proteksi konfirmasi sebelum menarik data cloud saat masih ada ketikan belum disimpan, serta penanda nilai di bawah KKM atau di luar <code>0–100</code>.</li>
+                                <li><strong>Standar Mapel Belum Diajarkan (Wajib Isi Strip <code>-</code>):</strong> Gunakan tanda strip <code>-</code> untuk mapel yang memang belum diajarkan agar terhitung <strong>Lengkap (100%)</strong> di Progres &amp; Audit, sementara biarkan <strong>kosong</strong> jika nilai memang belum disetor oleh guru mapel.</li>
                             </ul>
                         </div>
 
@@ -847,6 +857,69 @@ export const raporPanduan: PanduanSectionData = {
                                 <li><strong>Tombol Kunci Kolom (Freeze):</strong> Saat memakai mode <strong>Tabel</strong> di HP, kolom nama otomatis dilepas agar ruang nilai tetap lega, dan dapat dikunci/dilepas kapan saja lewat tombol <strong>Kunci Kolom</strong>.</li>
                                 <li><strong>Multi-Sheet, Rincian &amp; Ekspor:</strong> Pindah lembar kerja rapor dengan mudah, klik <strong>Rincian</strong> untuk mengecek kolom mapel yang masih kosong, tarik pembaruan nilai dari GAS secara langsung, atau unduh Leger ke Excel/Cetak.</li>
                             </ul>
+                        </div>
+                    </div>
+
+                    {/* Panduan Khusus: Kosong vs Strip "-" vs Angka 0 */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                            <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-check2-square text-teal-600"></i> Panduan Penting: Kapan Dikosongkan, Diisi Strip (<code>-</code>), atau Diisi <code>0</code>?
+                            </strong>
+                            <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold uppercase">
+                                Kasus Mapel Belum Diajarkan
+                            </span>
+                        </div>
+                        <p className="text-gray-600 text-[11px] leading-relaxed">
+                            Sering kali 1 template rapor dipakai lintas semester (Ganjil &amp; Genap) atau lintas kelas sehingga ada baris mata pelajaran yang <strong>memang belum diajarkan pada semester berjalan</strong>. Sistem membedakan 3 cara pengisian berikut secara presisi:
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-[11px]">
+                            <div className="p-2.5 bg-emerald-50/90 border border-emerald-300 rounded-lg space-y-1.5">
+                                <div className="flex items-center justify-between gap-1">
+                                    <strong className="text-emerald-950 font-bold">1. Diisi Tanda Strip (<code>-</code>)</strong>
+                                    <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[9px] font-bold uppercase shrink-0">Rekomendasi</span>
+                                </div>
+                                <p className="text-emerald-900 font-semibold">Untuk: Mapel yang memang belum / tidak diajarkan semester ini.</p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-gray-700">
+                                    <li><strong>Rumus &amp; Statistik:</strong> Diabaikan dari pembagi <code>=RATA2</code>, <code>=RATA2_KELAS</code>, jumlah &amp; ranking; rumus <code>=IF</code> / <code>=PREDIKAT</code> otomatis menampilkan <code>-</code> (bebas <em>Remidi</em> palsu).</li>
+                                    <li><strong>Progres &amp; Portal Audit:</strong> Dihitung <strong>SUDAH TERISI SAH (Lengkap 100%)</strong>, tidak muncul sebagai tunggakan <em>Mapel Kosong</em>, dan lolos filter <em>Pilih Hanya yang Lengkap 100%</em> di Cetak Rapor.</li>
+                                    <li><strong>Tampilan &amp; Sinkron:</strong> Tercetak rapi <code>-</code> di Rapor &amp; Leger, tersinkron 2 arah di Cloud GAS, serta disembunyikan rapi di Portal Wali &amp; ringkasan WA.</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-2.5 bg-amber-50/80 border border-amber-200 rounded-lg space-y-1.5">
+                                <div className="flex items-center justify-between gap-1">
+                                    <strong className="text-amber-950 font-bold">2. Dikosongkan Saja</strong>
+                                    <span className="px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 text-[9px] font-bold uppercase shrink-0">Belum Disetor</span>
+                                </div>
+                                <p className="text-amber-900 font-semibold">Untuk: Mapel aktif yang nilainya belum masuk / ujian susulan.</p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-gray-700">
+                                    <li><strong>Rumus &amp; Statistik:</strong> Tetap aman! Sama seperti <code>-</code>, sel kosong tidak ikut membagi <code>=RATA2</code> maupun <code>=RATA2_KELAS</code> dan tidak memicu <em>Remidi</em> palsu pada <code>=IF</code>.</li>
+                                    <li><strong>Progres &amp; Portal Audit:</strong> Dihitung <strong>BELUM LENGKAP (&lt; 100%)</strong> dan tetap ditandai di <em>Audit Mapel Kosong</em> agar Panitia/Wali Kelas tahu guru pengampu belum menyetor nilai.</li>
+                                    <li><strong>Cetak Rapor:</strong> Tetap bisa dicetak manual, tetapi tidak ikut tercentang otomatis saat menekan tombol <em>Pilih Lengkap 100%</em>.</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-2.5 bg-rose-50/80 border border-rose-200 rounded-lg space-y-1.5">
+                                <div className="flex items-center justify-between gap-1">
+                                    <strong className="text-rose-950 font-bold">3. Diisi Angka <code>0</code></strong>
+                                    <span className="px-1.5 py-0.5 rounded bg-rose-200 text-rose-900 text-[9px] font-bold uppercase shrink-0">Jangan Tertukar</span>
+                                </div>
+                                <p className="text-rose-900 font-semibold">Khusus: Santri ikut mapel tersebut dan murni mendapat skor nol.</p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-gray-700">
+                                    <li><strong>Dampak ke Rata-Rata:</strong> Angka <code>0</code> ikut dihitung sebagai pembagi <code>=RATA2</code> &amp; <code>=RATA2_KELAS</code> sehingga <strong>menjatuhkan nilai rata-rata santri dan kelas secara drastis</strong>.</li>
+                                    <li><strong>Dampak ke Ketuntasan:</strong> Memicu peringatan kuning <em>Di Bawah KKM</em>, status <strong>Remidi</strong> pada <code>=IF</code>, dan predikat terendah (<em>E / Rasib</em>).</li>
+                                    <li><strong>Penting:</strong> Jangan pernah mengisi <code>0</code> untuk mapel yang belum diajarkan.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div className="bg-white border border-slate-200 rounded-lg p-2.5 text-[11px] text-gray-700 flex items-start gap-2">
+                            <i className="bi bi-lightbulb-fill text-amber-500 mt-0.5 shrink-0"></i>
+                            <div>
+                                <strong>Tips Pengisian Cepat Se-Rombel:</strong> Jika satu kolom mata pelajaran belum diajarkan untuk seluruh santri di kelas tersebut, cukup ketik <code>-</code> pada baris pertama di Excel/Spreadsheet, tarik ke bawah sebanyak jumlah santri, lalu <strong>Copy &amp; Paste langsung</strong> ke kolom mapel tersebut di mode <strong>Tabel Leger</strong> (atau unggah via <strong>Import Excel</strong> / <strong>Form HTML Guru</strong>). Jika sebelumnya terlanjur terisi angka <code>0</code> di Cloud GAS, cukup ubah menjadi <code>-</code> lalu klik <strong>Simpan Nilai</strong>—data di Google Sheet GAS akan otomatis ikut diperbarui.
+                            </div>
                         </div>
                     </div>
                 </div>

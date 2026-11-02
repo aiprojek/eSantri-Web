@@ -1,4 +1,5 @@
 import { GridCell, RaporColumnType, RaporSheet, RaporTemplate } from '../../../types';
+import { isKnownDynamicSystemTag, isMediaTag } from '../../../utils/raporPlaceholderResolver';
 
 export interface ParsedExcelCell {
     value: string;
@@ -123,6 +124,8 @@ export const analyzeCellValue = (rawVal: string): { type: RaporColumnType; key?:
     if (trimmed.startsWith('$')) {
         const upper = trimmed.toUpperCase();
         if (
+            isMediaTag(trimmed) ||
+            isKnownDynamicSystemTag(trimmed) ||
             SYSTEM_KEYS.includes(upper) ||
             upper === '$KKM' ||
             upper.startsWith('$KKM_') ||
@@ -135,7 +138,10 @@ export const analyzeCellValue = (rawVal: string): { type: RaporColumnType; key?:
             upper.startsWith('$STEMPEL') ||
             upper.startsWith('$TTD')
         ) {
-            return { type: 'data', value: upper };
+            const normTag = (upper === '$NILAI_KKM' || upper === '$KBM')
+                ? '$KKM'
+                : (trimmed.startsWith('$TTD_PENGAJAR:') ? trimmed : upper);
+            return { type: 'data', value: normTag };
         }
 
         // Custom variable / input wali

@@ -822,7 +822,12 @@ export const PublicPortal: React.FC = () => {
                                                     )}
                                                 </div>
                                                 <span className="rounded-xl bg-teal-600 text-white px-3 py-1 text-xs font-extrabold">
-                                                    Rata-rata: {loggedInSantri.raporTerakhir.rataRata}
+                                                    Rata-rata:{' '}
+                                                    {loggedInSantri.raporTerakhir.hasNumericScores === false ||
+                                                    (!loggedInSantri.raporTerakhir.rataRata &&
+                                                        (!loggedInSantri.raporTerakhir.mapel || loggedInSantri.raporTerakhir.mapel.length === 0))
+                                                        ? '-'
+                                                        : loggedInSantri.raporTerakhir.rataRata}
                                                 </span>
                                             </div>
                                             {loggedInSantri.raporTerakhir.mapel && loggedInSantri.raporTerakhir.mapel.length > 0 && (

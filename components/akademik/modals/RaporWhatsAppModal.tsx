@@ -13,6 +13,7 @@ export interface RaporWhatsAppModalProps {
     calculation?: {
         totalNilai?: number;
         rataRata?: number;
+        hasNumericScores?: boolean;
         ranking?: number;
         totalSantri?: number;
         predikat?: string;
@@ -82,9 +83,12 @@ export const RaporWhatsAppModal: React.FC<RaporWhatsAppModalProps> = ({
         const rankText = calculation?.ranking 
             ? `\n🏆 *Peringkat:* Juara #${calculation.ranking} dari ${calculation.totalSantri || '-'} Santri` 
             : '';
-        const avgText = calculation?.rataRata 
-            ? `\n📊 *Nilai Rata-rata:* ${calculation.rataRata.toFixed(2)} (${calculation.predikat || 'Baik'})` 
-            : '';
+        const avgText =
+            calculation?.hasNumericScores !== false &&
+            calculation?.rataRata !== undefined &&
+            (calculation.rataRata > 0 || calculation.hasNumericScores === true)
+                ? `\n📊 *Nilai Rata-rata:* ${calculation.rataRata.toFixed(2)} (${calculation.predikat || 'Baik'})`
+                : '';
 
         let customObj: Record<string, any> = {};
         if (record?.customData) {
@@ -94,7 +98,15 @@ export const RaporWhatsAppModal: React.FC<RaporWhatsAppModalProps> = ({
         const sakit = record?.sakit ?? (customObj['SAKIT'] ?? 0);
         const izin = record?.izin ?? (customObj['IZIN'] ?? 0);
         const alpha = record?.alpha ?? (customObj['ALPHA'] ?? 0);
-        const catatan = record?.catatanWaliKelas || customObj['CATATAN_WALI_KELAS'] || 'Pertahankan prestasi belajar dan kedisiplinan.';
+        const rawCatatan = record?.catatanWaliKelas || customObj['CATATAN_WALI_KELAS'] || 'Pertahankan prestasi belajar dan kedisiplinan.';
+        const catatan = resolveRaporText(String(rawCatatan), {
+            santri,
+            settings,
+            record,
+            tahunAjaran,
+            semester: semester as any,
+            calculation: calculation as any
+        });
 
         return `*LAPORAN HASIL EVALUASI BELAJAR (RAPOR)*
 *${ponpesName.toUpperCase()}*
@@ -118,7 +130,7 @@ Alhamdulillah evaluasi hasil belajar telah selesai dilaksanakan dengan tertib. R
 
 Wassalamu'alaikum Warahmatullahi Wabarakatuh.
 _Panitia Akademik & Wali Kelas ${ponpesName}_`;
-    }, [settings.namaPonpes, semester, tahunAjaran, santri, rombelName, calculation, record]);
+    }, [settings, semester, tahunAjaran, santri, rombelName, calculation, record]);
 
     const [message, setMessage] = useState<string>(defaultMessage);
 

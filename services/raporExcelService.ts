@@ -69,26 +69,35 @@ export const extractTemplateKeys = (template?: RaporTemplate | null, targetSheet
                     if (trimmedKey && !seen.has(trimmedKey)) {
                         seen.add(trimmedKey);
 
-                        // Find a readable subject/field label in the same row before this cell (skip pure numbers like KKM "70" or row number "1")
+                        // Find a readable subject/field label in the same row (prefer single-row left label over merged group header, and fall back to right-side label for Arabic RTL templates)
                         let label = cell.key;
                         const rowCells = sheet.cells[cell.row] || [];
+                        const nonSubjectHeaderSet = new Set([
+                            'NO', 'NOMOR', 'URUT', 'KKM', 'SKBM', 'STANDAR KKM', 'NILAI', 'ANGKA',
+                            'PREDIKAT', 'HURUF', 'TERBILANG', 'DESKRIPSI', 'KETERANGAN', 'CATATAN'
+                        ]);
                         const isMeaningfulTextLabel = (rawText?: string) => {
                             if (!rawText) return false;
                             const t = rawText.trim();
                             if (!t || t.startsWith('$') || t.startsWith('=')) return false;
-                            // Skip pure numbers / KKM / numbering / punctuation-only cells like "1", "1.", "70", "75,5", ":", "-"
                             if (/^(?:-?\d+(?:[.,]\d+)?%?|[.:\-/#()]+)$/.test(t)) return false;
+                            const upperClean = t.toUpperCase().replace(/[.:()]/g, '').trim();
+                            if (nonSubjectHeaderSet.has(upperClean)) return false;
                             return /[A-Za-z\u0600-\u06FF]/.test(t);
                         };
                         const leftCandidates = [...rowCells]
                             .reverse()
-                            .filter(c => c.col < cell.col && !c.hidden && c.type === 'label' && c.value && c.value.trim() !== '' && !c.value.startsWith('$'));
+                            .filter(c => c && c.col < cell.col && !c.hidden && c.type === 'label' && c.value && c.value.trim() !== '' && !c.value.startsWith('$'));
 
-                        const meaningfulLabelLeft = leftCandidates.find(c => isMeaningfulTextLabel(c.value));
+                        const meaningfulSingleRowLeft = leftCandidates.find(c => (c.rowSpan || 1) === 1 && isMeaningfulTextLabel(c.value));
+                        const meaningfulAnyLeft = meaningfulSingleRowLeft || leftCandidates.find(c => isMeaningfulTextLabel(c.value));
+                        const meaningfulRightRtl = meaningfulAnyLeft || rowCells.find(
+                            c => c && c.col > cell.col && !c.hidden && c.type === 'label' && (c.rowSpan || 1) === 1 && isMeaningfulTextLabel(c.value)
+                        );
                         const fallbackLabelLeft = leftCandidates[0];
 
-                        if (meaningfulLabelLeft) {
-                            label = meaningfulLabelLeft.value.trim();
+                        if (meaningfulRightRtl) {
+                            label = meaningfulRightRtl.value.trim();
                         } else if (isMeaningfulTextLabel(cell.value)) {
                             label = cell.value.trim();
                         } else if (fallbackLabelLeft) {
@@ -125,6 +134,8 @@ export interface ExportRaporExcelParams {
     tahunAjaran: string;
     semester: string;
     currentGrades?: Record<number, Record<string, string>>;
+    allowedKeys?: string[];
+    fileNameTag?: string;
 }
 
 export const exportRaporExcelTemplate = async ({
@@ -133,10 +144,14 @@ export const exportRaporExcelTemplate = async ({
     rombelName,
     tahunAjaran,
     semester,
-    currentGrades = {}
+    currentGrades = {},
+    allowedKeys,
+    fileNameTag
 }: ExportRaporExcelParams): Promise<string> => {
     const XLSX = await loadXLSX();
-    const keys = extractTemplateKeys(template);
+    const rawKeys = extractTemplateKeys(template);
+    const allowedSet = allowedKeys && allowedKeys.length > 0 ? new Set(allowedKeys) : null;
+    const keys = allowedSet ? rawKeys.filter(k => allowedSet.has(k.key)) : rawKeys;
 
     // If template has no explicit input keys, provide standard attendance & notes keys
     const effectiveKeys = keys.length > 0 ? keys : [
@@ -184,7 +199,8 @@ export const exportRaporExcelTemplate = async ({
 
     const cleanRombel = (rombelName || 'Rombel').replace(/[^a-zA-Z0-9_-]/g, '_');
     const cleanTA = (tahunAjaran || 'TA').replace(/[^a-zA-Z0-9_-]/g, '-');
-    const fileName = `Template_Nilai_${cleanRombel}_${cleanTA}_${semester}.xlsx`;
+    const cleanTag = fileNameTag ? `_${fileNameTag.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
+    const fileName = `Template_Nilai_${cleanRombel}${cleanTag}_${cleanTA}_${semester}.xlsx`;
 
     XLSX.writeFile(workbook, fileName);
     return fileName;

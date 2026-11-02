@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { generateRaporFormHtml } from '../../services/academicService';
-import { getTemplateSheets } from '../../services/raporExcelService';
+import { extractTemplateKeys, getTemplateSheets } from '../../services/raporExcelService';
+import { findMapelInMasterPool } from '../../utils/raporFormulaUtils';
 import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
 import { buildStandardExportFileName } from '../../utils/exportFileName';
 import {
@@ -221,9 +223,25 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
     const selectedTemplate = useMemo(() => templates.find(t => t.id === genTemplateId), [templates, genTemplateId]);
     const availableSheets = useMemo(() => getTemplateSheets(selectedTemplate), [selectedTemplate]);
     const [genSheetId, setGenSheetId] = useState<string>('all');
+    const [columnScopeMode, setColumnScopeMode] = useState<'all' | 'subset'>('all');
+    const [selectedTeacherId, setSelectedTeacherId] = useState<number>(0);
+    const [selectedAllowedKeys, setSelectedAllowedKeys] = useState<Set<string>>(new Set());
     const [previewModalOpen, setPreviewModalOpen] = useState(false);
     const [previewHtml, setPreviewHtml] = useState('');
     const [previewTitle, setPreviewTitle] = useState('Pratinjau Dokumen HTML');
+
+    const jadwalPelajaranList = useLiveQuery(() => db.jadwalPelajaran.toArray(), []) || [];
+
+    const templateInputKeys = useMemo(
+        () => extractTemplateKeys(selectedTemplate, genSheetId),
+        [selectedTemplate, genSheetId]
+    );
+
+    useEffect(() => {
+        setColumnScopeMode('all');
+        setSelectedTeacherId(0);
+        setSelectedAllowedKeys(new Set());
+    }, [genTemplateId, genSheetId]);
 
     const activeSantriAll = useMemo(
         () => santriList.filter(s => !s.deleted && (s.status || '').trim().toLowerCase() === 'aktif'),
@@ -278,6 +296,105 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
         return templates.filter(t => !t.jenjangId || t.jenjangId === portalJenjangId);
     }, [templates, portalJenjangId]);
 
+    // Pemetaan otomatis Kolom Template ($KEY) <-> Mata Pelajaran Master <-> Guru Pengampu di Jadwal Pelajaran
+    const keyToMasterMapelMap = useMemo(() => {
+        const effJId = genJenjangId || selectedTemplate?.jenjangId;
+        const map = new Map<string, number>();
+        const pool = settings.mataPelajaran || [];
+        templateInputKeys.forEach(item => {
+            const matched =
+                findMapelInMasterPool(item.label, pool, effJId) ||
+                findMapelInMasterPool(item.key, pool, effJId);
+            if (matched) {
+                map.set(item.key, matched.id);
+            }
+        });
+        return map;
+    }, [templateInputKeys, settings.mataPelajaran, genJenjangId, selectedTemplate?.jenjangId]);
+
+    const teacherColumnOptions = useMemo(() => {
+        if (templateInputKeys.length === 0) return [];
+        const targetRombelIds = new Set<number>();
+        if (targetSantriList.length > 0) {
+            targetSantriList.forEach(s => {
+                if (s.rombelId) targetRombelIds.add(Number(s.rombelId));
+            });
+        } else if (genRombelId > 0) {
+            targetRombelIds.add(genRombelId);
+        } else if (genKelasId > 0) {
+            settings.rombel.filter(r => r.kelasId === genKelasId).forEach(r => targetRombelIds.add(r.id));
+        } else if (genJenjangId > 0) {
+            const kIds = new Set(settings.kelas.filter(k => k.jenjangId === genJenjangId).map(k => k.id));
+            settings.rombel.filter(r => kIds.has(r.kelasId)).forEach(r => targetRombelIds.add(r.id));
+        }
+
+        const guruMapelIds = new Map<number, Set<number>>();
+        jadwalPelajaranList.forEach(jdw => {
+            if (!jdw || jdw.deleted || !jdw.guruId || !jdw.mapelId) return;
+            if (targetRombelIds.size > 0 && !targetRombelIds.has(Number(jdw.rombelId))) return;
+            const set = guruMapelIds.get(Number(jdw.guruId)) || new Set<number>();
+            set.add(Number(jdw.mapelId));
+            guruMapelIds.set(Number(jdw.guruId), set);
+        });
+
+        const list: Array<{ guruId: number; guruNama: string; keys: string[]; labels: string[] }> = [];
+        guruMapelIds.forEach((mSet, gId) => {
+            const teacher = (settings.tenagaPengajar || []).find(t => Number(t.id) === gId);
+            if (!teacher) return;
+            const matchedItems = templateInputKeys.filter(k => {
+                const mId = keyToMasterMapelMap.get(k.key);
+                return mId !== undefined && mSet.has(mId);
+            });
+            if (matchedItems.length > 0) {
+                list.push({
+                    guruId: gId,
+                    guruNama: teacher.nama,
+                    keys: matchedItems.map(i => i.key),
+                    labels: matchedItems.map(i => i.label)
+                });
+            }
+        });
+
+        return list.sort((a, b) => a.guruNama.localeCompare(b.guruNama));
+    }, [
+        templateInputKeys,
+        targetSantriList,
+        genRombelId,
+        genKelasId,
+        genJenjangId,
+        settings.rombel,
+        settings.kelas,
+        settings.tenagaPengajar,
+        jadwalPelajaranList,
+        keyToMasterMapelMap
+    ]);
+
+    const resolvedColumnScopeMeta = useMemo(() => {
+        if (columnScopeMode !== 'subset') {
+            return { allowedKeys: undefined as string[] | undefined, scopeTitle: undefined as string | undefined, fileSlug: '' };
+        }
+        const orderedSelected = templateInputKeys.filter(k => selectedAllowedKeys.has(k.key));
+        const keys = orderedSelected.map(k => k.key);
+        const labels = orderedSelected.map(k => k.label);
+        const teacherObj = selectedTeacherId
+            ? teacherColumnOptions.find(t => t.guruId === selectedTeacherId)
+            : undefined;
+        const labelSummary = labels.slice(0, 3).join(', ') + (labels.length > 3 ? ` +${labels.length - 3} lainnya` : '');
+        const scopeTitle = teacherObj
+            ? `${teacherObj.guruNama} (${labelSummary})`
+            : labelSummary
+            ? `Mapel: ${labelSummary}`
+            : undefined;
+        const fileSlug = teacherObj
+            ? teacherObj.guruNama
+            : labels.length === 1
+            ? labels[0]
+            : labels.length > 1
+            ? `${labels[0]}-${labels.length}-mapel`
+            : '';
+        return { allowedKeys: keys, scopeTitle, fileSlug };
+    }, [columnScopeMode, templateInputKeys, selectedAllowedKeys, selectedTeacherId, teacherColumnOptions]);
+
     // --- GENERATE LEDGER HTML ---
     const createGeneratedLedgerHtml = (): string | null => {
         if (targetMode === 'range') {
@@ -290,6 +407,10 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                 showToast('Pilih template dan target (Jenjang/Kelas/Rombel) terlebih dahulu', 'error');
                 return null;
             }
+        }
+        if (columnScopeMode === 'subset' && (!resolvedColumnScopeMeta.allowedKeys || resolvedColumnScopeMeta.allowedKeys.length === 0)) {
+            showToast('Pilih minimal 1 kolom mata pelajaran untuk disertakan pada formulir.', 'error');
+            return null;
         }
         if (targetSantriList.length === 0) {
             showToast('Tidak ada santri aktif pada target yang dipilih', 'error');
@@ -324,7 +445,9 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
             googleScriptUrl: googleScriptUrl.trim(),
             waDestination: waDestination.trim(),
             rankingScope: genRankingScope,
-            tabMode
+            tabMode,
+            allowedKeys: resolvedColumnScopeMeta.allowedKeys,
+            scopeTitle: resolvedColumnScopeMeta.scopeTitle
         });
     };
 
@@ -333,7 +456,8 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
             const html = createGeneratedLedgerHtml();
             if (!html) return;
             await persistRaporCloudConfig(true);
-            setPreviewTitle(`Pratinjau Formulir Ledger — ${selectedTemplate?.name || 'Rapor'}`);
+            const scopeSuffix = resolvedColumnScopeMeta.scopeTitle ? ` • ${resolvedColumnScopeMeta.scopeTitle}` : '';
+            setPreviewTitle(`Pratinjau Formulir Ledger — ${selectedTemplate?.name || 'Rapor'}${scopeSuffix}`);
             setPreviewHtml(html);
             setPreviewModalOpen(true);
         } catch (e) {
@@ -375,7 +499,14 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
 
             const filename = buildStandardExportFileName(
                 'form-nilai',
-                [targetJenjang, targetKelas, targetRombel, genSemester, genTahunAjaran].filter(Boolean)
+                [
+                    targetJenjang,
+                    targetKelas,
+                    targetRombel,
+                    resolvedColumnScopeMeta.fileSlug,
+                    genSemester,
+                    genTahunAjaran
+                ].filter(Boolean)
             );
             a.download = `${filename}.html`;
             document.body.appendChild(a);
@@ -567,6 +698,145 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                                     </option>
                                                 ))}
                                             </select>
+                                        </div>
+                                    )}
+
+                                    {selectedTemplate && templateInputKeys.length > 0 && (
+                                        <div className="bg-white p-3.5 rounded-xl border border-teal-200 space-y-2.5">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                                <span className="text-xs font-bold text-teal-950 flex items-center gap-1.5">
+                                                    <i className="bi bi-funnel-fill text-teal-600"></i>
+                                                    <span>Cakupan Kolom Input Guru:</span>
+                                                </span>
+                                                <div className="inline-flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setColumnScopeMode('all');
+                                                            setSelectedTeacherId(0);
+                                                        }}
+                                                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                                                            columnScopeMode === 'all'
+                                                                ? 'bg-white text-teal-800 shadow-2xs'
+                                                                : 'text-slate-600 hover:text-slate-900'
+                                                        }`}
+                                                    >
+                                                        Semua Kolom ({templateInputKeys.length})
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setColumnScopeMode('subset')}
+                                                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                                                            columnScopeMode === 'subset'
+                                                                ? 'bg-white text-teal-800 shadow-2xs'
+                                                                : 'text-slate-600 hover:text-slate-900'
+                                                        }`}
+                                                    >
+                                                        Per Mapel / Pengampu
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {columnScopeMode === 'subset' && (
+                                                <div className="space-y-2.5 pt-2 border-t border-slate-100 animate-fade-in">
+                                                    {teacherColumnOptions.length > 0 && (
+                                                        <div>
+                                                            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                                                                Pilih Cepat Berdasarkan Guru Pengampu (Jadwal Pelajaran):
+                                                            </label>
+                                                            <select
+                                                                value={selectedTeacherId}
+                                                                onChange={e => {
+                                                                    const gId = Number(e.target.value);
+                                                                    setSelectedTeacherId(gId);
+                                                                    const found = teacherColumnOptions.find(t => t.guruId === gId);
+                                                                    if (found) {
+                                                                        setSelectedAllowedKeys(new Set(found.keys));
+                                                                    }
+                                                                }}
+                                                                className="w-full border border-teal-200 rounded-lg p-2 text-xs font-semibold bg-teal-50/40 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                                                            >
+                                                                <option value={0}>-- Pilih Ustadz/Ustadzah Pengampu atau Centang Manual --</option>
+                                                                {teacherColumnOptions.map(t => (
+                                                                    <option key={t.guruId} value={t.guruId}>
+                                                                        {t.guruNama} — {t.labels.join(', ')} ({t.keys.length} kolom)
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    )}
+
+                                                    <div className="flex items-center justify-between text-[11px]">
+                                                        <span className="font-bold text-slate-600">
+                                                            Centang Kolom Nilai ({selectedAllowedKeys.size} dari {templateInputKeys.length} dipilih):
+                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setSelectedTeacherId(0);
+                                                                    setSelectedAllowedKeys(new Set(templateInputKeys.map(k => k.key)));
+                                                                }}
+                                                                className="text-teal-700 hover:underline font-bold"
+                                                            >
+                                                                Pilih Semua
+                                                            </button>
+                                                            <span className="text-slate-300">|</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setSelectedTeacherId(0);
+                                                                    setSelectedAllowedKeys(new Set());
+                                                                }}
+                                                                className="text-rose-600 hover:underline font-bold"
+                                                            >
+                                                                Reset
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="max-h-44 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1.5 pr-1">
+                                                        {templateInputKeys.map(item => {
+                                                            const checked = selectedAllowedKeys.has(item.key);
+                                                            return (
+                                                                <label
+                                                                    key={item.key}
+                                                                    className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
+                                                                        checked
+                                                                            ? 'bg-teal-50 border-teal-300 text-teal-950 font-bold'
+                                                                            : 'bg-slate-50/70 border-slate-200 text-slate-700 hover:bg-slate-100'
+                                                                    }`}
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={checked}
+                                                                        onChange={() => {
+                                                                            setSelectedTeacherId(0);
+                                                                            setSelectedAllowedKeys(prev => {
+                                                                                const next = new Set(prev);
+                                                                                if (next.has(item.key)) next.delete(item.key);
+                                                                                else next.add(item.key);
+                                                                                return next;
+                                                                            });
+                                                                        }}
+                                                                        className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                                                                    />
+                                                                    <span className="truncate flex-1" title={`${item.label} [${item.key}]`}>
+                                                                        {item.label}
+                                                                    </span>
+                                                                    <span className="font-mono text-[10px] text-slate-400 shrink-0">
+                                                                        ${item.key}
+                                                                    </span>
+                                                                </label>
+                                                            );
+                                                        })}
+                                                    </div>
+
+                                                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                                                        Formulir yang diunduh hanya menampilkan kolom yang dicentang sehingga guru mata pelajaran fokus mengisi mapelnya sendiri. Saat dikirim ke Cloud GAS / WA, nilainya tetap digabungkan rapi ke rapor santri tanpa menimpa mapel guru lain.
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>

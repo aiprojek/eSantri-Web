@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Santri } from '../../../types';
+import { MataPelajaran, Santri } from '../../../types';
 import { ExtractedTemplateKey } from '../../../services/raporExcelService';
 import { classifyRaporInputField } from '../../../services/raporCalculationService';
 
@@ -9,12 +9,16 @@ interface RaporBulkHelperModalProps {
     santriList: Santri[];
     inputKeys: ExtractedTemplateKey[];
     currentGrades: Record<number, Record<string, string>>;
+    mataPelajaran?: MataPelajaran[];
+    jenjangId?: number;
     onApplyBulkUpdates: (updatesBySantri: Record<number, Record<string, string>>) => void;
 }
 
 function computeStudentAverage(
     studentGrades: Record<string, string> | undefined,
-    keyMetaMap: Map<string, ExtractedTemplateKey>
+    keyMetaMap: Map<string, ExtractedTemplateKey>,
+    mataPelajaran?: MataPelajaran[],
+    jenjangId?: number
 ): number | null {
     if (!studentGrades) return null;
     let sum = 0;
@@ -25,7 +29,9 @@ function computeStudentAverage(
             key: k,
             label: meta?.label,
             type: meta?.type,
-            inputMode: meta?.inputMode
+            inputMode: meta?.inputMode,
+            mataPelajaran,
+            jenjangId
         });
         if (!cls.isNumericScore) return;
         const cleaned = String(val ?? '').trim().replace(',', '.');
@@ -72,6 +78,8 @@ export const RaporBulkHelperModal: React.FC<RaporBulkHelperModalProps> = ({
     santriList,
     inputKeys,
     currentGrades,
+    mataPelajaran,
+    jenjangId,
     onApplyBulkUpdates
 }) => {
     const [activeTab, setActiveTab] = useState<'catatan' | 'keputusan'>('catatan');
@@ -111,14 +119,16 @@ export const RaporBulkHelperModal: React.FC<RaporBulkHelperModalProps> = ({
 
     const previewItems = useMemo(() => {
         return santriList.map(s => {
-            const avg = computeStudentAverage(currentGrades[s.id], keyMetaMap);
+            const avg = computeStudentAverage(currentGrades[s.id], keyMetaMap, mataPelajaran, jenjangId);
             const existingCat = (currentGrades[s.id]?.[catatanTargetKey] || '').trim();
             const generatedCat = buildPesantrenCatatan(s.namaLengkap, avg, catatanTone);
 
-            const generatedKep =
+            const generatedKep: string | null =
                 keputusanMode === 'uniform'
                     ? uniformText
-                    : avg !== null && avg >= kkmThreshold
+                    : avg === null
+                    ? null
+                    : avg >= kkmThreshold
                     ? passText
                     : failText;
 
@@ -135,6 +145,8 @@ export const RaporBulkHelperModal: React.FC<RaporBulkHelperModalProps> = ({
         santriList,
         currentGrades,
         keyMetaMap,
+        mataPelajaran,
+        jenjangId,
         catatanTargetKey,
         catatanTone,
         overwriteExistingCatatan,
@@ -164,10 +176,12 @@ export const RaporBulkHelperModal: React.FC<RaporBulkHelperModalProps> = ({
     const handleApplyKeputusan = () => {
         const updates: Record<number, Record<string, string>> = {};
         previewItems.forEach(item => {
-            updates[item.santri.id] = {
-                [keputusanTargetKey]: item.generatedKep,
-                KEPUTUSAN: item.generatedKep
-            };
+            if (item.generatedKep !== null) {
+                updates[item.santri.id] = {
+                    [keputusanTargetKey]: item.generatedKep,
+                    KEPUTUSAN: item.generatedKep
+                };
+            }
         });
         onApplyBulkUpdates(updates);
         onClose();
@@ -402,6 +416,12 @@ export const RaporBulkHelperModal: React.FC<RaporBulkHelperModalProps> = ({
                                             />
                                         </div>
                                     </div>
+                                    {previewItems.some(i => i.avg === null) && (
+                                        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 font-medium">
+                                            <i className="bi bi-info-circle-fill mr-1"></i>
+                                            {previewItems.filter(i => i.avg === null).length} santri yang belum memiliki nilai angka (kosong / semua &quot;-&quot;) otomatis dilewati agar tidak salah dicap tidak naik.
+                                        </p>
+                                    )}
                                 </div>
                             )}
                         </>
@@ -430,10 +450,11 @@ export const RaporBulkHelperModal: React.FC<RaporBulkHelperModalProps> = ({
                         <button
                             type="button"
                             onClick={handleApplyKeputusan}
-                            className="px-5 py-2 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center gap-1.5"
+                            disabled={previewItems.every(i => i.generatedKep === null)}
+                            className="px-5 py-2 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white shadow-sm flex items-center gap-1.5"
                         >
                             <i className="bi bi-check2-all"></i>
-                            <span>Terapkan Keputusan ({santriList.length} Santri)</span>
+                            <span>Terapkan Keputusan ({previewItems.filter(i => i.generatedKep !== null).length} Santri)</span>
                         </button>
                     )}
                 </div>

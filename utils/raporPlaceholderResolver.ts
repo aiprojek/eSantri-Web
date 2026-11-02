@@ -27,6 +27,7 @@ import {
     inspectSheetRowKkm
 } from './raporFormulaUtils';
 import { resolveAcademicYearLabels } from './academicYear';
+import { extractTemplateKeys } from '../services/raporExcelService';
 
 export interface DynamicTagItem {
     tag: string;
@@ -255,6 +256,38 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
     }
 ];
 
+export const isKnownDynamicSystemTag = (raw: string): boolean => {
+    const up = (raw || '').trim().toUpperCase();
+    if (!up.startsWith('$') || up.includes(' ')) return false;
+    if (
+        up === '$KKM' ||
+        up.startsWith('$KKM_') ||
+        up.startsWith('$MAPEL_') ||
+        up.startsWith('$TTD_') ||
+        up.startsWith('$RATA2_KELAS_') ||
+        up.startsWith('$RERATA_KELAS_') ||
+        up.startsWith('$NRK_')
+    ) {
+        return true;
+    }
+    for (const cat of DYNAMIC_TAG_CATEGORIES) {
+        if (cat.tags.some(t => t.tag.toUpperCase() === up)) return true;
+    }
+    const aliases = [
+        '$TAHUNAJAR', '$TAHUN_AJAR', '$TAHUNAJARAN', '$TAHUN_AJARAN',
+        '$MARHALAH', '$JENJANG', '$TINGKAT', '$KELAS', '$ROMBEL', '$SEMESTER',
+        '$FASE', '$CAPAIAN_KOMPETENSI', '$CAPAIAN_UMUM', '$P5',
+        '$CATATAN_WALIKELAS', '$LOGO', '$TEMPAT_TANGGAL_RAPOR',
+        '$NILAI_KKM', '$STANDAR_KKM', '$KKM_DEFAULT', '$KKM_MARHALAH', '$KBM',
+        '$RATA_RATA_KELAS', '$RERATA_KELAS', '$RATA2_KELAS',
+        '$RANKING', '$PERINGKAT_KELAS', '$PERINGKAT_JENJANG',
+        '$TOTAL_SANTRI', '$TOTAL_SANTRI_KELAS', '$TOTAL_SANTRI_JENJANG',
+        '$KOTA_PONPES', '$TANGGAL_MASEHI', '$TANGGAL_HIJRIAH',
+        '$TANGGAL_HIJRIAH_MASEHI', '$TANGGAL_MASEHI_HIJRIAH', '$TITIMANGSA_MASEHI_HIJRIAH'
+    ];
+    return aliases.includes(up);
+};
+
 export interface RaporResolveContext {
     santri?: Santri | null;
     settings?: PondokSettings | null;
@@ -265,6 +298,7 @@ export interface RaporResolveContext {
     calculation?: {
         totalNilai?: number;
         rataRata?: number;
+        hasNumericScores?: boolean;
         ranking?: number;
         rankingKelas?: number;
         rankingJenjang?: number;
@@ -1576,9 +1610,10 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     setToken('$PREDIKAT_TAHFIZH', String(predikatTahfizhVal));
 
     // Kalkulasi & Ranking
-    let totalScore = context.calculation?.totalNilai;
-    let avgScore = context.calculation?.rataRata;
-    let predikatStr = context.calculation?.predikat;
+    const explicitNoScores = context.calculation?.hasNumericScores === false;
+    let totalScore = explicitNoScores ? undefined : context.calculation?.totalNilai;
+    let avgScore = explicitNoScores ? undefined : context.calculation?.rataRata;
+    let predikatStr = explicitNoScores ? undefined : context.calculation?.predikat;
     const rankVal = context.calculation?.ranking;
     const rankKelasVal = context.calculation?.rankingKelas ?? rankVal;
     const rankJenjangVal = context.calculation?.rankingJenjang ?? rankVal;
@@ -1587,22 +1622,43 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     const totalSantriKelasVal = context.calculation?.totalSantriKelas ?? totalSantriVal;
     const totalSantriJenjangVal = context.calculation?.totalSantriJenjang ?? totalSantriVal;
 
-    if (totalScore === undefined || avgScore === undefined) {
+    let hasFallbackNumericScore =
+        !explicitNoScores &&
+        context.calculation !== undefined &&
+        context.calculation.rataRata !== undefined;
+
+    if (!explicitNoScores && (totalScore === undefined || avgScore === undefined)) {
         let sum = 0;
         let count = 0;
-        const nonGradeSet = new Set(['sakit', 'izin', 'alpha', 'alpa', 'total_absen', 's', 'i', 'a']);
+        const allowedSubjectKeySet: Set<string> | null = context.template
+            ? new Set(
+                  extractTemplateKeys(context.template, 'all')
+                      .filter(tk => tk.type !== 'dropdown' && tk.inputMode !== 'text')
+                      .map(tk => tk.key)
+              )
+            : null;
+        const nonGradeWordPattern = /(?:^|_)(?:sakit|izin|ijin|alpha|alpa|absen|absensi|kehadiran|hadir|terlambat|telat|catatan|deskripsi|narasi|keputusan|predikat|taqdir|ranking|peringkat|target_juz|juz_terakhir|total_juz|total_setoran|setoran|juz)(?:$|_)/i;
+        const nonGradeExactSet = new Set(['s', 'i', 'a', 'h']);
         Object.entries(customObj).forEach(([k, val]) => {
-            if (!nonGradeSet.has(k.toLowerCase()) && val !== undefined && val !== null && String(val).trim() !== '') {
-                const num = Number(String(val).trim().replace(',', '.'));
-                if (!isNaN(num) && num >= 0 && num <= 100) {
-                    sum += num;
-                    count += 1;
+            if (!k || k.startsWith('_')) return;
+            if (allowedSubjectKeySet && allowedSubjectKeySet.size > 0 && !allowedSubjectKeySet.has(k)) return;
+            const kLower = k.trim().toLowerCase();
+            if (nonGradeExactSet.has(kLower) || nonGradeWordPattern.test(kLower)) return;
+            if (val !== undefined && val !== null) {
+                const sv = String(val).trim();
+                if (sv !== '' && sv !== '-') {
+                    const num = Number(sv.replace(',', '.'));
+                    if (!isNaN(num) && isFinite(num) && num >= 0 && num <= 100) {
+                        sum += num;
+                        count += 1;
+                    }
                 }
             }
         });
         if (count > 0) {
-            totalScore = sum;
-            avgScore = Math.round((sum / count) * 10000) / 10000;
+            hasFallbackNumericScore = true;
+            totalScore = Math.round((sum + Number.EPSILON) * 10000) / 10000;
+            avgScore = Math.round(((totalScore / count) + Number.EPSILON) * 10000) / 10000;
             if (!predikatStr) {
                 if (avgScore >= 90) predikatStr = 'Mumtaz';
                 else if (avgScore >= 80) predikatStr = 'Jayyid Jiddan';
@@ -1623,9 +1679,22 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         }
     }
     if (context.cohortRecords && context.cohortRecords.length > 0 && Object.keys(effectiveClassAverages).length === 0) {
-        const cohortAccum = new Map<string, { sum: number; count: number }>();
+        const dedupedCohort = new Map<number, RaporRecord>();
+        const unindexedCohort: RaporRecord[] = [];
         for (const cRec of context.cohortRecords) {
-            if (!cRec?.customData) continue;
+            if (!cRec || cRec.deleted || !cRec.customData) continue;
+            if (cRec.santriId) {
+                const prev = dedupedCohort.get(cRec.santriId);
+                if (!prev || (cRec.lastModified || 0) >= (prev.lastModified || 0)) {
+                    dedupedCohort.set(cRec.santriId, cRec);
+                }
+            } else {
+                unindexedCohort.push(cRec);
+            }
+        }
+        const cohortList = [...Array.from(dedupedCohort.values()), ...unindexedCohort];
+        const cohortAccum = new Map<string, { sum: number; count: number }>();
+        for (const cRec of cohortList) {
             let cObj: Record<string, any> = {};
             try {
                 cObj = typeof cRec.customData === 'string' ? JSON.parse(cRec.customData) : cRec.customData;
@@ -1674,12 +1743,14 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
             : Number(effectiveClassOverallAvg.toFixed(2)).toString())
         : '-';
 
-    setToken('$TOTAL_NILAI', totalScore !== undefined && totalScore > 0 ? String(totalScore) : '-');
-    setToken('$RATA_RATA', avgScore !== undefined && avgScore > 0 ? avgScore.toFixed(tokenDigits) : '-');
+    const canShowScoreSummary = hasFallbackNumericScore && totalScore !== undefined;
+    const canShowAvgSummary = hasFallbackNumericScore && avgScore !== undefined;
+    setToken('$TOTAL_NILAI', canShowScoreSummary ? String(totalScore) : '-');
+    setToken('$RATA_RATA', canShowAvgSummary && avgScore !== undefined ? avgScore.toFixed(tokenDigits) : '-');
     setToken('$RATA_RATA_KELAS', formattedClassOverall);
     setToken('$RERATA_KELAS', formattedClassOverall);
     setToken('$RATA2_KELAS', formattedClassOverall);
-    setToken('$PREDIKAT_RATA_RATA', predikatStr || '-');
+    setToken('$PREDIKAT_RATA_RATA', canShowAvgSummary && predikatStr ? predikatStr : '-');
     setToken('$PERINGKAT', rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
     setToken('$RANKING', rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
     setToken('$PERINGKAT_KELAS', rankKelasVal !== undefined && rankKelasVal > 0 ? String(rankKelasVal) : '-');
@@ -1705,31 +1776,43 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     const customKelulusan = findCustomVal('STATUS_KELULUSAN', 'KELULUSAN', 'KENAIKAN_KELAS');
 
     const defaultCpTertinggi = customCpTertinggi || (
-        avgScore && avgScore >= 85
+        !canShowAvgSummary || avgScore === undefined
+            ? '-'
+            : avgScore >= 85
             ? 'Menunjukkan penguasaan yang sangat optimal dan mandiri dalam memahami seluruh tujuan pembelajaran serta mampu mengaplikasikan materi dengan sangat baik.'
-            : (avgScore && avgScore >= 75
-                ? 'Menunjukkan penguasaan yang baik dalam sebagian besar kompetensi materi pokok dan mampu menyelesaikan penugasan dengan konsisten.'
-                : 'Mampu memahami konsep-konsep dasar pembelajaran dengan cukup baik.')
+            : avgScore >= 75
+            ? 'Menunjukkan penguasaan yang baik dalam sebagian besar kompetensi materi pokok dan mampu menyelesaikan penugasan dengan konsisten.'
+            : 'Mampu memahami konsep-konsep dasar pembelajaran dengan cukup baik.'
     );
 
     const defaultCpTerendah = customCpTerendah || (
-        avgScore && avgScore < 75
+        !canShowAvgSummary || avgScore === undefined
+            ? '-'
+            : avgScore < 75
             ? 'Perlu pendampingan dan bimbingan lebih intensif dalam penguatan konsep dasar materi pembelajaran serta peningkatan disiplin belajar.'
-            : (avgScore && avgScore < 85
-                ? 'Perlu peningkatan ketelitian dan latihan berkelanjutan pada materi yang memerlukan analisis mendalam.'
-                : 'Perlu terus mempertahankan prestasi belajar dan aktif membantu rekan dalam diskusi kelompok.')
+            : avgScore < 85
+            ? 'Perlu peningkatan ketelitian dan latihan berkelanjutan pada materi yang memerlukan analisis mendalam.'
+            : 'Perlu terus mempertahankan prestasi belajar dan aktif membantu rekan dalam diskusi kelompok.'
     );
 
     const defaultKompetensi = customKompetensi || (
-        avgScore && avgScore >= 85
+        !canShowAvgSummary || avgScore === undefined
+            ? '-'
+            : avgScore >= 85
             ? 'Ananda menunjukkan antusiasme, akhlak mulia, dan capaian kompetensi belajar yang luar biasa sepanjang semester ini. Pertahankan ketekunan ini.'
-            : (avgScore && avgScore >= 75
-                ? 'Ananda telah mencapai kriteria ketuntasan dengan baik. Diharapkan dapat terus meningkatkan semangat belajar di semester berikutnya.'
-                : 'Ananda perlu lebih giat mengulang pelajaran di luar jam kelas serta meminta arahan guru pada materi yang belum dipahami.')
+            : avgScore >= 75
+            ? 'Ananda telah mencapai kriteria ketuntasan dengan baik. Diharapkan dapat terus meningkatkan semangat belajar di semester berikutnya.'
+            : 'Ananda perlu lebih giat mengulang pelajaran di luar jam kelas serta meminta arahan guru pada materi yang belum dipahami.'
     );
 
     const defaultKelulusan = customKelulusan || (
-        keputusanVal !== '-' ? keputusanVal : (avgScore && avgScore >= 70 ? 'Naik ke Tingkat Berikutnya' : 'Perlu Evaluasi Lanjutan')
+        keputusanVal !== '-'
+            ? keputusanVal
+            : !canShowAvgSummary || avgScore === undefined
+            ? '-'
+            : avgScore >= 70
+            ? 'Naik ke Tingkat Berikutnya'
+            : 'Perlu Evaluasi Lanjutan'
     );
 
     setToken('$DESKRIPSI_CAPAIAN_TERTINGGI', String(defaultCpTertinggi));

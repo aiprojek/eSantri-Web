@@ -70,6 +70,28 @@ const expandSheetFormulaCoords = (
     const preferredJenjangId = ctx?.preferredJenjangId;
     const defaultKkm = computeDefaultKkmForPool(mataPelajaran, preferredJenjangId);
 
+    // Collect defined $KEY names so column-locked cell refs like $D6 are never confused with $KEY variables
+    const definedKeysUpper = new Set<string>();
+    for (let r = 0; r < maxRows; r++) {
+        const rowArr = sheetCells[r];
+        if (!rowArr) continue;
+        for (let c = 0; c < rowArr.length; c++) {
+            const k = rowArr[c]?.key?.trim();
+            if (k) definedKeysUpper.add(k.toUpperCase());
+        }
+    }
+
+    const parseSheetCellCoordSmart = (token: string): { r: number; c: number } | null => {
+        const trimmed = (token || '').trim();
+        if (!trimmed) return null;
+        if (trimmed.startsWith('$') && !trimmed.slice(1).includes('$')) {
+            const rawKey = trimmed.slice(1).toUpperCase();
+            if (definedKeysUpper.has(rawKey)) return null;
+            return parseExcelCellCoord(trimmed, true);
+        }
+        return parseExcelCellCoord(trimmed, false);
+    };
+
     const resolveDynamicKkmToken = (r: number, c: number, explicitSlug?: string): string => {
         if (explicitSlug) {
             const matched = findMapelInMasterPool(explicitSlug, mataPelajaran, preferredJenjangId);
@@ -90,7 +112,7 @@ const expandSheetFormulaCoords = (
 
     const cellToExprToken = (r: number, c: number, forRange = false): string | null => {
         const master = resolveMasterGridCell(sheetCells, r, c);
-        if (!master) return forRange ? null : '0';
+        if (!master) return forRange ? null : 'null';
 
         const rawVal = (master.value ?? '').trim();
         // Resolve $KKM / $MAPEL_KKM / $KKM_STANDAR / $KKM_<MAPEL> cells before treating as generic text/variable
@@ -114,10 +136,10 @@ const expandSheetFormulaCoords = (
                 formulaRow: master.row ?? r,
                 formulaCol: master.col ?? c
             });
-            return inner ? `(${inner})` : '0';
+            return inner ? `(${inner})` : 'null';
         }
 
-        if (!rawVal) return forRange ? null : '0';
+        if (!rawVal) return forRange ? null : 'null';
         if (/^\$[A-Za-z0-9_]+$/.test(rawVal)) return rawVal;
 
         const normalizedNum = rawVal.replace(',', '.');
@@ -143,7 +165,7 @@ const expandSheetFormulaCoords = (
             }
             const firstArg = parts[0];
             const explicitFallback = parts[1];
-            const coord = parseExcelCellCoord(firstArg);
+            const coord = parseSheetCellCoordSmart(firstArg);
             if (coord && coord.r < maxRows && coord.c < maxCols) {
                 const targetCell = resolveMasterGridCell(sheetCells, coord.r, coord.c);
                 const rowInfo = inspectSheetRowKkm({
@@ -172,30 +194,57 @@ const expandSheetFormulaCoords = (
             return explicitFallback ? `KKM(${firstArg}, ${explicitFallback})` : `KKM(${firstArg}, ${defaultKkm})`;
         });
 
-        // 0b. Pre-resolve =RATA2_KELAS(...) / RERATA_KELAS(...) / AVERAGE_KELAS(...) / NRK(...) to column key string
-        processed = processed.replace(/\b(?:RATA2_KELAS|RERATA_KELAS|AVERAGE_KELAS|AVG_CLASS|NRK)\s*\(([^()]*)\)/gi, (_full, rawArgs: string) => {
-            const firstArg = (rawArgs.split(/[;,]/)[0] || '').trim();
-            if (!firstArg) return '0';
-            const coord = parseExcelCellCoord(firstArg);
+        // 0b. Pre-resolve =RATA2_KELAS(...) / RERATA_KELAS(...) / AVERAGE_KELAS(...) / NRK(...) to column key string, range, or 0-arg overall
+        processed = processed.replace(/\b(?:RATA2_KELAS|RERATA_KELAS|RATA_KELAS|AVERAGE_KELAS|AVG_KELAS|AVG_CLASS|NRK)\s*\(([^()]*)\)/gi, (_full, rawArgs: string) => {
+            const parts = rawArgs.split(/[;,]/).map(s => s.trim()).filter(Boolean);
+            const firstArg = parts[0] || '';
+            const decArg = parts[1];
+            const withDec = (keyExpr: string) => (decArg !== undefined && decArg !== '' ? `RATA2_KELAS(${keyExpr}, ${decArg})` : `RATA2_KELAS(${keyExpr})`);
+            if (!firstArg) return withDec('"__OVERALL__"');
+
+            const range = parseExcelRangeCoord(firstArg);
+            if (range) {
+                const rangeCalls: string[] = [];
+                const seenRangeKeys = new Set<string>();
+                for (let r = range.rMin; r <= Math.min(range.rMax, maxRows - 1); r++) {
+                    for (let c = range.cMin; c <= Math.min(range.cMax, maxCols - 1); c++) {
+                        const targetCell = resolveMasterGridCell(sheetCells, r, c);
+                        const kName = targetCell?.key?.trim();
+                        if (kName && !seenRangeKeys.has(kName)) {
+                            seenRangeKeys.add(kName);
+                            rangeCalls.push(`RATA2_KELAS(${JSON.stringify(kName)})`);
+                        }
+                    }
+                }
+                if (rangeCalls.length === 0) return 'null';
+                const avgExpr = `AVERAGE(${rangeCalls.join(', ')})`;
+                return decArg !== undefined && decArg !== '' ? `ROUND(${avgExpr}, ${decArg})` : avgExpr;
+            }
+
+            const coord = parseSheetCellCoordSmart(firstArg);
             if (coord && coord.r < maxRows && coord.c < maxCols) {
                 const targetCell = resolveMasterGridCell(sheetCells, coord.r, coord.c);
                 const keyName = targetCell?.key?.trim();
-                if (keyName) return `RATA2_KELAS(${JSON.stringify(keyName)})`;
-                return '0';
+                if (keyName) return withDec(JSON.stringify(keyName));
+                return 'null';
+            }
+            if (/^\$(?:RATA_RATA_KELAS|RERATA_KELAS|RATA2_KELAS)$/i.test(firstArg)) {
+                return withDec('"__OVERALL__"');
             }
             if (/^\$[A-Za-z0-9_]+$/.test(firstArg)) {
-                return `RATA2_KELAS(${JSON.stringify(firstArg.slice(1))})`;
+                return withDec(JSON.stringify(firstArg.slice(1)));
             }
-            return `RATA2_KELAS(${firstArg})`;
+            return decArg !== undefined && decArg !== '' ? `RATA2_KELAS(${firstArg}, ${decArg})` : `RATA2_KELAS(${firstArg})`;
         });
 
-        // 0c. Inline $KKM / $KKM_<MAPEL> tags written directly inside a formula expression
+        // 0c. Inline $KKM / $KKM_<MAPEL> & $RATA_RATA_KELAS tags written directly inside a formula expression
         processed = processed.replace(/\$(?:KKM|MAPEL_KKM|KKM_STANDAR)\b/gi, () =>
             resolveDynamicKkmToken(ctx?.formulaRow ?? 0, ctx?.formulaCol ?? 0)
         );
         processed = processed.replace(/\$KKM_([A-Za-z0-9_]+)\b/gi, (_m, slug: string) =>
             resolveDynamicKkmToken(ctx?.formulaRow ?? 0, ctx?.formulaCol ?? 0, slug)
         );
+        processed = processed.replace(/\$(?:RATA_RATA_KELAS|RERATA_KELAS|RATA2_KELAS)\b/gi, 'RATA2_KELAS("__OVERALL__")');
 
         // 1. Expand range coordinates like D6:D15 or $D$6:$D$15
         processed = processed.replace(/\$?[A-Za-z]{1,2}\$?\d{1,3}\s*:\s*\$?[A-Za-z]{1,2}\$?\d{1,3}/g, (match) => {
@@ -214,15 +263,15 @@ const expandSheetFormulaCoords = (
                     if (tok !== null) tokens.push(tok);
                 }
             }
-            return tokens.length > 0 ? tokens.join(', ') : '0';
+            return tokens.length > 0 ? tokens.join(', ') : 'null';
         });
 
         // 2. Expand single cell coordinates like D6, $D$6, $D6, D$6
         processed = processed.replace(/(?<![A-Za-z0-9_$])(\$?[A-Za-z]{1,2}\$?\d{1,3})(?![A-Za-z0-9_(])/g, (match) => {
-            const coord = parseExcelCellCoord(match);
+            const coord = parseSheetCellCoordSmart(match);
             if (!coord) return match;
             if (coord.r >= maxRows || coord.c >= maxCols) return match;
-            return cellToExprToken(coord.r, coord.c, false) ?? '0';
+            return cellToExprToken(coord.r, coord.c, false) ?? 'null';
         });
 
         return processed;
@@ -413,29 +462,37 @@ const convertFormulaToJs = (expression: string): string => {
         js = js.replace(/\b(?:TRUE|BENAR)\b/gi, 'true');
         js = js.replace(/\b(?:FALSE|SALAH)\b/gi, 'false');
 
-        // Class Cohort Average & KKM Functions (must run before generic RATA2/AVERAGE)
+        // Class Cohort Average & KKM Functions (must run before generic RATA2/AVERAGE; handle 0-arg calls safely)
+        js = js.replace(/\b(?:RATA2_KELAS|RERATA_KELAS|RATA_KELAS|AVERAGE_KELAS|AVG_KELAS|AVG_CLASS|NRK)\s*\(\s*\)/gi, "rata2Kelas(rowId, '__OVERALL__')");
         js = js.replace(/\b(?:RATA2_KELAS|RERATA_KELAS|RATA_KELAS|AVERAGE_KELAS|AVG_KELAS|AVG_CLASS|NRK)\s*\(/gi, 'rata2Kelas(rowId, ');
+        js = js.replace(/\b(?:KKM|NILAI_KKM|STANDAR_KKM)\s*\(\s*\)/gi, "excelKkm(rowId, '')");
         js = js.replace(/\b(?:KKM|NILAI_KKM|STANDAR_KKM)\s*\(/gi, 'excelKkm(rowId, ');
 
-        // Conditional & Blank-Check Aggregation Functions (must run before generic COUNT/AVERAGE)
+        // Conditional & Blank-Check Aggregation Functions (must run before generic COUNT/AVERAGE/SUM)
         js = js.replace(/\b(?:ISBLANK|KOSONG)\s*\(/gi, 'excelIsBlank(');
         js = js.replace(/\b(?:COUNTBLANK|HITUNG_KOSONG)\s*\(/gi, 'excelCountBlank(');
         js = js.replace(/\b(?:COUNTA|HITUNG_ISI)\s*\(/gi, 'excelCountA(');
         js = js.replace(/\b(?:AVERAGEIF|RATA2_JIKA|RERATA_JIKA)\s*\(/gi, 'excelAverageIf(');
+        js = js.replace(/\b(?:SUMIF|JUMLAH_JIKA|TOTAL_JIKA)\s*\(/gi, 'excelSumIf(');
         js = js.replace(/\b(?:COUNTIF|HITUNG_JIKA)\s*\(/gi, 'excelCountIf(');
         js = js.replace(/\b(?:COUNT|HITUNG)\s*\(/gi, 'excelCount(');
 
-        // Numeric & Aggregation Functions
+        // Numeric, Math & Aggregation Functions
         js = js.replace(/\b(?:RATA2|AVERAGE|AVG|RERATA)\s*\(/gi, 'average(');
         js = js.replace(/\b(?:SUM|JUMLAH|TOTAL)\s*\(/gi, 'sum(');
         js = js.replace(/\bMIN\s*\(/gi, 'excelMin(');
         js = js.replace(/\bMAX\s*\(/gi, 'excelMax(');
+        js = js.replace(/\bABS\s*\(/gi, 'excelAbs(');
+        js = js.replace(/\b(?:MOD|SISA)\s*\(/gi, 'excelMod(');
+        js = js.replace(/\b(?:POWER|PANGKAT)\s*\(/gi, 'excelPower(');
+        js = js.replace(/\b(?:SQRT|AKAR)\s*\(/gi, 'excelSqrt(');
 
         // Rounding & Precision Functions
         js = js.replace(/\b(?:ROUNDUP|BULAT_ATAS)\s*\(/gi, 'excelRoundUp(');
         js = js.replace(/\b(?:ROUNDDOWN|BULAT_BAWAH)\s*\(/gi, 'excelRoundDown(');
         js = js.replace(/\b(?:ROUND|BULAT)\s*\(/gi, 'excelRound(');
-        js = js.replace(/\bINT\s*\(/gi, 'Math.floor(');
+        js = js.replace(/\bTRUNC\s*\(/gi, 'excelTrunc(');
+        js = js.replace(/\bINT\s*\(/gi, 'excelInt(');
         js = js.replace(/\b(?:FIXED|DESIMAL)\s*\(/gi, 'excelFixed(');
 
         // Logic Functions (IFERROR & IFS before IF)
@@ -455,6 +512,12 @@ const convertFormulaToJs = (expression: string): string => {
         js = js.replace(/\b(?:UPPER|BESAR|KAPITAL)\s*\(/gi, 'excelUpper(');
         js = js.replace(/\b(?:LOWER|KECIL)\s*\(/gi, 'excelLower(');
         js = js.replace(/\b(?:PROPER|JUDUL|TITLE|CAPITALIZE)\s*\(/gi, 'excelProper(');
+        js = js.replace(/\b(?:SENTENCE|KALIMAT)\s*\(/gi, 'excelSentence(');
+        js = js.replace(/\b(?:TRIM|RAPIKAN)\s*\(/gi, 'excelTrim(');
+        js = js.replace(/\b(?:LEN|PANJANG)\s*\(/gi, 'excelLen(');
+        js = js.replace(/\b(?:LEFT|KIRI)\s*\(/gi, 'excelLeft(');
+        js = js.replace(/\b(?:RIGHT|KANAN)\s*\(/gi, 'excelRight(');
+        js = js.replace(/\b(?:MID|TENGAH)\s*\(/gi, 'excelMid(');
 
         // Prevent inline nested RANK crash in row context
         js = js.replace(/\b(?:RANK|PERINGKAT)\s*\(/gi, '0 * (');
@@ -482,6 +545,8 @@ export interface GeneratorConfig {
     waDestination?: string; 
     rankingScope?: 'rombel' | 'kelas' | 'jenjang' | 'global';
     tabMode?: 'per_rombel' | 'per_jenjang' | 'per_file';
+    allowedKeys?: string[]; // Optional: subset of input/dropdown $KEYs (e.g. per-subject / per-teacher form)
+    scopeTitle?: string; // Optional: display label for subject/teacher scope
 }
 
 export interface RankConfig {
@@ -781,10 +846,30 @@ export const generateRaporFormHtml = (
         defaultRankingScope,
         resolvedConfigJenjangId
     );
-    const targetSheets = compiledSchema.sheets;
-    const interactiveCells = compiledSchema.interactiveCells;
-    const formulaCells = compiledSchema.formulaCells;
-    const rankConfigs = compiledSchema.rankConfigs;
+    const allowedKeySet = config.allowedKeys && config.allowedKeys.length > 0
+        ? new Set(config.allowedKeys.map(k => k.trim()).filter(Boolean))
+        : null;
+    const rankTargetKeySet = new Set(compiledSchema.rankConfigs.map(rc => rc.targetKey));
+
+    const interactiveCells = allowedKeySet
+        ? compiledSchema.interactiveCells.filter(cell => {
+              if (allowedKeySet.has(cell.key)) return true;
+              if (cell.type !== 'formula') return false;
+              if (rankTargetKeySet.has(cell.key)) return false;
+              const expr = cell.formulaJs || '';
+              const refMatches = Array.from(expr.matchAll(/getValue\('([^']+)'/g)).map(m => m[1]);
+              if (refMatches.length === 0) return false;
+              return refMatches.every(rk => allowedKeySet.has(rk));
+          })
+        : compiledSchema.interactiveCells;
+
+    const keptKeySet = new Set(interactiveCells.map(c => c.key));
+    const formulaCells = compiledSchema.formulaCells.filter(fc => keptKeySet.has(fc.key));
+    const rankConfigs = compiledSchema.rankConfigs.filter(rc => keptKeySet.has(rc.targetKey));
+    const activeSheetIdsInCells = new Set(interactiveCells.map(c => c.sheetId));
+    const targetSheets = allowedKeySet
+        ? compiledSchema.sheets.filter(s => activeSheetIdsInCells.has(s.id))
+        : compiledSchema.sheets;
     const hasClassAvgFormula = formulaCells.some(fc => (fc.formulaJs || '').includes('rata2Kelas('));
 
     // Build Jenjang-aware KKM dictionary for standalone HTML runtime
@@ -812,6 +897,14 @@ export const generateRaporFormHtml = (
         `;
     }).join('\n');
 
+    const escHtml = (val: unknown): string =>
+        String(val ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
     // --- Generate Ledger Header ---
     const showMultiSheetBadges = targetSheets.length > 1;
     const theadHtml = `
@@ -832,18 +925,23 @@ export const generateRaporFormHtml = (
                     headerBg = "bg-emerald-50/40";
                 }
                 const kkmBadgeHtml = cell.isNumericScore && cell.kkm
-                    ? `<span class="text-[8px] font-bold px-1 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200">KKM ${cell.kkm}</span>`
+                    ? `<span class="text-[8px] font-bold px-1 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200">KKM ${escHtml(cell.kkm)}</span>`
+                    : '';
+                
+                const quickDashBtnHtml = cell.type === 'input'
+                    ? `<button type="button" onclick="fillColumnEmptyWithDash(${escHtml(JSON.stringify(cell.key))}, ${escHtml(JSON.stringify(cell.label))})" class="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-200/75 hover:bg-amber-100 text-slate-600 hover:text-amber-900 border border-slate-300/80 text-[8px] font-bold transition-colors" title="Isi tanda '-' (belum diajarkan) ke seluruh sel yang masih kosong pada kolom ini">Isi &quot;-&quot; Kosong</button>`
                     : '';
                 
                 return `
-                <th data-sheet="${cell.sheetId}" class="table-col-cell p-2 border border-slate-300 text-xs font-bold text-center min-w-[130px] ${headerBg}">
-                    <div class="font-bold text-slate-800 leading-tight mb-1 text-[11px]">${cell.label}</div>
+                <th data-sheet="${escHtml(cell.sheetId)}" class="table-col-cell p-2 border border-slate-300 text-xs font-bold text-center min-w-[130px] ${headerBg}">
+                    <div class="font-bold text-slate-800 leading-tight mb-1 text-[11px]">${escHtml(cell.label)}</div>
                     <div class="flex items-center justify-center gap-1 flex-wrap">
-                        <span class="font-mono text-[9px] text-slate-500 font-semibold bg-white/80 px-1 py-0.5 rounded border border-slate-200">${cell.key}</span>
-                        <span class="text-[8px] font-black uppercase px-1 py-0.5 rounded border ${badgeClass}">${cell.type}</span>
+                        <span class="font-mono text-[9px] text-slate-500 font-semibold bg-white/80 px-1 py-0.5 rounded border border-slate-200">${escHtml(cell.key)}</span>
+                        <span class="text-[8px] font-black uppercase px-1 py-0.5 rounded border ${badgeClass}">${escHtml(cell.type)}</span>
                         ${kkmBadgeHtml}
                     </div>
-                    ${showMultiSheetBadges ? `<div class="text-[8px] text-slate-400 font-normal mt-0.5 truncate max-w-[120px] mx-auto">${cell.sheetName}</div>` : ''}
+                    ${quickDashBtnHtml}
+                    ${showMultiSheetBadges ? `<div class="text-[8px] text-slate-400 font-normal mt-0.5 truncate max-w-[120px] mx-auto">${escHtml(cell.sheetName)}</div>` : ''}
                 </th>
                 `;
             }).join('')}
@@ -875,7 +973,7 @@ export const generateRaporFormHtml = (
                 <tr class="bg-teal-700 text-white font-bold rombel-sep">
                     <td colspan="${interactiveCells.length + 3}" class="p-2.5 text-xs border border-teal-800 sticky left-0 z-20">
                         <span class="inline-flex items-center gap-2">
-                            <i class="bi bi-people-fill"></i> ${rombelName !== "Tanpa Rombel" ? `ROMBEL: <b>${rombelName}</b>` : 'SANTRI'} ${kelasName ? `• Tingkat: <b>${kelasName}</b>` : ''}
+                            <i class="bi bi-people-fill"></i> ${rombelName !== "Tanpa Rombel" ? `ROMBEL: <b>${escHtml(rombelName)}</b>` : 'SANTRI'} ${kelasName ? `• Tingkat: <b>${escHtml(kelasName)}</b>` : ''}
                         </span>
                     </td>
                 </tr>
@@ -884,19 +982,20 @@ export const generateRaporFormHtml = (
 
         const rowCells = interactiveCells.map(col => {
             const fieldId = `val_${s.id}_${col.key}`;
-            const commonFocusAttr = `data-santri="${shortName}" data-mapel="${col.label} (${col.key})" onfocus="showCellHint(this)"`;
+            const safeColKeyAttr = escHtml(JSON.stringify(col.key));
+            const commonFocusAttr = `data-santri="${escHtml(shortName)}" data-mapel="${escHtml(`${col.label} (${col.key})`)}" onfocus="showCellHint(this)"`;
             
             if (col.type === 'input') {
                 return `
-                <td data-sheet="${col.sheetId}" class="table-col-cell p-0.5 border border-slate-300 bg-white">
-                    <input type="text" id="${fieldId}" name="${fieldId}" ${commonFocusAttr} oninput="syncFromTable(${s.id}, '${col.key}', this.value)" class="w-full h-full p-1.5 text-center text-xs font-semibold text-slate-800 bg-transparent focus:bg-blue-50 focus:ring-2 focus:ring-blue-400 outline-none rounded transition-colors" placeholder="-">
+                <td data-sheet="${escHtml(col.sheetId)}" class="table-col-cell p-0.5 border border-slate-300 bg-white">
+                    <input type="text" id="${escHtml(fieldId)}" name="${escHtml(fieldId)}" ${commonFocusAttr} oninput="syncFromTable(${s.id}, ${safeColKeyAttr}, this.value)" class="w-full h-full p-1.5 text-center text-xs font-semibold text-slate-800 bg-transparent focus:bg-blue-50 focus:ring-2 focus:ring-blue-400 outline-none rounded transition-colors" placeholder="-">
                 </td>`;
             }
             if (col.type === 'dropdown') {
-                const optionsHtml = col.options ? col.options.map(opt => `<option value="${opt}">${opt}</option>`).join('') : '';
+                const optionsHtml = col.options ? col.options.map(opt => `<option value="${escHtml(opt)}">${escHtml(opt)}</option>`).join('') : '';
                 return `
-                <td data-sheet="${col.sheetId}" class="table-col-cell p-0.5 border border-slate-300 bg-emerald-50/30">
-                    <select id="${fieldId}" name="${fieldId}" ${commonFocusAttr} onchange="syncFromTable(${s.id}, '${col.key}', this.value)" class="w-full h-full p-1 text-center text-xs font-semibold text-emerald-950 bg-transparent focus:bg-emerald-100 outline-none rounded cursor-pointer">
+                <td data-sheet="${escHtml(col.sheetId)}" class="table-col-cell p-0.5 border border-slate-300 bg-emerald-50/30">
+                    <select id="${escHtml(fieldId)}" name="${escHtml(fieldId)}" ${commonFocusAttr} onchange="syncFromTable(${s.id}, ${safeColKeyAttr}, this.value)" class="w-full h-full p-1 text-center text-xs font-semibold text-emerald-950 bg-transparent focus:bg-emerald-100 outline-none rounded cursor-pointer">
                         <option value="">-</option>
                         ${optionsHtml}
                     </select>
@@ -904,50 +1003,51 @@ export const generateRaporFormHtml = (
             }
             if (col.type === 'formula') {
                 return `
-                <td data-sheet="${col.sheetId}" class="table-col-cell p-0.5 border border-slate-300 bg-amber-50/50">
-                    <input type="text" id="${fieldId}" name="${fieldId}" ${commonFocusAttr} readonly tabindex="-1" class="w-full h-full p-1.5 text-center text-xs font-bold text-amber-950 bg-transparent outline-none cursor-default" value="-">
+                <td data-sheet="${escHtml(col.sheetId)}" class="table-col-cell p-0.5 border border-slate-300 bg-amber-50/50">
+                    <input type="text" id="${escHtml(fieldId)}" name="${escHtml(fieldId)}" ${commonFocusAttr} readonly tabindex="-1" class="w-full h-full p-1.5 text-center text-xs font-bold text-amber-950 bg-transparent outline-none cursor-default" value="-">
                 </td>`;
             }
-            return `<td data-sheet="${col.sheetId}" class="table-col-cell p-1 border border-slate-300 bg-slate-50"></td>`;
+            return `<td data-sheet="${escHtml(col.sheetId)}" class="table-col-cell p-1 border border-slate-300 bg-slate-50"></td>`;
         }).join('');
 
         tbodyHtml += `
         <tr id="row_santri_${s.id}" class="hover:bg-slate-50 transition-colors">
             <td class="p-2 text-center bg-slate-50 text-xs font-medium text-slate-500 border border-slate-300 sticky left-0 z-10 w-12">${index + 1}</td>
-            <td class="p-2 bg-white text-xs font-bold text-slate-900 whitespace-nowrap border border-slate-300 sticky left-12 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)]" title="${s.namaLengkap}">
-                <div class="leading-tight">${s.namaLengkap}</div>
-                <div class="text-[10px] text-slate-400 font-normal md:hidden">${rombelName}</div>
+            <td class="p-2 bg-white text-xs font-bold text-slate-900 whitespace-nowrap border border-slate-300 sticky left-12 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)]" title="${escHtml(s.namaLengkap)}">
+                <div class="leading-tight">${escHtml(s.namaLengkap)}</div>
+                <div class="text-[10px] text-slate-400 font-normal md:hidden">${escHtml(rombelName)}</div>
             </td>
-            <td class="p-2 bg-slate-50/70 text-xs font-mono text-slate-600 text-center border border-slate-300">${s.nis || '-'}</td>
+            <td class="p-2 bg-slate-50/70 text-xs font-mono text-slate-600 text-center border border-slate-300">${escHtml(s.nis || '-')}</td>
             ${rowCells}
         </tr>`;
 
         // Card items
         const cardFields = interactiveCells.map(col => {
             const cardFieldId = `card_val_${s.id}_${col.key}`;
+            const safeColKeyAttr = escHtml(JSON.stringify(col.key));
             let typeBadge = '<span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold border border-blue-200">INPUT</span>';
             if (col.type === 'dropdown') typeBadge = '<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">PILIHAN</span>';
             if (col.type === 'formula') typeBadge = '<span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-200">RUMUS</span>';
 
             let inputWidget = '';
             if (col.type === 'input') {
-                inputWidget = `<input type="text" id="${cardFieldId}" oninput="syncFromCard(${s.id}, '${col.key}', this.value)" placeholder="Ketik nilai..." class="w-full border-2 border-slate-200 rounded-xl p-3 text-base font-bold text-slate-800 focus:border-teal-500 focus:bg-teal-50/20 outline-none transition-all shadow-sm">`;
+                inputWidget = `<input type="text" id="${escHtml(cardFieldId)}" oninput="syncFromCard(${s.id}, ${safeColKeyAttr}, this.value)" placeholder="Ketik nilai..." class="w-full border-2 border-slate-200 rounded-xl p-3 text-base font-bold text-slate-800 focus:border-teal-500 focus:bg-teal-50/20 outline-none transition-all shadow-sm">`;
             } else if (col.type === 'dropdown') {
-                const optionsHtml = col.options ? col.options.map(opt => `<option value="${opt}">${opt}</option>`).join('') : '';
-                inputWidget = `<select id="${cardFieldId}" onchange="syncFromCard(${s.id}, '${col.key}', this.value)" class="w-full border-2 border-emerald-200 bg-emerald-50/40 rounded-xl p-3 text-base font-bold text-emerald-950 focus:border-emerald-500 outline-none shadow-sm"><option value="">-- Pilih Nilai --</option>${optionsHtml}</select>`;
+                const optionsHtml = col.options ? col.options.map(opt => `<option value="${escHtml(opt)}">${escHtml(opt)}</option>`).join('') : '';
+                inputWidget = `<select id="${escHtml(cardFieldId)}" onchange="syncFromCard(${s.id}, ${safeColKeyAttr}, this.value)" class="w-full border-2 border-emerald-200 bg-emerald-50/40 rounded-xl p-3 text-base font-bold text-emerald-950 focus:border-emerald-500 outline-none shadow-sm"><option value="">-- Pilih Nilai --</option>${optionsHtml}</select>`;
             } else if (col.type === 'formula') {
-                inputWidget = `<input type="text" id="${cardFieldId}" readonly tabindex="-1" value="-" class="w-full border-2 border-amber-200 bg-amber-50 rounded-xl p-3 text-base font-black text-amber-950 text-center outline-none shadow-sm">`;
+                inputWidget = `<input type="text" id="${escHtml(cardFieldId)}" readonly tabindex="-1" value="-" class="w-full border-2 border-amber-200 bg-amber-50 rounded-xl p-3 text-base font-black text-amber-950 text-center outline-none shadow-sm">`;
             }
 
             return `
-            <div data-sheet="${col.sheetId}" class="card-field-item bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 flex flex-col gap-2 transition-all">
+            <div data-sheet="${escHtml(col.sheetId)}" class="card-field-item bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 flex flex-col gap-2 transition-all">
                 <div class="flex justify-between items-start gap-2">
                     <div>
-                        <label class="text-xs font-bold text-slate-800 leading-snug block">${col.label}</label>
+                        <label class="text-xs font-bold text-slate-800 leading-snug block">${escHtml(col.label)}</label>
                         <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                            <span class="font-mono text-[9px] text-slate-400 font-semibold">${col.key}</span>
-                            ${col.isNumericScore && col.kkm ? `<span class="text-[9px] text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200 font-bold">KKM ${col.kkm}</span>` : ''}
-                            ${showMultiSheetBadges ? `<span class="text-[9px] text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">${col.sheetName}</span>` : ''}
+                            <span class="font-mono text-[9px] text-slate-400 font-semibold">${escHtml(col.key)}</span>
+                            ${col.isNumericScore && col.kkm ? `<span class="text-[9px] text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200 font-bold">KKM ${escHtml(col.kkm)}</span>` : ''}
+                            ${showMultiSheetBadges ? `<span class="text-[9px] text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">${escHtml(col.sheetName)}</span>` : ''}
                         </div>
                     </div>
                     ${typeBadge}
@@ -964,8 +1064,8 @@ export const generateRaporFormHtml = (
                         ${index + 1}
                     </div>
                     <div>
-                        <h3 class="text-base md:text-lg font-black text-slate-900 leading-tight">${s.namaLengkap}</h3>
-                        <p class="text-xs text-slate-500">NIS: <span class="font-mono font-bold text-slate-700">${s.nis || '-'}</span> • ${rombelName}</p>
+                        <h3 class="text-base md:text-lg font-black text-slate-900 leading-tight">${escHtml(s.namaLengkap)}</h3>
+                        <p class="text-xs text-slate-500">NIS: <span class="font-mono font-bold text-slate-700">${escHtml(s.nis || '-')}</span> • ${escHtml(rombelName)}</p>
                     </div>
                 </div>
                 <div class="text-right">
@@ -980,6 +1080,21 @@ export const generateRaporFormHtml = (
 
     const inputKeysToSave = interactiveCells.map(c => c.key);
     const inputOnlyKeys = interactiveCells.filter(c => c.type !== 'formula').map(c => c.key);
+    const numericInputKeysServer = interactiveCells.filter(c => c.type !== 'formula' && c.isNumericScore).map(c => c.key);
+    const colKeyAliasMapServer: Record<string, string> = {};
+    interactiveCells.forEach(c => {
+        if (!c.key) return;
+        colKeyAliasMapServer[c.key] = c.key;
+        colKeyAliasMapServer[c.key.toUpperCase()] = c.key;
+        extractMapelLookupCandidates(c.key).forEach(cand => {
+            if (cand && !colKeyAliasMapServer[cand]) colKeyAliasMapServer[cand] = c.key;
+        });
+        if (c.label) {
+            extractMapelLookupCandidates(c.label).forEach(cand => {
+                if (cand && !colKeyAliasMapServer[cand]) colKeyAliasMapServer[cand] = c.key;
+            });
+        }
+    });
     const columnLabelsMap: Record<string, string> = {};
     interactiveCells.forEach(c => {
         columnLabelsMap[c.key] = c.label || c.key;
@@ -1006,12 +1121,23 @@ export const generateRaporFormHtml = (
     });
     const rankConfigsScript = `[${rankConfigs.map(rc => `{
         targetKey: ${JSON.stringify(rc.targetKey)},
-        evalSource: function(rowId) { try { const v = (${rc.sourceJs}); return typeof v === 'number' && !isNaN(v) ? v : (parseFloat(v) || 0); } catch(e) { return 0; } },
+        evalSource: function(rowId) {
+            try {
+                const v = (${rc.sourceJs});
+                if (v === null || v === undefined) return null;
+                const sv = String(v).trim();
+                if (sv === '' || sv === '-') return null;
+                if (typeof v === 'number') return (!isNaN(v) && isFinite(v)) ? v : null;
+                const n = Number(sv.replace(',', '.'));
+                return (!isNaN(n) && isFinite(n)) ? n : null;
+            } catch(e) { return null; }
+        },
         limit: ${rc.limit},
         scope: ${JSON.stringify(rc.scope)}
     }`).join(',')}]`;
     const rangeKeyPart = config.kelasRange ? `range_${config.kelasRange.kelasIds.join('_')}` : (config.kelasId || config.jenjangId || 0);
-    const localStorageKey = `esantri_leger_${config.template.id}_${config.tahunAjaran}_${config.semester}_${config.rombelId || rangeKeyPart}`;
+    const scopeStorageSuffix = allowedKeySet ? `_sub_${Array.from(allowedKeySet).sort().slice(0, 4).join('_')}_${allowedKeySet.size}` : '';
+    const localStorageKey = `esantri_leger_${config.template.id}_${config.tahunAjaran}_${config.semester}_${config.rombelId || rangeKeyPart}${scopeStorageSuffix}`;
 
     // Extract unique kelas & rombel for filter
     const uniqueKelasMap = new Map<number, string>();
@@ -1021,8 +1147,8 @@ export const generateRaporFormHtml = (
         if (s.rombelId && s.rombelName) uniqueRombelMap.set(s.rombelId, { nama: s.rombelName, kelasId: s.kelasId });
     });
 
-    const uniqueKelasOptions = Array.from(uniqueKelasMap.entries()).map(([id, nama]) => `<option value="${id}">${nama}</option>`).join('');
-    const uniqueRombelOptions = Array.from(uniqueRombelMap.entries()).map(([id, r]) => `<option value="${id}">${r.nama}</option>`).join('');
+    const uniqueKelasOptions = Array.from(uniqueKelasMap.entries()).map(([id, nama]) => `<option value="${id}">${escHtml(nama)}</option>`).join('');
+    const uniqueRombelOptions = Array.from(uniqueRombelMap.entries()).map(([id, r]) => `<option value="${id}">${escHtml(r.nama)}</option>`).join('');
 
     const hasMultipleClasses = uniqueKelasMap.size > 1 || uniqueRombelMap.size > 1;
 
@@ -1078,9 +1204,10 @@ export const generateRaporFormHtml = (
             </button>
             ${targetSheets.map(s => {
                 const count = interactiveCells.filter(c => c.sheetId === s.id).length;
+                const safeSheetIdAttr = escHtml(JSON.stringify(s.id));
                 return `
-                <button onclick="filterBySheet('${s.id}')" id="sheet-btn-${s.id}" class="sheet-filter-btn px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all bg-white text-slate-700 border border-slate-200 hover:bg-slate-50">
-                    ${s.name} (${count})
+                <button onclick="filterBySheet(${safeSheetIdAttr})" id="sheet-btn-${escHtml(s.id)}" class="sheet-filter-btn px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all bg-white text-slate-700 border border-slate-200 hover:bg-slate-50">
+                    ${escHtml(s.name)} (${count})
                 </button>`;
             }).join('')}
         </div>`;
@@ -1092,22 +1219,22 @@ export const generateRaporFormHtml = (
         submissionScript = `
             const jsonString = JSON.stringify(payload);
             const encoded = btoa(unescape(encodeURIComponent(jsonString)));
-            let message = "*Setoran Data Rapor (Grid V2)*\\nKelas: ${contextName}\\nTemplate: ${config.template.name}\\n\\n*KODE DATA:*\\nRAPOR_V2_START\\n" + encoded + "\\nRAPOR_V2_END";
+            let message = "*Setoran Data Rapor (Grid V2)*\\nKelas: " + ${JSON.stringify(contextName)} + "\\nTemplate: " + ${JSON.stringify(config.template.name)} + "\\n\\n*KODE DATA:*\\nRAPOR_V2_START\\n" + encoded + "\\nRAPOR_V2_END";
             
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(message).then(() => {
-                    const waUrl = "${waDest}" ? 'https://wa.me/${waDest}' : 'https://wa.me/';
+                    const waUrl = ${JSON.stringify(waDest)} ? 'https://wa.me/${waDest}' : 'https://wa.me/';
                     showFormToast("Kode nilai berhasil disalin ke Clipboard! Silakan tempel (Paste) pada chat WhatsApp.", "success", waUrl);
                     const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
                     btn.disabled = false; btn.innerHTML = originalText;
                 }).catch(() => {
-                    const waUrl = ("${waDest}" ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
+                    const waUrl = (${JSON.stringify(waDest)} ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
                     showFormToast("Membuka WhatsApp untuk pengiriman data nilai...", "info", waUrl);
                     const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
                     btn.disabled = false; btn.innerHTML = originalText;
                 });
             } else {
-                const waUrl = ("${waDest}" ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
+                const waUrl = (${JSON.stringify(waDest)} ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
                 showFormToast("Membuka WhatsApp untuk pengiriman data nilai...", "info", waUrl);
                 const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
                 btn.disabled = false; btn.innerHTML = originalText;
@@ -1115,7 +1242,7 @@ export const generateRaporFormHtml = (
         `;
     } else {
         submissionScript = `
-            fetch("${scriptUrl}", { 
+            fetch(${JSON.stringify(scriptUrl)}, { 
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify(payload) 
@@ -1141,21 +1268,21 @@ export const generateRaporFormHtml = (
                  ${config.submissionMethod === 'google_sheet' ? `showFormToast('Data nilai berhasil dikirim ke Cloud Spreadsheet!', 'success'); btn.disabled = false; btn.innerHTML = originalText;` : `
                     const jsonString = JSON.stringify(payload);
                     const encoded = btoa(unescape(encodeURIComponent(jsonString)));
-                    let message = "*Setoran Data Rapor (Hybrid)*\\nKelas: ${contextName}\\nStatus: Terupload ke Cloud\\n\\n*BACKUP DATA:*\\nRAPOR_V2_START\\n" + encoded + "\\nRAPOR_V2_END";
+                    let message = "*Setoran Data Rapor (Hybrid)*\\nKelas: " + ${JSON.stringify(contextName)} + "\\nStatus: Terupload ke Cloud\\n\\n*BACKUP DATA:*\\nRAPOR_V2_START\\n" + encoded + "\\nRAPOR_V2_END";
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(message).then(() => {
-                            const waUrl = "${waDest}" ? 'https://wa.me/${waDest}' : 'https://wa.me/';
+                            const waUrl = ${JSON.stringify(waDest)} ? 'https://wa.me/${waDest}' : 'https://wa.me/';
                             showFormToast("Terkirim ke Cloud & disalin ke Clipboard! Silakan tempel di WhatsApp sebagai cadangan.", "success", waUrl);
                             const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
                             btn.disabled = false; btn.innerHTML = originalText;
                         }).catch(() => {
-                            const waUrl = ("${waDest}" ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
+                            const waUrl = (${JSON.stringify(waDest)} ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
                             showFormToast("Terkirim ke Cloud! Klik tombol WhatsApp jika belum terbuka otomatis.", "success", waUrl);
                             const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
                             btn.disabled = false; btn.innerHTML = originalText;
                         });
                     } else {
-                        const waUrl = ("${waDest}" ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
+                        const waUrl = (${JSON.stringify(waDest)} ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
                         showFormToast("Terkirim ke Cloud! Membuka WhatsApp...", "success", waUrl);
                         const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
                         btn.disabled = false; btn.innerHTML = originalText;
@@ -1173,7 +1300,7 @@ export const generateRaporFormHtml = (
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Formulir Input Nilai - ${contextName}</title>
+    <title>Formulir Input Nilai - ${escHtml(contextName)}</title>
     
     <!-- Google Fonts & Bootstrap Icons CDN -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1250,17 +1377,27 @@ export const generateRaporFormHtml = (
         const santriById = new Map(santriList.map(s => [Number(s.id), s]));
         const santriIds = santriList.map(s => s.id);
         const rankConfigs = ${rankConfigsScript};
-        const defaultRankingScope = "${defaultRankingScope}";
+        const defaultRankingScope = ${JSON.stringify(defaultRankingScope)};
         const hasClassAvgFormula = ${hasClassAvgFormula ? 'true' : 'false'};
         const kkmLookupByJenjang = ${JSON.stringify(kkmLookupByJenjang)};
         const kkmLookupGlobal = ${JSON.stringify(kkmLookupGlobal)};
         const kkmDefaultByJenjang = ${JSON.stringify(kkmDefaultByJenjang)};
         const kkmDefaultGlobal = ${kkmDefaultGlobal};
-        const storageKey = "${localStorageKey}";
+        const numericInputKeys = ${JSON.stringify(numericInputKeysServer)};
+        const colKeyAliasMap = ${JSON.stringify(colKeyAliasMapServer)};
+        const storageKey = ${JSON.stringify(localStorageKey)};
         let currentCardIndex = 0;
         let currentActiveSheet = 'all';
         let toastTimer = null;
         const loadedBaselineBySantri = {};
+        function escHtmlJs(v) {
+            return String(v ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
         function markLoadedBaseline(sid, key, val) {
             if (val !== '' && val !== null && val !== undefined) {
                 if (!loadedBaselineBySantri[sid]) loadedBaselineBySantri[sid] = {};
@@ -1311,6 +1448,37 @@ export const generateRaporFormHtml = (
         function sum(...args) { const validArgs = args.filter(a => typeof a === 'number' && !isNaN(a)); if (validArgs.length === 0) return null; return validArgs.reduce((a, b) => a + b, 0); }
         function excelMin(...args) { const valid = args.filter(a => typeof a === 'number' && !isNaN(a)); return valid.length === 0 ? null : Math.min(...valid); }
         function excelMax(...args) { const valid = args.filter(a => typeof a === 'number' && !isNaN(a)); return valid.length === 0 ? null : Math.max(...valid); }
+        function excelAbs(num) { if (excelIsBlank(num)) return null; const n = Number(num); return isFinite(n) ? Math.abs(n) : null; }
+        function excelInt(num) { if (excelIsBlank(num)) return null; const n = Number(num); return isFinite(n) ? Math.floor(n) : null; }
+        function excelTrunc(num, digits = 0) {
+            if (excelIsBlank(num)) return null;
+            const n = Number(num);
+            const d = Math.max(0, Math.min(10, Math.trunc(Number(digits) || 0)));
+            if (!isFinite(n)) return null;
+            const factor = Math.pow(10, d);
+            return Math.trunc(n * factor) / factor;
+        }
+        function excelMod(num, divisor) {
+            if (excelIsBlank(num) || excelIsBlank(divisor)) return null;
+            const n = Number(num);
+            const d = Number(divisor);
+            if (!isFinite(n) || !isFinite(d) || d === 0) return null;
+            return n - d * Math.floor(n / d);
+        }
+        function excelPower(base, exp) {
+            if (excelIsBlank(base) || excelIsBlank(exp)) return null;
+            const b = Number(base);
+            const e = Number(exp);
+            if (!isFinite(b) || !isFinite(e)) return null;
+            const res = Math.pow(b, e);
+            return isFinite(res) ? res : null;
+        }
+        function excelSqrt(num) {
+            if (excelIsBlank(num)) return null;
+            const n = Number(num);
+            if (!isFinite(n) || n < 0) return null;
+            return Math.sqrt(n);
+        }
         function excelRound(num, digits = 0) {
             if (excelIsBlank(num)) return null;
             const n = Number(num);
@@ -1483,6 +1651,35 @@ export const generateRaporFormHtml = (
         function excelProper(v) {
             return String(v ?? '').toLowerCase().replace(/(?:^|\\s|[-'/])\\S/g, ch => ch.toUpperCase());
         }
+        function excelSentence(v) {
+            const s = String(v ?? '').trim();
+            if (!s) return '';
+            return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+        }
+        function excelTrim(v) {
+            return String(v ?? '').replace(/\\s+/g, ' ').trim();
+        }
+        function excelLen(v) {
+            return excelIsBlank(v) ? 0 : String(v).length;
+        }
+        function excelLeft(v, count = 1) {
+            if (excelIsBlank(v)) return '';
+            const n = Math.max(0, Math.trunc(Number(count) || 0));
+            return String(v).slice(0, n);
+        }
+        function excelRight(v, count = 1) {
+            if (excelIsBlank(v)) return '';
+            const s = String(v);
+            const n = Math.max(0, Math.trunc(Number(count) || 0));
+            return n === 0 ? '' : s.slice(-n);
+        }
+        function excelMid(v, start = 1, count = 1) {
+            if (excelIsBlank(v)) return '';
+            const s = String(v);
+            const st = Math.max(1, Math.trunc(Number(start) || 1)) - 1;
+            const len = Math.max(0, Math.trunc(Number(count) || 0));
+            return s.slice(st, st + len);
+        }
         function matchExcelCriteria(val, criteria) {
             const crit = String(criteria ?? '').trim();
             const m = crit.match(/^(>=|<=|!=|<>|>|<|=)\\s*(.*)$/);
@@ -1526,6 +1723,13 @@ export const generateRaporFormHtml = (
             const criteria = args[args.length - 1];
             return args.slice(0, -1).filter(v => matchExcelCriteria(v, criteria)).length;
         }
+        function excelSumIf(...args) {
+            if (args.length < 2) return null;
+            const criteria = args[args.length - 1];
+            const matched = args.slice(0, -1).filter(v => typeof v === 'number' && !isNaN(v) && matchExcelCriteria(v, criteria));
+            if (matched.length === 0) return null;
+            return matched.reduce((a, b) => a + b, 0);
+        }
         function excelAverageIf(...args) {
             if (args.length < 2) return null;
             const criteria = args[args.length - 1];
@@ -1558,23 +1762,55 @@ export const generateRaporFormHtml = (
             if (jKey && kkmDefaultByJenjang[jKey]) return kkmDefaultByJenjang[jKey];
             return kkmDefaultGlobal || 70;
         }
-        function rata2Kelas(rowId, colKey) {
-            const key = String(colKey ?? '').trim().replace(/^\\$+/g, '');
-            if (!key) return null;
+        function rata2Kelas(rowId, colKey, decimals) {
+            const rawKey = String(colKey ?? '').trim().replace(/^\\$+/g, '');
+            const key = (!rawKey || rawKey === '__OVERALL__')
+                ? rawKey
+                : (colKeyAliasMap[rawKey] || colKeyAliasMap[rawKey.toUpperCase()] || colKeyAliasMap[normMapelKeyJs(rawKey)] || rawKey);
             const sMeta = santriById.get(Number(rowId));
             const targetRombel = sMeta ? Number(sMeta.rombelId || 0) : 0;
             const cohort = targetRombel > 0 ? santriList.filter(s => Number(s.rombelId) === targetRombel) : santriList;
-            const vals = [];
-            cohort.forEach(s => {
-                const el = document.getElementById('val_' + s.id + '_' + key) || document.getElementById('card_val_' + s.id + '_' + key);
-                if (!el) return;
-                const raw = String(el.value ?? '').trim();
-                if (raw === '' || raw === '-') return;
-                const num = Number(raw.replace(',', '.'));
-                if (!isNaN(num) && isFinite(num)) vals.push(num);
-            });
-            if (vals.length === 0) return null;
-            return vals.reduce((a, b) => a + b, 0) / vals.length;
+
+            let rawAvg = null;
+            if (!key || key === '__OVERALL__') {
+                const studentAvgs = [];
+                cohort.forEach(s => {
+                    const sNums = [];
+                    numericInputKeys.forEach(nk => {
+                        const el = document.getElementById('val_' + s.id + '_' + nk) || document.getElementById('card_val_' + s.id + '_' + nk);
+                        if (!el) return;
+                        const raw = String(el.value ?? '').trim();
+                        if (raw === '' || raw === '-') return;
+                        const num = Number(raw.replace(',', '.'));
+                        if (!isNaN(num) && isFinite(num)) sNums.push(num);
+                    });
+                    if (sNums.length > 0) {
+                        studentAvgs.push(sNums.reduce((a, b) => a + b, 0) / sNums.length);
+                    }
+                });
+                if (studentAvgs.length > 0) {
+                    rawAvg = studentAvgs.reduce((a, b) => a + b, 0) / studentAvgs.length;
+                }
+            } else {
+                const vals = [];
+                cohort.forEach(s => {
+                    const el = document.getElementById('val_' + s.id + '_' + key) || document.getElementById('card_val_' + s.id + '_' + key);
+                    if (!el) return;
+                    const raw = String(el.value ?? '').trim();
+                    if (raw === '' || raw === '-') return;
+                    const num = Number(raw.replace(',', '.'));
+                    if (!isNaN(num) && isFinite(num)) vals.push(num);
+                });
+                if (vals.length > 0) {
+                    rawAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
+                }
+            }
+
+            if (rawAvg === null) return null;
+            if (decimals !== undefined && decimals !== null && String(decimals).trim() !== '' && !isNaN(Number(decimals))) {
+                return excelRound(rawAvg, Number(decimals));
+            }
+            return rawAvg;
         }
 
         function calculateRanks() { 
@@ -1735,7 +1971,7 @@ export const generateRaporFormHtml = (
                 });
                 uniqueRombels.sort((a,b) => a.nama.localeCompare(b.nama));
                 rombelSelect.innerHTML = '<option value="0">Semua Rombel (' + availableRombels.length + ')</option>' +
-                    uniqueRombels.map(r => '<option value="' + r.id + '">' + r.nama + '</option>').join('');
+                    uniqueRombels.map(r => '<option value="' + r.id + '">' + escHtmlJs(r.nama) + '</option>').join('');
                 if (seenRombel.has(Number(currentVal))) {
                     rombelSelect.value = currentVal;
                 } else {
@@ -1751,7 +1987,7 @@ export const generateRaporFormHtml = (
                     jumpSel.innerHTML = '<option value="-1">⚠️ Tidak ada santri yang cocok</option>';
                 } else {
                     jumpSel.innerHTML = filteredSantriList.map((s, idx) => 
-                        '<option value="' + idx + '">' + (idx + 1) + '. ' + s.nama + ' (' + s.rombelName + ')</option>'
+                        '<option value="' + idx + '">' + (idx + 1) + '. ' + escHtmlJs(s.nama) + ' (' + escHtmlJs(s.rombelName) + ')</option>'
                     ).join('');
                 }
             }
@@ -1860,7 +2096,9 @@ export const generateRaporFormHtml = (
                         markLoadedBaseline(sid, key, strVal);
                     }); 
                 }); 
-                santriIds.forEach(id => calculateRow(id)); 
+                santriIds.forEach(id => calculateRow(id, true));
+                if (hasClassAvgFormula) santriIds.forEach(id => runRowFormulasOnce(id));
+                calculateRanks(); 
             } catch (e) { console.warn('Draft tidak dapat dimuat', e); } 
         }
 
@@ -1881,11 +2119,11 @@ export const generateRaporFormHtml = (
                 const payload = {
                     meta: {
                         rombelId: ${config.rombelId},
-                        rombelName: "${contextName}",
-                        templateName: "${config.template.name}",
-                        tahunAjaran: "${config.tahunAjaran}",
-                        semester: "${config.semester}",
-                        templateId: "${config.template.id}",
+                        rombelName: ${JSON.stringify(contextName)},
+                        templateName: ${JSON.stringify(config.template.name)},
+                        tahunAjaran: ${JSON.stringify(config.tahunAjaran)},
+                        semester: ${JSON.stringify(config.semester)},
+                        templateId: ${JSON.stringify(config.template.id)},
                         exportedAt: new Date().toISOString()
                     },
                     records
@@ -1894,7 +2132,7 @@ export const generateRaporFormHtml = (
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = "backup-nilai-${contextName.replace(/[^a-zA-Z0-9]/g, '-')}.json";
+                a.download = ${JSON.stringify(`backup-nilai-${contextName.replace(/[^a-zA-Z0-9]/g, '-')}.json`)};
                 a.click();
                 URL.revokeObjectURL(url);
                 showFormToast('File cadangan JSON berhasil diunduh.', 'success');
@@ -1906,8 +2144,8 @@ export const generateRaporFormHtml = (
         function showCellHint(el) { 
             const hint = document.getElementById('cell-hint'); 
             if (!hint || !el) return; 
-            const mapel = el.getAttribute('data-mapel') || '-'; 
-            const santri = el.getAttribute('data-santri') || '-'; 
+            const mapel = escHtmlJs(el.getAttribute('data-mapel') || '-'); 
+            const santri = escHtmlJs(el.getAttribute('data-santri') || '-'); 
             hint.innerHTML = '<span class="opacity-75">Mapel:</span> <b>' + mapel + '</b> <span class="opacity-75 ml-2">Santri:</span> <b>' + santri + '</b>'; 
         }
 
@@ -1990,7 +2228,36 @@ export const generateRaporFormHtml = (
             }
         }
 
-        function submitData() { 
+        function fillColumnEmptyWithDash(key, label) {
+            let filled = 0;
+            santriList.forEach(s => {
+                const tr = document.getElementById('tr_' + s.id);
+                if (tr && tr.style.display === 'none') return;
+                const el = document.getElementById('val_' + s.id + '_' + key);
+                const cardEl = document.getElementById('card_val_' + s.id + '_' + key);
+                const cur = el ? String(el.value ?? '').trim() : (cardEl ? String(cardEl.value ?? '').trim() : '');
+                if (cur === '') {
+                    if (el) el.value = '-';
+                    if (cardEl) cardEl.value = '-';
+                    calculateRow(s.id);
+                    filled++;
+                }
+            });
+            if (filled > 0) {
+                updateAllRankings();
+                saveDraft(true);
+                showFormToast(filled + ' sel kosong pada kolom "' + label + '" diisi tanda "-" (belum diajarkan).', 'success');
+            } else {
+                showFormToast('Seluruh sel santri pada kolom "' + label + '" sudah terisi.', 'info');
+            }
+        }
+
+        function closeOutOfScaleModal() {
+            const modal = document.getElementById('out-of-scale-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function submitData(forceOutOfScale = false) { 
             santriIds.forEach(id => calculateRow(id)); 
             const btn = document.getElementById('submit-btn'); 
             const originalText = btn.innerHTML; 
@@ -1999,7 +2266,9 @@ export const generateRaporFormHtml = (
             try { 
                 const inputKeys = ${JSON.stringify(inputKeysToSave)}; 
                 const inputOnlySet = new Set(${JSON.stringify(inputOnlyKeys)});
+                const numericSet = new Set(numericInputKeys || []);
                 const columnLabels = ${JSON.stringify(columnLabelsMap)};
+                const outOfScaleWarnings = [];
                 const records = []; 
                 santriList.forEach(s => { 
                     const baselineForSantri = loadedBaselineBySantri[s.id] || {};
@@ -2009,6 +2278,16 @@ export const generateRaporFormHtml = (
                         const val = el ? String(el.value ?? '').trim() : '';
                         if (val === '' && baselineForSantri[key]) {
                             clearedKeys.push(key);
+                        }
+                        if (numericSet.has(key) && val !== '' && val !== '-') {
+                            const num = Number(val.replace(',', '.'));
+                            if (!isNaN(num) && (num < 0 || num > 100)) {
+                                outOfScaleWarnings.push({
+                                    santriName: s.nama,
+                                    label: columnLabels[key] || key,
+                                    val: val
+                                });
+                            }
                         }
                     });
 
@@ -2051,6 +2330,22 @@ export const generateRaporFormHtml = (
                     btn.innerHTML = originalText;
                     return;
                 }
+                if (outOfScaleWarnings.length > 0 && !forceOutOfScale) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    const modal = document.getElementById('out-of-scale-modal');
+                    const listBox = document.getElementById('out-of-scale-list');
+                    if (modal && listBox) {
+                        listBox.innerHTML = outOfScaleWarnings.slice(0, 12).map(w =>
+                            '<div class="flex items-center justify-between gap-2 py-1.5 px-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs">' +
+                            '<span class="font-bold text-slate-800 truncate">' + escHtmlJs(w.santriName) + ' <span class="font-normal text-slate-500">(' + escHtmlJs(w.label) + ')</span></span>' +
+                            '<span class="font-mono font-black text-rose-600 shrink-0">' + escHtmlJs(w.val) + '</span>' +
+                            '</div>'
+                        ).join('') + (outOfScaleWarnings.length > 12 ? '<div class="text-[11px] text-slate-500 text-center pt-1">...dan ' + (outOfScaleWarnings.length - 12) + ' nilai lainnya di luar rentang 0–100.</div>' : '');
+                        modal.style.display = 'flex';
+                        return;
+                    }
+                }
                 const payload = { 
                     meta: { 
                         rombelId: ${config.rombelId}, 
@@ -2091,17 +2386,18 @@ export const generateRaporFormHtml = (
             <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                 <div>
                     <div class="flex items-center gap-2.5 flex-wrap">
-                        <h1 class="text-lg md:text-xl font-black tracking-tight">${config.template.name}</h1>
-                        <span class="text-[11px] bg-white/20 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">${config.semester}</span>
-                        <span class="text-[11px] bg-teal-900/80 border border-white/20 px-2 py-0.5 rounded-full font-semibold">T.A. ${config.tahunAjaran}</span>
+                        <h1 class="text-lg md:text-xl font-black tracking-tight">${escHtml(config.template.name)}</h1>
+                        <span class="text-[11px] bg-white/20 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">${escHtml(config.semester)}</span>
+                        <span class="text-[11px] bg-teal-900/80 border border-white/20 px-2 py-0.5 rounded-full font-semibold">T.A. ${escHtml(config.tahunAjaran)}</span>
                     </div>
                     <p class="text-xs text-teal-100/90 mt-1 font-medium">
-                        <i class="bi bi-building mr-1"></i> ${settings.namaPonpes} &nbsp;|&nbsp; <i class="bi bi-people mr-1"></i> ${contextName}
+                        <i class="bi bi-building mr-1"></i> ${escHtml(settings.namaPonpes)} &nbsp;|&nbsp; <i class="bi bi-people mr-1"></i> ${escHtml(contextName)}
                     </p>
                     <p class="text-[11px] text-teal-200/80 mt-0.5">
-                        <i class="bi bi-trophy mr-1"></i> Cakupan Ranking: <b class="uppercase">${defaultRankingScope}</b>
+                        <i class="bi bi-trophy mr-1"></i> Cakupan Ranking: <b class="uppercase">${escHtml(defaultRankingScope)}</b>
                         &nbsp;•&nbsp; <i class="bi bi-person-check mr-1"></i> <b>${targetSantri.length}</b> Santri Aktif
                         &nbsp;•&nbsp; <i class="bi bi-input-cursor-text mr-1"></i> <b>${interactiveCells.length}</b> Kolom Nilai
+                        ${config.scopeTitle ? `&nbsp;•&nbsp; <span class="bg-amber-400/20 text-amber-200 border border-amber-300/40 px-2 py-0.5 rounded-md font-bold"><i class="bi bi-journal-bookmark-fill mr-1"></i>${escHtml(config.scopeTitle)}</span>` : ''}
                     </p>
                 </div>
                 
@@ -2136,8 +2432,13 @@ export const generateRaporFormHtml = (
             </div>
 
             <!-- Hint helper bar -->
-            <div id="cell-hint" class="mt-3 pt-2 border-t border-teal-700/60 text-xs font-medium text-teal-100 hidden md:block">
-                <i class="bi bi-info-circle mr-1"></i> Klik atau fokus ke salah satu kotak nilai untuk melihat nama santri dan mata pelajaran.
+            <div class="mt-3 pt-2 border-t border-teal-700/60 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-1 text-[11px] text-teal-100">
+                <div id="cell-hint" class="font-medium hidden md:block">
+                    <i class="bi bi-info-circle mr-1"></i> Klik atau fokus ke salah satu kotak nilai untuk melihat nama santri dan mata pelajaran.
+                </div>
+                <div class="text-teal-100/95 bg-teal-950/35 px-2.5 py-1 rounded-lg border border-teal-700/50">
+                    <i class="bi bi-lightbulb-fill text-amber-300 mr-1"></i> <strong>Mapel belum diajarkan:</strong> isi tanda <code class="px-1 bg-teal-900 rounded text-amber-200 font-bold">-</code> (terhitung Lengkap 100% &amp; tidak membagi rata-rata). Kosongkan jika belum dinilai; jangan isi <code class="px-1 bg-teal-900 rounded text-rose-200 font-bold">0</code> kecuali nilai murni nol.
+                </div>
             </div>
         </div>
         
@@ -2173,7 +2474,7 @@ export const generateRaporFormHtml = (
                 </div>
                 <div class="flex-grow max-w-xs">
                     <select id="card-jump-select" onchange="showFilteredCard(parseInt(this.value))" class="w-full border border-slate-200 rounded-xl p-2 text-xs font-bold bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
-                        ${targetSantri.map((s, idx) => `<option value="${idx}">${idx + 1}. ${s.namaLengkap} (${s.nis || '-'})</option>`).join('')}
+                        ${targetSantri.map((s, idx) => `<option value="${idx}">${idx + 1}. ${escHtml(s.namaLengkap)} (${escHtml(s.nis || '-')})</option>`).join('')}
                     </select>
                 </div>
             </div>
@@ -2194,6 +2495,28 @@ export const generateRaporFormHtml = (
         <div class="px-4 py-3 text-center text-[11px] text-slate-500 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-2">
             <span>eSantri Web Rapor • Offline-First Digital Ledger</span>
             <span class="font-semibold text-slate-600">dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id</span>
+        </div>
+    </div>
+
+    <!-- OUT-OF-SCALE SCORE WARNING MODAL -->
+    <div id="out-of-scale-modal" style="display: none;" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-amber-200">
+            <div class="flex items-start gap-3 pb-3 border-b border-slate-100">
+                <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-black shrink-0">!</div>
+                <div>
+                    <h3 class="text-sm font-black text-slate-900">Periksa Nilai di Luar Skala 0–100</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Ditemukan angka di bawah 0 atau di atas 100 (kemungkinan salah ketik seperti 850). Periksa sebelum mengirim:</p>
+                </div>
+            </div>
+            <div id="out-of-scale-list" class="my-3.5 max-h-52 overflow-y-auto space-y-1.5 pr-1"></div>
+            <div class="pt-3 border-t border-slate-100 flex justify-end gap-2">
+                <button type="button" onclick="closeOutOfScaleModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700">
+                    Perbaiki Dulu
+                </button>
+                <button type="button" onclick="closeOutOfScaleModal(); submitData(true);" class="px-4 py-2 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-xs">
+                    Tetap Kirim Nilai
+                </button>
+            </div>
         </div>
     </div>
 
@@ -2254,6 +2577,17 @@ export interface ParseRaporFilterOptions {
     templateId?: string;
     rombelId?: number;
     allowedRombelIds?: number[];
+    dryRun?: boolean;
+    conflictMode?: 'overwrite' | 'fill_empty_only';
+}
+
+export interface RaporSyncConflictItem {
+    santriId: number;
+    santriName: string;
+    rombelName: string;
+    key: string;
+    oldValue: string;
+    newValue: string;
 }
 
 export interface RaporSyncStats {
@@ -2261,6 +2595,9 @@ export interface RaporSyncStats {
     newRecordsCount: number;
     mergedRecordsCount: number;
     fieldsMergedCount: number;
+    newFieldsCount: number;
+    overwrittenFieldsCount: number;
+    conflicts: RaporSyncConflictItem[];
     tabsDetected: string[];
     skippedLockedCount: number;
     skippedOutOfScopeCount: number;
@@ -2366,8 +2703,14 @@ export const syncRaporStructuredData = async (
     let newRecordsCount = 0;
     let mergedRecordsCount = 0;
     let fieldsMergedCount = 0;
+    let newFieldsCount = 0;
+    let overwrittenFieldsCount = 0;
+    const conflicts: RaporSyncConflictItem[] = [];
     let skippedLockedCount = 0;
     let skippedOutOfScopeCount = 0;
+
+    const isDryRun = Boolean(filterOptions?.dryRun);
+    const conflictMode = filterOptions?.conflictMode || 'overwrite';
 
     const allowedRombelSet =
         filterOptions?.allowedRombelIds && filterOptions.allowedRombelIds.length > 0
@@ -2379,7 +2722,7 @@ export const syncRaporStructuredData = async (
     const santriLookup = new Map<number, Santri>();
     allSantri.forEach(s => santriLookup.set(Number(s.id), s));
 
-    // Cache raporRecords per periode agar multi-template di periode sama selalu menggabungkan ke record terbaru
+    // Cache raporRecords per periode agar multi-template di periode sama selalu menggabungkan ke record aktif terbaru
     const periodRecordCache = new Map<string, Map<number, RaporRecord>>();
     const getPeriodMap = async (tahunAjaran: string, semester: string): Promise<Map<number, RaporRecord>> => {
         const pKey = `${tahunAjaran}__${semester}`;
@@ -2390,9 +2733,14 @@ export const syncRaporStructuredData = async (
             .toArray();
         const rMap = new Map<number, RaporRecord>();
         recs.forEach(r => {
-            const existingInMap = rMap.get(Number(r.santriId));
-            if (!existingInMap || (existingInMap.deleted && !r.deleted)) {
-                rMap.set(Number(r.santriId), r);
+            const sid = Number(r.santriId);
+            const existingInMap = rMap.get(sid);
+            if (
+                !existingInMap ||
+                (existingInMap.deleted && !r.deleted) ||
+                (!r.deleted && (r.lastModified || 0) >= (existingInMap.lastModified || 0))
+            ) {
+                rMap.set(sid, r);
             }
         });
         periodRecordCache.set(pKey, rMap);
@@ -2460,6 +2808,8 @@ export const syncRaporStructuredData = async (
             }
 
             const rombelObj = settings.rombel.find(r => Number(r.id) === Number(targetRombelId));
+            const resolvedSantriName = santriObj?.namaLengkap || String(rec.santriName || `Santri #${santriIdNum}`);
+            const resolvedRombelName = rombelObj?.nama || String(rec.rombelName || (targetRombelId ? `Rombel #${targetRombelId}` : '-'));
             const targetKelasId = santriObj?.kelasId || rombelObj?.kelasId || existing?.kelasId || 0;
             const kelasObj = settings.kelas.find(k => Number(k.id) === Number(targetKelasId));
             const targetJenjangId = santriObj?.jenjangId || kelasObj?.jenjangId || existing?.jenjangId || 0;
@@ -2479,8 +2829,23 @@ export const syncRaporStructuredData = async (
                 rec.clearedKeys.forEach((ck: string) => {
                     const cleanCk = String(ck || '').trim();
                     if (!cleanCk) return;
-                    clearedUpperSet.add(cleanCk.toUpperCase());
                     if (Object.prototype.hasOwnProperty.call(customData, cleanCk)) {
+                        const prevVal = String(customData[cleanCk] ?? '').trim();
+                        if (prevVal !== '') {
+                            conflicts.push({
+                                santriId: santriIdNum,
+                                santriName: resolvedSantriName,
+                                rombelName: resolvedRombelName,
+                                key: cleanCk,
+                                oldValue: prevVal,
+                                newValue: '(Dikosongkan)'
+                            });
+                            if (conflictMode === 'fill_empty_only') {
+                                return;
+                            }
+                            overwrittenFieldsCount++;
+                        }
+                        clearedUpperSet.add(cleanCk.toUpperCase());
                         delete customData[cleanCk];
                         mergedInThisRecord++;
                     }
@@ -2491,14 +2856,40 @@ export const syncRaporStructuredData = async (
                     if (key === '__cleared') return;
                     const val = rec.data[key];
                     if (val !== '' && val !== null && val !== undefined) {
-                        customData[key] = String(val);
-                        clearedUpperSet.delete(key.trim().toUpperCase());
-                        mergedInThisRecord++;
+                        const incomingStr = String(val).trim();
+                        const prevVal =
+                            customData[key] !== undefined && customData[key] !== null
+                                ? String(customData[key]).trim()
+                                : '';
+                        if (prevVal === '') {
+                            customData[key] = String(val);
+                            clearedUpperSet.delete(key.trim().toUpperCase());
+                            mergedInThisRecord++;
+                            newFieldsCount++;
+                        } else if (prevVal !== incomingStr) {
+                            conflicts.push({
+                                santriId: santriIdNum,
+                                santriName: resolvedSantriName,
+                                rombelName: resolvedRombelName,
+                                key,
+                                oldValue: prevVal,
+                                newValue: incomingStr
+                            });
+                            if (conflictMode === 'overwrite') {
+                                customData[key] = String(val);
+                                clearedUpperSet.delete(key.trim().toUpperCase());
+                                mergedInThisRecord++;
+                                overwrittenFieldsCount++;
+                            }
+                        }
                     }
                 });
             }
 
             if (mergedInThisRecord === 0 && clearedUpperSet.size === 0 && existing && !existing.deleted) {
+                continue;
+            }
+            if (mergedInThisRecord === 0 && clearedUpperSet.size === 0 && (!existing || existing.deleted) && Object.keys(customData).length === 0) {
                 continue;
             }
 
@@ -2562,12 +2953,14 @@ export const syncRaporStructuredData = async (
 
             if (existing) {
                 const updatedRec = { ...recordToSave, id: existing.id } as RaporRecord;
-                await db.raporRecords.put(updatedRec);
+                if (!isDryRun) {
+                    await db.raporRecords.put(updatedRec);
+                }
                 periodMap.set(santriIdNum, updatedRec);
                 if (existing.deleted) newRecordsCount++;
                 else mergedRecordsCount++;
             } else {
-                const newId = await db.raporRecords.add(recordToSave as RaporRecord);
+                const newId = isDryRun ? -santriIdNum : await db.raporRecords.add(recordToSave as RaporRecord);
                 periodMap.set(santriIdNum, { ...recordToSave, id: Number(newId) } as RaporRecord);
                 newRecordsCount++;
             }
@@ -2617,15 +3010,29 @@ export const syncRaporStructuredData = async (
                 }
             }
 
-            // Fallback two-way: jika ada kolom ekstra langsung pada objek row (misal [KEY]), ikut gabungkan
+            // Fallback two-way: jika ada kolom ekstra langsung pada objek row (misal [KEY]), ikut gabungkan atau deteksi pengosongan sel
+            const dataJsonPresentKeys = new Set(
+                Object.keys(parsedRowData || {}).filter(
+                    k => k !== '__cleared' && parsedRowData[k] !== '' && parsedRowData[k] !== null && parsedRowData[k] !== undefined
+                )
+            );
             Object.keys(row).forEach(colName => {
                 if (RESERVED_CLOUD_ROW_KEYS.has(colName)) return;
                 const val = row[colName];
-                if (val === '' || val === null || val === undefined) return;
                 const bracketMatch = colName.match(/\[([^\]]+)\]\s*$/);
                 const extractedKey = bracketMatch ? bracketMatch[1].trim() : colName.trim();
-                if (extractedKey) {
-                    parsedRowData[extractedKey] = val;
+                if (!extractedKey) return;
+                if (val === '' || val === null || val === undefined) {
+                    if (dataJsonPresentKeys.has(extractedKey)) {
+                        delete parsedRowData[extractedKey];
+                        parsedRowData.__cleared = parsedRowData.__cleared || {};
+                        parsedRowData.__cleared[extractedKey] = true;
+                    }
+                    return;
+                }
+                parsedRowData[extractedKey] = val;
+                if (parsedRowData.__cleared && parsedRowData.__cleared[extractedKey]) {
+                    delete parsedRowData.__cleared[extractedKey];
                 }
             });
 
@@ -2705,6 +3112,9 @@ export const syncRaporStructuredData = async (
         newRecordsCount,
         mergedRecordsCount,
         fieldsMergedCount,
+        newFieldsCount,
+        overwrittenFieldsCount,
+        conflicts,
         tabsDetected: Array.from(tabsDetectedSet),
         skippedLockedCount,
         skippedOutOfScopeCount
@@ -2804,9 +3214,9 @@ export const pushRaporGradesToCloud = async (
         templateKeySet.forEach(key => {
             const rawCur = cur[key] !== undefined && cur[key] !== null ? String(cur[key]).trim() : '';
             const rawPrev = prev[key] !== undefined && prev[key] !== null ? String(prev[key]).trim() : '';
-            if (rawCur !== '' && rawCur !== '-') {
+            if (rawCur !== '') {
                 dataObj[key] = rawCur;
-            } else if (rawPrev !== '' && rawPrev !== '-' && rawCur === '') {
+            } else if (rawPrev !== '' && rawCur === '') {
                 clearedKeys.push(key);
             }
         });

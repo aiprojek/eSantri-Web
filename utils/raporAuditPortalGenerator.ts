@@ -136,15 +136,19 @@ function doGet(e) {
         mergedObj = {};
       }
 
-      // Sinkronkan juga jika ada koreksi manual langsung di sel kolom mapel Google Sheets
+      // Sinkronkan juga jika ada koreksi atau penghapusan manual langsung di sel kolom mapel Google Sheets
       for (var ek = 0; ek < extraKeyCols.length; ek++) {
         var cellVal = row[extraKeyCols[ek].colIdx];
+        var eKey = extraKeyCols[ek].key;
         if (cellVal !== "" && cellVal !== null && cellVal !== undefined) {
-          var eKey = extraKeyCols[ek].key;
           mergedObj[eKey] = String(cellVal);
           if (mergedObj.__cleared && mergedObj.__cleared[eKey]) {
             delete mergedObj.__cleared[eKey];
           }
+        } else if (mergedObj[eKey] !== undefined) {
+          delete mergedObj[eKey];
+          mergedObj.__cleared = mergedObj.__cleared || {};
+          mergedObj.__cleared[eKey] = true;
         }
       }
 
@@ -202,7 +206,7 @@ function doPost(e) {
         for (var k in rec.data) {
           if (!Object.prototype.hasOwnProperty.call(rec.data, k) || k === "__cleared") continue;
           var val = rec.data[k];
-          if (val !== "" && val !== null && val !== undefined && String(val).trim() !== "-") {
+          if (val !== "" && val !== null && val !== undefined) {
             cleanData[k] = val;
             hasValue = true;
           }
@@ -375,20 +379,30 @@ function doPost(e) {
           if (idxRombelNama !== -1 && rec.rombelName) targetRow[idxRombelNama] = rec.rombelName;
           if (idxJson !== -1) targetRow[idxJson] = JSON.stringify(mergedJsonObj);
 
-          // Sinkronkan kolom mapel terbaca (termasuk mengosongkan sel jika nilai dihapus)
+          // Sinkronkan kolom mapel terbaca secara penuh terhadap DataJSON (termasuk mengosongkan sel jika nilai dihapus)
           for (var colI = 0; colI < headers.length; colI++) {
             var hText = headers[colI];
+            var colKeyMatch = String(hText || "").match(/\[([A-Za-z0-9_]+)\]/);
+            var matchedKeyName = colKeyMatch ? colKeyMatch[1] : null;
+            if (matchedKeyName) {
+              if (mergedJsonObj[matchedKeyName] !== undefined && mergedJsonObj[matchedKeyName] !== null) {
+                targetRow[colI] = mergedJsonObj[matchedKeyName];
+              } else {
+                targetRow[colI] = "";
+              }
+              continue;
+            }
             if (rec.clearedKeys && rec.clearedKeys.length > 0) {
               for (var ckI = 0; ckI < rec.clearedKeys.length; ckI++) {
                 var clrK = rec.clearedKeys[ckI];
-                if (hText === clrK || hText.indexOf("[" + clrK + "]") !== -1) {
+                if (hText === clrK) {
                   targetRow[colI] = "";
                 }
               }
             }
             for (var dk in mergedJsonObj) {
               if (dk === "__cleared") continue;
-              if (hText === dk || hText.indexOf("[" + dk + "]") !== -1) {
+              if (hText === dk) {
                 targetRow[colI] = mergedJsonObj[dk];
               }
             }
@@ -1119,6 +1133,45 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
             const valid = args.filter(a => typeof a === 'number' && !isNaN(a));
             return valid.length === 0 ? null : Math.max(...valid);
         }
+        function excelAbs(num) {
+            if (excelIsBlank(num)) return null;
+            const n = Number(num);
+            return isFinite(n) ? Math.abs(n) : null;
+        }
+        function excelInt(num) {
+            if (excelIsBlank(num)) return null;
+            const n = Number(num);
+            return isFinite(n) ? Math.floor(n) : null;
+        }
+        function excelTrunc(num, digits = 0) {
+            if (excelIsBlank(num)) return null;
+            const n = Number(num);
+            const d = Math.max(0, Math.min(10, Math.trunc(Number(digits) || 0)));
+            if (!isFinite(n)) return null;
+            const factor = Math.pow(10, d);
+            return Math.trunc(n * factor) / factor;
+        }
+        function excelMod(num, divisor) {
+            if (excelIsBlank(num) || excelIsBlank(divisor)) return null;
+            const n = Number(num);
+            const d = Number(divisor);
+            if (!isFinite(n) || !isFinite(d) || d === 0) return null;
+            return n - d * Math.floor(n / d);
+        }
+        function excelPower(base, exp) {
+            if (excelIsBlank(base) || excelIsBlank(exp)) return null;
+            const b = Number(base);
+            const e = Number(exp);
+            if (!isFinite(b) || !isFinite(e)) return null;
+            const res = Math.pow(b, e);
+            return isFinite(res) ? res : null;
+        }
+        function excelSqrt(num) {
+            if (excelIsBlank(num)) return null;
+            const n = Number(num);
+            if (!isFinite(n) || n < 0) return null;
+            return Math.sqrt(n);
+        }
         function excelPredikat(score, mode = 'huruf') {
             if (excelIsBlank(score)) return '-';
             const n = Number(String(score).replace(',', '.'));
@@ -1142,9 +1195,21 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
             const s = String(val);
             let out = '';
             for (let i = 0; i < s.length; i++) {
-                const code = s.charCodeAt(i);
-                if (code >= 48 && code <= 57) out += digits[code - 48];
-                else out += s[i];
+                const ch = s[i];
+                const code = ch.charCodeAt(0);
+                if (code >= 48 && code <= 57) {
+                    out += digits[code - 48];
+                } else if ((ch === '.' || ch === ',') && i > 0 && i < s.length - 1) {
+                    const prev = s.charCodeAt(i - 1);
+                    const next = s.charCodeAt(i + 1);
+                    if (prev >= 48 && prev <= 57 && next >= 48 && next <= 57) {
+                        out += '٫';
+                    } else {
+                        out += ch;
+                    }
+                } else {
+                    out += ch;
+                }
             }
             return out;
         }
@@ -1233,6 +1298,35 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
         function excelProper(v) {
             return String(v ?? '').toLowerCase().replace(/(?:^|\\s|[-'/])\\S/g, ch => ch.toUpperCase());
         }
+        function excelSentence(v) {
+            const s = String(v ?? '').trim();
+            if (!s) return '';
+            return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+        }
+        function excelTrim(v) {
+            return String(v ?? '').replace(/\\s+/g, ' ').trim();
+        }
+        function excelLen(v) {
+            return excelIsBlank(v) ? 0 : String(v).length;
+        }
+        function excelLeft(v, count = 1) {
+            if (excelIsBlank(v)) return '';
+            const n = Math.max(0, Math.trunc(Number(count) || 0));
+            return String(v).slice(0, n);
+        }
+        function excelRight(v, count = 1) {
+            if (excelIsBlank(v)) return '';
+            const s = String(v);
+            const n = Math.max(0, Math.trunc(Number(count) || 0));
+            return n === 0 ? '' : s.slice(-n);
+        }
+        function excelMid(v, start = 1, count = 1) {
+            if (excelIsBlank(v)) return '';
+            const s = String(v);
+            const st = Math.max(1, Math.trunc(Number(start) || 1)) - 1;
+            const len = Math.max(0, Math.trunc(Number(count) || 0));
+            return s.slice(st, st + len);
+        }
         function matchExcelCriteria(val, criteria) {
             const crit = String(criteria ?? '').trim();
             const m = crit.match(/^(>=|<=|!=|<>|>|<|=)\\s*(.*)$/);
@@ -1275,6 +1369,13 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
             if (args.length < 2) return 0;
             const criteria = args[args.length - 1];
             return args.slice(0, -1).filter(v => matchExcelCriteria(v, criteria)).length;
+        }
+        function excelSumIf(...args) {
+            if (args.length < 2) return null;
+            const criteria = args[args.length - 1];
+            const matched = args.slice(0, -1).filter(v => typeof v === 'number' && !isNaN(v) && matchExcelCriteria(v, criteria));
+            if (matched.length === 0) return null;
+            return matched.reduce((a, b) => a + b, 0);
         }
         function excelAverageIf(...args) {
             if (args.length < 2) return null;
@@ -1338,12 +1439,14 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 try {
                     fn = new Function(
                         'rowId', 'getValue', 'average', 'sum', 'excelMin', 'excelMax',
+                        'excelAbs', 'excelInt', 'excelTrunc', 'excelMod', 'excelPower', 'excelSqrt',
                         'excelRound', 'excelRoundUp', 'excelRoundDown', 'excelFixed',
                         'excelPredikat', 'angkaKeArab', 'terbilang',
                         'excelCmp', 'excelIsBlank', 'excelCountA', 'excelCountBlank',
                         'excelIf', 'excelIfs', 'excelIfError', 'excelAnd', 'excelOr', 'excelNot',
                         'excelConcat', 'excelConcatSpasi', 'excelUpper', 'excelLower', 'excelProper',
-                        'excelCount', 'excelCountIf', 'excelAverageIf', 'excelKkm', 'rata2Kelas',
+                        'excelSentence', 'excelTrim', 'excelLen', 'excelLeft', 'excelRight', 'excelMid',
+                        'excelCount', 'excelCountIf', 'excelSumIf', 'excelAverageIf', 'excelKkm', 'rata2Kelas',
                         'return (' + exprJs + ');'
                     );
                 } catch (e) {
@@ -1354,12 +1457,14 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
             try {
                 return fn(
                     rowId, getValueFn, average, sum, excelMin, excelMax,
+                    excelAbs, excelInt, excelTrunc, excelMod, excelPower, excelSqrt,
                     excelRound, excelRoundUp, excelRoundDown, excelFixed,
                     excelPredikat, angkaKeArab, terbilang,
                     excelCmp, excelIsBlank, excelCountA, excelCountBlank,
                     excelIf, excelIfs, excelIfError, excelAnd, excelOr, excelNot,
                     excelConcat, excelConcatSpasi, excelUpper, excelLower, excelProper,
-                    excelCount, excelCountIf, excelAverageIf, excelKkm, rata2KelasFn || noopRata2Kelas
+                    excelSentence, excelTrim, excelLen, excelLeft, excelRight, excelMid,
+                    excelCount, excelCountIf, excelSumIf, excelAverageIf, excelKkm, rata2KelasFn || noopRata2Kelas
                 );
             } catch (e) {
                 return null;
@@ -1479,7 +1584,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 Object.keys(parsed).forEach(k => {
                     if (k.startsWith('_')) return;
                     const v = parsed[k];
-                    if (v === '' || v === null || v === undefined || String(v).trim() === '-') return;
+                    if (v === '' || v === null || v === undefined) return;
                     anyEntry.data[k] = v;
                     if (tplEntry) tplEntry.data[k] = v;
                 });
@@ -1543,12 +1648,13 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
 
                 inputColumns.forEach(col => {
                     const rawVal = rec.data[col.key];
-                    const hasVal = rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '' && String(rawVal).trim() !== '-';
+                    const rawTrim = rawVal !== undefined && rawVal !== null ? String(rawVal).trim() : '';
+                    const hasVal = rawTrim !== '';
                     if (hasVal) {
                         rowVals[col.key] = rawVal;
                         filledCount++;
-                        if (col.isNumericScore) {
-                            const num = Number(String(rawVal).replace(',', '.'));
+                        if (col.isNumericScore && rawTrim !== '-') {
+                            const num = Number(rawTrim.replace(',', '.'));
                             if (!isNaN(num) && isFinite(num)) numericScores.push(num);
                         }
                     } else {
@@ -1578,23 +1684,66 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 return raw;
             }
 
-            function rata2Kelas(rowId, colKey) {
-                const key = String(colKey ?? '').trim().replace(/^\\$+/g, '');
-                if (!key) return null;
+            const numericInputCols = inputColumns.filter(c => c.isNumericScore);
+            const colAliasMap = {};
+            allColumns.forEach(c => {
+                if (!c || !c.key) return;
+                colAliasMap[c.key] = c.key;
+                colAliasMap[String(c.key).toUpperCase()] = c.key;
+                const nk = normMapelKeyJs(c.key);
+                if (nk && !colAliasMap[nk]) colAliasMap[nk] = c.key;
+                const nl = normMapelKeyJs(c.label || '');
+                if (nl && !colAliasMap[nl]) colAliasMap[nl] = c.key;
+            });
+            function rata2Kelas(rowId, colKey, decimals) {
+                const rawKey = String(colKey ?? '').trim().replace(/^\\$+/g, '');
+                const key = (!rawKey || rawKey === '__OVERALL__')
+                    ? rawKey
+                    : (colAliasMap[rawKey] || colAliasMap[rawKey.toUpperCase()] || colAliasMap[normMapelKeyJs(rawKey)] || rawKey);
                 const sObj = santriById.get(Number(rowId));
                 const targetRombel = sObj ? Number(sObj.rombelId || 0) : 0;
                 const cohort = targetRombel > 0 ? students.filter(st => Number(st.rombelId) === targetRombel) : students;
-                const vals = [];
-                cohort.forEach(st => {
-                    const row = valuesByStudent.get(st.id);
-                    if (!row) return;
-                    const raw = String(row[key] ?? '').trim();
-                    if (raw === '' || raw === '-') return;
-                    const num = Number(raw.replace(',', '.'));
-                    if (!isNaN(num) && isFinite(num)) vals.push(num);
-                });
-                if (vals.length === 0) return null;
-                return vals.reduce((a, b) => a + b, 0) / vals.length;
+
+                let rawAvg = null;
+                if (!key || key === '__OVERALL__') {
+                    const studentAvgs = [];
+                    cohort.forEach(st => {
+                        const row = valuesByStudent.get(st.id);
+                        if (!row) return;
+                        const sNums = [];
+                        numericInputCols.forEach(nc => {
+                            const raw = String(row[nc.key] ?? '').trim();
+                            if (raw === '' || raw === '-') return;
+                            const num = Number(raw.replace(',', '.'));
+                            if (!isNaN(num) && isFinite(num)) sNums.push(num);
+                        });
+                        if (sNums.length > 0) {
+                            studentAvgs.push(sNums.reduce((a, b) => a + b, 0) / sNums.length);
+                        }
+                    });
+                    if (studentAvgs.length > 0) {
+                        rawAvg = studentAvgs.reduce((a, b) => a + b, 0) / studentAvgs.length;
+                    }
+                } else {
+                    const vals = [];
+                    cohort.forEach(st => {
+                        const row = valuesByStudent.get(st.id);
+                        if (!row) return;
+                        const raw = String(row[key] ?? '').trim();
+                        if (raw === '' || raw === '-') return;
+                        const num = Number(raw.replace(',', '.'));
+                        if (!isNaN(num) && isFinite(num)) vals.push(num);
+                    });
+                    if (vals.length > 0) {
+                        rawAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
+                    }
+                }
+
+                if (rawAvg === null) return null;
+                if (decimals !== undefined && decimals !== null && String(decimals).trim() !== '' && !isNaN(Number(decimals))) {
+                    return excelRound(rawAvg, Number(decimals));
+                }
+                return rawAvg;
             }
 
             // 2-pass evaluasi formula per baris santri (agar rumus berantai seperti JUMLAH -> RATA2 -> PREDIKAT sinkron)
@@ -2009,11 +2158,12 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 cohortAll.forEach(s => {
                     const row = evalRes.studentMap.get(s.id);
                     const rawVal = row ? row.values[col.key] : '';
-                    const has = rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '' && String(rawVal).trim() !== '-';
+                    const rawTrim = rawVal !== undefined && rawVal !== null ? String(rawVal).trim() : '';
+                    const has = rawTrim !== '';
                     if (has) {
                         filled++;
-                        if (col.isNumericScore) {
-                            const n = Number(String(rawVal).replace(',', '.'));
+                        if (col.isNumericScore && rawTrim !== '-') {
+                            const n = Number(rawTrim.replace(',', '.'));
                             if (!isNaN(n) && isFinite(n)) {
                                 nums.push(n);
                                 if (col.kkm && n < col.kkm) belowKkm++;

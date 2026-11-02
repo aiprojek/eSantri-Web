@@ -6,6 +6,7 @@ import { RaporSignatureStampMedia } from '../../common/RaporSignatureStampMedia'
 import { ReportFooter, chunkArray, formatDate, formatAlamat } from './Common';
 import { formatTanggalDokumen, resolveTempatRapor } from '../../../utils/formatters';
 import { resolveCellMediaVisual, resolveMudirMarhalahTeacher, resolveWaliKelasTeacher } from '../../../utils/raporPlaceholderResolver';
+import { canonicalizeMapelLookupKey, extractMapelLookupCandidates } from '../../../utils/raporFormulaUtils';
 import { db } from '../../../db';
 import { formatAcademicYearDisplay } from '../../../utils/academicYear';
 
@@ -41,14 +42,17 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [record, assets] = await Promise.all([
+                const [records, assets] = await Promise.all([
                     db.raporRecords
                         .where('[santriId+tahunAjaran+semester]')
                         .equals([santri.id, options.tahunAjaran, options.semester])
-                        .first(),
+                        .toArray(),
                     db.digitalAssets.toArray(),
                 ]);
-                setRaporData(record && !record.deleted ? record : null);
+                const activeRecords = (records || [])
+                    .filter(r => !r.deleted)
+                    .sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0) || (b.id || 0) - (a.id || 0));
+                setRaporData(activeRecords[0] || null);
                 setDigitalAssets(assets || []);
             } catch (error) {
                 console.error("Gagal mengambil data rapor", error);
@@ -70,19 +74,29 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
         </div>
     );
 
-    let customGradesMap: Record<string, any> = {};
+    const customGradesMap: Record<string, any> = {};
     if (raporData.customData) {
         try {
-            const parsed = JSON.parse(raporData.customData);
+            const parsed = typeof raporData.customData === 'string'
+                ? JSON.parse(raporData.customData)
+                : raporData.customData;
             if (parsed && typeof parsed === 'object') {
                 Object.entries(parsed).forEach(([k, v]) => {
-                    customGradesMap[k.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_')] = v;
+                    if (!k || k.startsWith('_')) return;
+                    const directKey = k.trim().toUpperCase().replace(/[^A-Z0-9\u0600-\u06FF]+/g, '_').replace(/^_+|_+$/g, '');
+                    if (directKey) customGradesMap[directKey] = v;
+                    const canonKey = canonicalizeMapelLookupKey(k);
+                    if (canonKey && customGradesMap[canonKey] === undefined) customGradesMap[canonKey] = v;
+                    extractMapelLookupCandidates(k).forEach(cand => {
+                        if (cand && customGradesMap[cand] === undefined) customGradesMap[cand] = v;
+                    });
                 });
             }
         } catch {
-            customGradesMap = {};
+            // Abaikan JSON tidak valid
         }
     }
+    const effectiveJenjangId = jenjang?.id || santri.jenjangId;
 
     return (
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt', lineHeight: '1.4' }}>
@@ -117,18 +131,32 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
                         </tr>
                     </thead>
                     <tbody>
-                        {settings.mataPelajaran.filter(m => m.jenjangId === santri.jenjangId).map((mapel, idx) => {
+                        {settings.mataPelajaran.filter(m => !effectiveJenjangId || m.jenjangId === effectiveJenjangId).map((mapel, idx) => {
                             const nilaiItem = raporData.nilai?.find(n => n.mapelId === mapel.id);
-                            let val: number | null = nilaiItem ? nilaiItem.nilaiAngka : null;
+                            let val: number | null = (nilaiItem && typeof nilaiItem.nilaiAngka === 'number' && !isNaN(nilaiItem.nilaiAngka))
+                                ? nilaiItem.nilaiAngka
+                                : null;
                             if (val === null) {
-                                const codeKey = (mapel.kodeMapel || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-                                const nameKey = (mapel.nama || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-                                const rawCustom = (codeKey && customGradesMap[codeKey] !== undefined)
-                                    ? customGradesMap[codeKey]
-                                    : customGradesMap[nameKey];
-                                if (rawCustom !== undefined && rawCustom !== null && String(rawCustom).trim() !== '') {
-                                    const parsedNum = Number(String(rawCustom).trim().replace(',', '.'));
-                                    if (!isNaN(parsedNum)) val = parsedNum;
+                                const lookupKeys = [
+                                    (mapel.kodeMapel || '').trim().toUpperCase().replace(/[^A-Z0-9\u0600-\u06FF]+/g, '_').replace(/^_+|_+$/g, ''),
+                                    canonicalizeMapelLookupKey(mapel.kodeMapel || ''),
+                                    (mapel.nama || '').trim().toUpperCase().replace(/[^A-Z0-9\u0600-\u06FF]+/g, '_').replace(/^_+|_+$/g, ''),
+                                    canonicalizeMapelLookupKey(mapel.nama || ''),
+                                    ...extractMapelLookupCandidates(mapel.nama || '')
+                                ].filter(Boolean);
+                                let rawCustom: any = undefined;
+                                for (const lk of lookupKeys) {
+                                    if (customGradesMap[lk] !== undefined) {
+                                        rawCustom = customGradesMap[lk];
+                                        break;
+                                    }
+                                }
+                                if (rawCustom !== undefined && rawCustom !== null) {
+                                    const strCustom = String(rawCustom).trim();
+                                    if (strCustom !== '' && strCustom !== '-') {
+                                        const parsedNum = Number(strCustom.replace(',', '.'));
+                                        if (!isNaN(parsedNum) && isFinite(parsedNum)) val = parsedNum;
+                                    }
                                 }
                             }
                             const numericVal = val ?? 0;
@@ -436,9 +464,9 @@ export const PanduanPenilaianTemplate: React.FC<{ settings?: PondokSettings; opt
                             E. Petunjuk Teknis & Tata Tertib Pengisian Guru:
                         </h4>
                         <ol className="list-decimal list-inside space-y-0.5 text-gray-700">
-                            <li>Isi skor rentang <strong>0 – 100</strong> tanpa desimal (pembulatan &ge; 0.5 ke atas).</li>
+                            <li>Isi skor rentang <strong>0 – 100</strong> tanpa desimal (pembulatan &ge; 0.5 ke atas). Angka <strong>0</strong> hanya diisi untuk nilai nol murni.</li>
                             <li>Bagi santri dengan nilai di bawah KKM (&lt; 70), berikan program <strong>Remedial</strong> sebelum mengisi kolom NA. Nilai maksimal remedial adalah KKM (70).</li>
-                            <li>Bagi santri <em>Hiatus / Izin Khusus</em>, kolom nilai dikosongkan sementara dan dikoordinasikan ke Wali Kelas.</li>
+                            <li>Jika mata pelajaran <strong>belum diajarkan</strong> pada semester berjalan, isi dengan tanda strip (<strong>-</strong>) agar dikecualikan dari pembagi rata-rata &amp; evaluasi KKM. Bagi santri <em>Hiatus / Susulan</em>, kosongkan sementara dan koordinasikan ke Wali Kelas.</li>
                             <li>Lembar nilai yang sudah ditandatangani diserahkan ke Bagian Kurikulum untuk penginputan sistem rapor eSantri.</li>
                         </ol>
                     </div>

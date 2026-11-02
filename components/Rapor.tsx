@@ -21,6 +21,8 @@ const TabLoadingFallback = () => (
 export interface SharedRaporContext {
     rombelId?: number;
     santriId?: number;
+    focusKey?: string;
+    focusNonce?: number;
     tahunAjaran?: string;
     semester?: 'Ganjil' | 'Genap';
     templateId?: string;
@@ -178,7 +180,14 @@ const Rapor: React.FC = () => {
                             initialRombelId={sharedContext.rombelId}
                             initialTahunAjaran={sharedContext.tahunAjaran}
                             initialSemester={sharedContext.semester}
-                            onNavigateToInputWali={(rId) => handleNavigateWithContext('input_wali', rId)} 
+                            onNavigateToInputWali={(rId, sId, fKey) =>
+                                handleNavigateWithContext('input_wali', {
+                                    rombelId: rId,
+                                    santriId: sId,
+                                    focusKey: fKey,
+                                    focusNonce: Date.now()
+                                })
+                            } 
                         />
                     )}
                 </Suspense>

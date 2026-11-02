@@ -6,7 +6,8 @@ import {
     syncRaporStructuredData,
     inspectRaporCloudSummary,
     RaporCloudInspectionSummary,
-    ParseRaporFilterOptions
+    ParseRaporFilterOptions,
+    RaporSyncConflictItem
 } from '../../services/academicService';
 import { RAPOR_UNIFIED_GAS_SCRIPT_V3 } from '../../utils/raporAuditPortalGenerator';
 import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
@@ -71,6 +72,14 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
     const [isInspecting, setIsInspecting] = useState(false);
     const [cloudPreview, setCloudPreview] = useState<RaporCloudInspectionSummary | null>(null);
     const [showGasScriptHelper, setShowGasScriptHelper] = useState(false);
+    const [pendingDiffReview, setPendingDiffReview] = useState<{
+        source: 'wa' | 'cloud';
+        conflicts: RaporSyncConflictItem[];
+        newFieldsCount: number;
+        uniqueStudentsUpdated: number;
+        cachedCloudData?: any[];
+        cachedWaBlocks?: string[];
+    } | null>(null);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -87,6 +96,7 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
         if (defaultRombelId !== undefined) setTargetRombelId(defaultRombelId || 0);
         if (defaultTemplateId !== undefined) setTargetTemplateId(defaultTemplateId || '');
         setCloudPreview(null);
+        setPendingDiffReview(null);
     }, [
         isOpen,
         initialSource,
@@ -170,60 +180,48 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
         }
     };
 
-    const handleProcessImport = async () => {
-        if (!canImport) return;
-        if (!isAdminOrGlobalWrite && isWaliKelas && myWaliRombels.length === 0) {
-            showAlert(
-                'Rombel Wali Belum Terhubung',
-                'Akun Wali Kelas Anda belum dipetakan ke Rombel manapun. Hubungi Admin untuk mengatur Wali Kelas pada Data Master Rombel.'
-            );
-            return;
-        }
-        if (importSource === 'wa' && !waInput.trim()) return;
-        if (importSource === 'cloud' && !cloudScriptUrl.trim()) return;
-
+    const executeCommitImport = async (
+        mode: 'overwrite' | 'fill_empty_only',
+        cachedPayload?: { cloudData?: any[]; waBlocks?: string[] }
+    ) => {
         setIsProcessing(true);
         try {
-            const filterOpts = buildFilterOptions();
+            const filterOpts: ParseRaporFilterOptions = {
+                ...buildFilterOptions(),
+                dryRun: false,
+                conflictMode: mode
+            };
             let totalSuccess = 0;
             let totalErrors: string[] = [];
             let tabsCount = 0;
 
             if (importSource === 'wa') {
-                const matches = Array.from(
-                    waInput.matchAll(/RAPOR_V2_START([\s\S]*?)RAPOR_V2_END/g)
-                );
-                if (matches.length === 0) {
-                    throw new Error(
-                        'Format kode WA tidak valid. Pastikan pesan mengandung blok RAPOR_V2_START ... RAPOR_V2_END.'
-                    );
-                }
+                const blocks =
+                    cachedPayload?.waBlocks ||
+                    Array.from(waInput.matchAll(/RAPOR_V2_START([\s\S]*?)RAPOR_V2_END/g))
+                        .map(m => (m[1] || '').trim())
+                        .filter(Boolean);
 
-                const uniqueUpdatedIds = new Set<number>();
-                for (const m of matches) {
-                    const block = (m[1] || '').trim();
-                    if (!block) continue;
+                for (const block of blocks) {
                     const { successCount, errors } = await parseRaporDataV2(block, settings, filterOpts);
                     totalSuccess += successCount;
                     totalErrors = [...totalErrors, ...errors];
-                    if (successCount > 0) uniqueUpdatedIds.add(totalSuccess);
                 }
             } else {
                 const cleanUrl = cloudScriptUrl.trim();
-                const cloudQueryOpts = {
-                    ...(filterOpts.tahunAjaran ? { tahunAjaran: filterOpts.tahunAjaran } : {}),
-                    ...(filterOpts.semester ? { semester: filterOpts.semester } : {}),
-                    ...(filterOpts.rombelId ? { rombelId: filterOpts.rombelId } : {}),
-                    ...(filterOpts.templateId ? { templateId: filterOpts.templateId } : {})
-                };
-
-                const cloudData = await fetchRaporFromCloud(cleanUrl, cloudQueryOpts);
+                const cloudData =
+                    cachedPayload?.cloudData ||
+                    (await fetchRaporFromCloud(cleanUrl, {
+                        ...(filterOpts.tahunAjaran ? { tahunAjaran: filterOpts.tahunAjaran } : {}),
+                        ...(filterOpts.semester ? { semester: filterOpts.semester } : {}),
+                        ...(filterOpts.rombelId ? { rombelId: filterOpts.rombelId } : {}),
+                        ...(filterOpts.templateId ? { templateId: filterOpts.templateId } : {})
+                    }));
                 const result = await syncRaporStructuredData(cloudData, settings, filterOpts);
                 totalSuccess = result.successCount;
                 totalErrors = result.errors;
                 tabsCount = result.stats.tabsDetected.length;
 
-                // Simpan URL & waktu sinkronisasi terakhir jika user punya akses update settings
                 if (isAdminOrGlobalWrite && cleanUrl) {
                     try {
                         await onUpdateSettings({
@@ -247,13 +245,17 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                 }
             }
 
+            setPendingDiffReview(null);
+
             if (totalSuccess > 0) {
                 const tabSuffix =
                     importSource === 'cloud' && tabsCount > 0
                         ? ` dari ${tabsCount} tab Google Sheet`
                         : '';
+                const modeNote =
+                    mode === 'fill_empty_only' ? ' (hanya mengisi sel kosong)' : '';
                 showToast(
-                    `Berhasil menarik & menggabungkan nilai ${totalSuccess} santri${tabSuffix}.`,
+                    `Berhasil menarik & menggabungkan nilai ${totalSuccess} santri${tabSuffix}${modeNote}.`,
                     'success'
                 );
                 setWaInput('');
@@ -261,9 +263,14 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                 onClose();
             } else if (totalErrors.length === 0) {
                 showToast(
-                    'Tidak ada data nilai baru yang cocok dengan periode atau ruang lingkup rombel yang dipilih.',
+                    mode === 'fill_empty_only'
+                        ? 'Tidak ada sel kosong baru yang perlu diisi (seluruh nilai lokal dipertahankan).'
+                        : 'Tidak ada data nilai baru yang cocok dengan periode atau ruang lingkup rombel yang dipilih.',
                     'info'
                 );
+                if (mode === 'fill_empty_only') {
+                    onClose();
+                }
             }
 
             if (totalErrors.length > 0) {
@@ -272,6 +279,94 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
         } catch (e) {
             showAlert('Gagal Menarik / Memproses Data', (e as Error).message);
         } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleProcessImport = async () => {
+        if (!canImport) return;
+        if (!isAdminOrGlobalWrite && isWaliKelas && myWaliRombels.length === 0) {
+            showAlert(
+                'Rombel Wali Belum Terhubung',
+                'Akun Wali Kelas Anda belum dipetakan ke Rombel manapun. Hubungi Admin untuk mengatur Wali Kelas pada Data Master Rombel.'
+            );
+            return;
+        }
+        if (importSource === 'wa' && !waInput.trim()) return;
+        if (importSource === 'cloud' && !cloudScriptUrl.trim()) return;
+
+        setIsProcessing(true);
+        try {
+            const dryOpts: ParseRaporFilterOptions = {
+                ...buildFilterOptions(),
+                dryRun: true,
+                conflictMode: 'overwrite'
+            };
+
+            if (importSource === 'wa') {
+                const matches = Array.from(
+                    waInput.matchAll(/RAPOR_V2_START([\s\S]*?)RAPOR_V2_END/g)
+                );
+                const blocks = matches.map(m => (m[1] || '').trim()).filter(Boolean);
+                if (blocks.length === 0) {
+                    throw new Error(
+                        'Format kode WA tidak valid. Pastikan pesan mengandung blok RAPOR_V2_START ... RAPOR_V2_END.'
+                    );
+                }
+
+                const allConflicts: RaporSyncConflictItem[] = [];
+                let newFields = 0;
+                let updatedStudents = 0;
+                for (const block of blocks) {
+                    const dryRes = await parseRaporDataV2(block, settings, dryOpts);
+                    if (dryRes.stats) {
+                        allConflicts.push(...(dryRes.stats.conflicts || []));
+                        newFields += dryRes.stats.newFieldsCount || 0;
+                        updatedStudents += dryRes.stats.uniqueStudentsUpdated || 0;
+                    }
+                }
+
+                if (allConflicts.length > 0) {
+                    setPendingDiffReview({
+                        source: 'wa',
+                        conflicts: allConflicts,
+                        newFieldsCount: newFields,
+                        uniqueStudentsUpdated: updatedStudents,
+                        cachedWaBlocks: blocks
+                    });
+                    setIsProcessing(false);
+                    return;
+                }
+
+                await executeCommitImport('overwrite', { waBlocks: blocks });
+            } else {
+                const cleanUrl = cloudScriptUrl.trim();
+                const cloudQueryOpts = {
+                    ...(dryOpts.tahunAjaran ? { tahunAjaran: dryOpts.tahunAjaran } : {}),
+                    ...(dryOpts.semester ? { semester: dryOpts.semester } : {}),
+                    ...(dryOpts.rombelId ? { rombelId: dryOpts.rombelId } : {}),
+                    ...(dryOpts.templateId ? { templateId: dryOpts.templateId } : {})
+                };
+
+                const cloudData = await fetchRaporFromCloud(cleanUrl, cloudQueryOpts);
+                const dryRes = await syncRaporStructuredData(cloudData, settings, dryOpts);
+
+                if (dryRes.stats.conflicts.length > 0) {
+                    setPendingDiffReview({
+                        source: 'cloud',
+                        conflicts: dryRes.stats.conflicts,
+                        newFieldsCount: dryRes.stats.newFieldsCount,
+                        uniqueStudentsUpdated: dryRes.stats.uniqueStudentsUpdated,
+                        cachedCloudData: cloudData
+                    });
+                    setIsProcessing(false);
+                    return;
+                }
+
+                await executeCommitImport('overwrite', { cloudData });
+            }
+        } catch (e) {
+            showAlert('Gagal Menarik / Memproses Data', (e as Error).message);
             setIsProcessing(false);
         }
     };
@@ -301,11 +396,70 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
 
                 {/* Body */}
                 <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+                    {pendingDiffReview && (
+                        <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-300 space-y-3 animate-in fade-in">
+                            <div className="flex items-start gap-2.5">
+                                <i className="bi bi-exclamation-triangle-fill text-amber-600 text-base mt-0.5 shrink-0"></i>
+                                <div className="text-xs text-amber-950">
+                                    <div className="font-black text-sm">
+                                        Ditemukan {pendingDiffReview.conflicts.length} Nilai Berbeda dengan Data Lokal
+                                    </div>
+                                    <p className="text-amber-800 mt-0.5 leading-relaxed">
+                                        Terdapat <strong>{pendingDiffReview.newFieldsCount}</strong> sel kosong baru dan{' '}
+                                        <strong>{pendingDiffReview.conflicts.length}</strong> sel yang nilainya berbeda dengan data yang sudah tersimpan di perangkat ini. Pilih cara penggabungan di bawah:
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="max-h-52 overflow-y-auto bg-white rounded-xl border border-amber-200 divide-y divide-slate-100">
+                                <table className="w-full text-left text-[11px]">
+                                    <thead className="bg-slate-50 text-slate-600 sticky top-0">
+                                        <tr>
+                                            <th className="py-2 px-3 font-bold">Santri</th>
+                                            <th className="py-2 px-2 font-bold">Kolom</th>
+                                            <th className="py-2 px-3 font-bold text-right">Lokal → Baru</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {pendingDiffReview.conflicts.slice(0, 80).map((c, idx) => (
+                                            <tr key={`${c.santriId}_${c.key}_${idx}`} className="hover:bg-slate-50">
+                                                <td className="py-1.5 px-3">
+                                                    <div className="font-bold text-slate-800">{c.santriName}</div>
+                                                    <div className="text-[10px] text-slate-400">{c.rombelName}</div>
+                                                </td>
+                                                <td className="py-1.5 px-2 font-mono font-semibold text-slate-600">
+                                                    {c.key}
+                                                </td>
+                                                <td className="py-1.5 px-3 text-right font-mono whitespace-nowrap">
+                                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-bold">
+                                                        {c.oldValue}
+                                                    </span>
+                                                    <i className="bi bi-arrow-right mx-1 text-slate-400"></i>
+                                                    <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-black">
+                                                        {c.newValue}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {pendingDiffReview.conflicts.length > 80 && (
+                                    <div className="p-2 text-center text-[10px] text-slate-500 bg-slate-50">
+                                        ...dan {pendingDiffReview.conflicts.length - 80} perubahan nilai lainnya.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Interactive Source Switcher */}
                     <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200">
                         <button
                             type="button"
-                            onClick={() => setImportSource('cloud')}
+                            onClick={() => {
+                                setImportSource('cloud');
+                                setPendingDiffReview(null);
+                            }}
                             className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
                                 importSource === 'cloud'
                                     ? 'bg-white text-blue-700 shadow-xs'
@@ -317,7 +471,10 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                         </button>
                         <button
                             type="button"
-                            onClick={() => setImportSource('wa')}
+                            onClick={() => {
+                                setImportSource('wa');
+                                setPendingDiffReview(null);
+                            }}
                             className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
                                 importSource === 'wa'
                                     ? 'bg-white text-emerald-700 shadow-xs'
@@ -608,45 +765,91 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
 
                 {/* Footer */}
                 <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="px-4 py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-xs hover:bg-slate-100 whitespace-nowrap"
-                    >
-                        Batal
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleProcessImport}
-                        disabled={
-                            isProcessing ||
-                            (importSource === 'wa' ? !waInput.trim() : !cloudScriptUrl.trim()) ||
-                            !canImport
-                        }
-                        className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs shadow-sm disabled:bg-slate-300 flex items-center gap-1.5 whitespace-nowrap transition-colors"
-                    >
-                        {isProcessing ? (
-                            <>
-                                <span className="animate-spin h-3.5 w-3.5 border-2 border-white rounded-full border-t-transparent"></span>
-                                <span>Menarik &amp; Menggabungkan...</span>
-                            </>
-                        ) : (
-                            <>
-                                <i
-                                    className={
-                                        importSource === 'cloud'
-                                            ? 'bi bi-cloud-arrow-down-fill'
-                                            : 'bi bi-box-arrow-in-down'
-                                    }
-                                ></i>
-                                <span>
-                                    {importSource === 'cloud'
-                                        ? 'Tarik & Simpan Nilai GAS'
-                                        : 'Proses & Simpan Kode WA'}
-                                </span>
-                            </>
-                        )}
-                    </button>
+                    {pendingDiffReview ? (
+                        <div className="flex flex-wrap items-center justify-end gap-2 w-full">
+                            <button
+                                type="button"
+                                onClick={() => setPendingDiffReview(null)}
+                                disabled={isProcessing}
+                                className="px-3.5 py-2 border border-slate-300 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors"
+                            >
+                                Kembali
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    executeCommitImport('fill_empty_only', {
+                                        cloudData: pendingDiffReview.cachedCloudData,
+                                        waBlocks: pendingDiffReview.cachedWaBlocks
+                                    })
+                                }
+                                disabled={isProcessing}
+                                className="px-4 py-2 bg-white hover:bg-teal-50 text-teal-800 border border-teal-300 font-bold rounded-xl text-xs shadow-2xs transition-colors flex items-center gap-1.5"
+                                title="Hanya mengisi sel yang saat ini masih kosong; nilai lokal yang sudah terisi tidak akan ditimpa"
+                            >
+                                <i className="bi bi-shield-check text-teal-600"></i>
+                                <span>Hanya Isi Sel Kosong ({pendingDiffReview.newFieldsCount})</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    executeCommitImport('overwrite', {
+                                        cloudData: pendingDiffReview.cachedCloudData,
+                                        waBlocks: pendingDiffReview.cachedWaBlocks
+                                    })
+                                }
+                                disabled={isProcessing}
+                                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs shadow-sm transition-colors flex items-center gap-1.5"
+                                title="Perbarui nilai lokal dengan nilai kiriman terbaru"
+                            >
+                                <i className="bi bi-arrow-repeat"></i>
+                                <span>Timpa Nilai Lama ({pendingDiffReview.conflicts.length})</span>
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                disabled={isProcessing}
+                                className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleProcessImport}
+                                disabled={
+                                    isProcessing ||
+                                    (importSource === 'wa' ? !waInput.trim() : !cloudScriptUrl.trim()) ||
+                                    !canImport
+                                }
+                                className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs shadow-sm disabled:bg-slate-300 flex items-center gap-1.5 whitespace-nowrap transition-colors"
+                            >
+                                {isProcessing ? (
+                                    <>
+                                        <span className="animate-spin h-3.5 w-3.5 border-2 border-white rounded-full border-t-transparent"></span>
+                                        <span>Memeriksa &amp; Menggabungkan...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i
+                                            className={
+                                                importSource === 'cloud'
+                                                    ? 'bi bi-cloud-arrow-down-fill'
+                                                    : 'bi bi-box-arrow-in-down'
+                                            }
+                                        ></i>
+                                        <span>
+                                            {importSource === 'cloud'
+                                                ? 'Tarik & Simpan Nilai GAS'
+                                                : 'Proses & Simpan Kode WA'}
+                                        </span>
+                                    </>
+                                )}
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
         </div>
@@ -699,10 +902,82 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
         open: boolean;
         source: 'cloud' | 'wa';
     }>({ open: false, source: 'cloud' });
+    const [quickDiffState, setQuickDiffState] = useState<{
+        cloudData: any[];
+        filterOpts: ParseRaporFilterOptions;
+        conflicts: RaporSyncConflictItem[];
+        newFieldsCount: number;
+    } | null>(null);
 
     if (!canImport) return null;
 
     const savedScriptUrl = (settings.raporCloudConfig?.googleScriptUrl || '').trim();
+
+    const commitQuickPullData = async (
+        cloudData: any[],
+        baseFilterOpts: ParseRaporFilterOptions,
+        conflictMode: 'overwrite' | 'fill_empty_only'
+    ) => {
+        setIsQuickPulling(true);
+        try {
+            const result = await syncRaporStructuredData(cloudData, settings, {
+                ...baseFilterOpts,
+                dryRun: false,
+                conflictMode
+            });
+
+            if (isAdminOrGlobalWrite) {
+                try {
+                    await onUpdateSettings({
+                        ...settings,
+                        raporCloudConfig: {
+                            ...(settings.raporCloudConfig || {}),
+                            googleScriptUrl: savedScriptUrl,
+                            lastSyncedAt: new Date().toISOString(),
+                            lastSyncedStudents: result.successCount
+                        }
+                    });
+                } catch {
+                    // non-fatal
+                }
+            }
+
+            setQuickDiffState(null);
+
+            if (result.successCount > 0) {
+                const tabCount = result.stats.tabsDetected.length;
+                const modeNote =
+                    conflictMode === 'fill_empty_only' ? ' (hanya sel kosong)' : '';
+                showToast(
+                    `Berhasil menarik & menggabungkan nilai ${result.successCount} santri${
+                        tabCount > 0 ? ` dari ${tabCount} tab Sheet` : ''
+                    }${modeNote}.`,
+                    'success'
+                );
+                onSyncComplete?.();
+            } else if (result.errors.length === 0) {
+                showToast(
+                    conflictMode === 'fill_empty_only'
+                        ? 'Tidak ada sel kosong baru yang diisi (nilai lokal yang sudah ada dipertahankan).'
+                        : defaultTahunAjaran
+                        ? `Belum ada kiriman nilai baru di Google Sheet untuk periode ${defaultTahunAjaran} (${defaultSemester || ''}). Klik ikon pengaturan (⚙) jika ingin menarik semua periode.`
+                        : 'Belum ada baris nilai baru di Google Sheet.',
+                    'info'
+                );
+            }
+
+            if (result.errors.length > 0) {
+                showAlert('Catatan Sinkronisasi Nilai', result.errors.slice(0, 15).join('\n'));
+            }
+        } catch (err) {
+            showAlert(
+                'Gagal Menyimpan Nilai dari GAS',
+                (err as Error).message
+            );
+        } finally {
+            setIsQuickPulling(false);
+        }
+    };
 
     const executeQuickPull = async () => {
         if (!savedScriptUrl) {
@@ -731,51 +1006,29 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
                 ...(filterOpts.semester ? { semester: filterOpts.semester } : {})
             });
 
-            const result = await syncRaporStructuredData(cloudData, settings, filterOpts);
+            const dryResult = await syncRaporStructuredData(cloudData, settings, {
+                ...filterOpts,
+                dryRun: true,
+                conflictMode: 'overwrite'
+            });
 
-            if (isAdminOrGlobalWrite) {
-                try {
-                    await onUpdateSettings({
-                        ...settings,
-                        raporCloudConfig: {
-                            ...(settings.raporCloudConfig || {}),
-                            googleScriptUrl: savedScriptUrl,
-                            lastSyncedAt: new Date().toISOString(),
-                            lastSyncedStudents: result.successCount
-                        }
-                    });
-                } catch {
-                    // non-fatal
-                }
+            if (dryResult.stats.conflicts.length > 0) {
+                setQuickDiffState({
+                    cloudData,
+                    filterOpts,
+                    conflicts: dryResult.stats.conflicts,
+                    newFieldsCount: dryResult.stats.newFieldsCount
+                });
+                setIsQuickPulling(false);
+                return;
             }
 
-            if (result.successCount > 0) {
-                const tabCount = result.stats.tabsDetected.length;
-                showToast(
-                    `Berhasil menarik & menggabungkan nilai ${result.successCount} santri${
-                        tabCount > 0 ? ` dari ${tabCount} tab Sheet` : ''
-                    }.`,
-                    'success'
-                );
-                onSyncComplete?.();
-            } else if (result.errors.length === 0) {
-                showToast(
-                    defaultTahunAjaran
-                        ? `Belum ada kiriman nilai di Google Sheet untuk periode ${defaultTahunAjaran} (${defaultSemester || ''}). Klik ikon pengaturan (⚙) jika ingin menarik semua periode.`
-                        : 'Belum ada baris nilai baru di Google Sheet.',
-                    'info'
-                );
-            }
-
-            if (result.errors.length > 0) {
-                showAlert('Catatan Sinkronisasi Nilai', result.errors.slice(0, 15).join('\n'));
-            }
+            await commitQuickPullData(cloudData, filterOpts, 'overwrite');
         } catch (err) {
             showAlert(
                 'Gagal Menarik Nilai dari GAS',
                 `${(err as Error).message}\n\nKlik tombol pengaturan (⚙) di sebelah tombol Tarik GAS untuk memeriksa URL Google Apps Script.`
             );
-        } finally {
             setIsQuickPulling(false);
         }
     };
@@ -868,6 +1121,109 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
                     </button>
                 )}
             </div>
+
+            {quickDiffState && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-2xl border border-amber-200 space-y-4 animate-in fade-in zoom-in-95">
+                        <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+                            <div className="flex items-start gap-2.5">
+                                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                                    <i className="bi bi-arrow-left-right text-sm"></i>
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-slate-900">
+                                        Pratinjau Perbedaan Nilai Cloud GAS
+                                    </h3>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        Ditemukan <strong>{quickDiffState.newFieldsCount}</strong> sel kosong baru dan{' '}
+                                        <strong>{quickDiffState.conflicts.length}</strong> sel yang berbeda dengan nilai lokal.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setQuickDiffState(null)}
+                                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center"
+                            >
+                                <i className="bi bi-x-lg text-xs"></i>
+                            </button>
+                        </div>
+
+                        <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200">
+                            <table className="w-full text-left text-[11px]">
+                                <thead className="bg-slate-50 text-slate-600 sticky top-0">
+                                    <tr>
+                                        <th className="py-2 px-3 font-bold">Santri</th>
+                                        <th className="py-2 px-2 font-bold">Kolom</th>
+                                        <th className="py-2 px-3 font-bold text-right">Lokal → Cloud</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {quickDiffState.conflicts.slice(0, 80).map((c, idx) => (
+                                        <tr key={`${c.santriId}_${c.key}_${idx}`} className="hover:bg-slate-50">
+                                            <td className="py-1.5 px-3">
+                                                <div className="font-bold text-slate-800">{c.santriName}</div>
+                                                <div className="text-[10px] text-slate-400">{c.rombelName}</div>
+                                            </td>
+                                            <td className="py-1.5 px-2 font-mono font-semibold text-slate-600">
+                                                {c.key}
+                                            </td>
+                                            <td className="py-1.5 px-3 text-right font-mono whitespace-nowrap">
+                                                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-bold">
+                                                    {c.oldValue}
+                                                </span>
+                                                <i className="bi bi-arrow-right mx-1 text-slate-400"></i>
+                                                <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-black">
+                                                    {c.newValue}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="pt-3 border-t border-slate-100 flex flex-wrap justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setQuickDiffState(null)}
+                                disabled={isQuickPulling}
+                                className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    commitQuickPullData(
+                                        quickDiffState.cloudData,
+                                        quickDiffState.filterOpts,
+                                        'fill_empty_only'
+                                    )
+                                }
+                                disabled={isQuickPulling}
+                                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-teal-50 text-teal-800 border border-teal-300"
+                            >
+                                Hanya Isi Sel Kosong ({quickDiffState.newFieldsCount})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    commitQuickPullData(
+                                        quickDiffState.cloudData,
+                                        quickDiffState.filterOpts,
+                                        'overwrite'
+                                    )
+                                }
+                                disabled={isQuickPulling}
+                                className="px-4 py-2 rounded-xl text-xs font-black bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
+                            >
+                                Timpa Nilai Lama ({quickDiffState.conflicts.length})
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <RaporWaCloudImportModal
                 isOpen={modalState.open}

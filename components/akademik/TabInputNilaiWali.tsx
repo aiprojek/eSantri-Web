@@ -6,7 +6,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
-import { getRaporRecordsByPeriod, getRaporRecordsByPeriodAndRombel } from '../../services/academicQueries';
+import { getRaporRecordsByPeriod } from '../../services/academicQueries';
 import { useAcademicRaporYears } from '../../hooks/useAcademicRaporYears';
 import {
     exportRaporExcelTemplate,
@@ -26,6 +26,8 @@ export interface TabInputNilaiWaliProps {
     initialContext?: {
         rombelId?: number;
         santriId?: number;
+        focusKey?: string;
+        focusNonce?: number;
         tahunAjaran?: string;
         semester?: 'Ganjil' | 'Genap';
         templateId?: string;
@@ -94,6 +96,14 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         return myRombels.find(r => r.id === activeRombelId) || myRombels[0] || null;
     }, [myRombels, activeRombelId]);
 
+    const [pendingFocusTask, setPendingFocusTask] = useState<{
+        santriId?: number;
+        focusKey?: string;
+        nonce: number;
+    } | null>(null);
+    const [highlightedSantriId, setHighlightedSantriId] = useState<number | null>(null);
+    const [highlightedColKey, setHighlightedColKey] = useState<string | null>(null);
+
     // Sync from initialContext when provided
     useEffect(() => {
         if (!initialContext) return;
@@ -114,16 +124,21 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                 setActiveRombelId(targetRombel.id);
             }
         }
-        if (initialContext.santriId) {
-            const targetSantri = santriList.find(s => s.id === initialContext.santriId);
-            if (targetSantri) {
-                setStudentSearchQuery(targetSantri.namaLengkap);
-            }
-        }
         if (initialContext.templateId && initialContext.templateId !== selectedTemplateId) {
             setSelectedTemplateId(initialContext.templateId);
         }
-    }, [initialContext, settings.rombel, settings.kelas, santriList]);
+        if (initialContext.santriId || initialContext.focusKey) {
+            // Tampilkan seluruh santri kelas (jangan menyembunyikan baris lain) lalu lompat & fokus langsung ke sel target
+            setStudentSearchQuery('');
+            setStudentStatusFilter('all');
+            setActiveInputSheetId('all');
+            setPendingFocusTask({
+                santriId: initialContext.santriId,
+                focusKey: initialContext.focusKey,
+                nonce: initialContext.focusNonce || Date.now()
+            });
+        }
+    }, [initialContext, settings.rombel, settings.kelas]);
 
     // Notify parent on context changes
     useEffect(() => {
@@ -393,6 +408,75 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         }
     }, [filteredStudents.length, activeStudentIndex]);
 
+    // Deep-focus jump ke baris santri & sel kolom yang dituju tanpa menyembunyikan santri lain
+    useEffect(() => {
+        if (!pendingFocusTask) return;
+        if (filteredStudents.length === 0 || inputKeys.length === 0) return;
+
+        let targetStudentIdx = 0;
+        if (pendingFocusTask.santriId) {
+            const foundIdx = filteredStudents.findIndex(s => s.id === pendingFocusTask.santriId);
+            if (foundIdx === -1) return; // Tunggu daftar santri rombel target selesai dimuat
+            targetStudentIdx = foundIdx;
+        } else if (pendingFocusTask.focusKey) {
+            const fKey = pendingFocusTask.focusKey;
+            const firstEmptyStudentIdx = filteredStudents.findIndex(
+                s => !(grades[s.id]?.[fKey] || '').trim()
+            );
+            targetStudentIdx = firstEmptyStudentIdx >= 0 ? firstEmptyStudentIdx : 0;
+        }
+
+        const targetStudent = filteredStudents[targetStudentIdx];
+        if (!targetStudent) return;
+
+        let targetKeyIdx = 0;
+        if (pendingFocusTask.focusKey) {
+            const foundKeyIdx = inputKeys.findIndex(k => k.key === pendingFocusTask.focusKey);
+            if (foundKeyIdx >= 0) targetKeyIdx = foundKeyIdx;
+        } else {
+            const firstEmptyKeyIdx = inputKeys.findIndex(
+                k => !(grades[targetStudent.id]?.[k.key] || '').trim()
+            );
+            targetKeyIdx = firstEmptyKeyIdx >= 0 ? firstEmptyKeyIdx : 0;
+        }
+
+        const targetKeyObj = inputKeys[targetKeyIdx];
+        setHighlightedSantriId(targetStudent.id);
+        setHighlightedColKey(targetKeyObj?.key || null);
+
+        if (viewMode === 'card') {
+            setActiveStudentIndex(targetStudentIdx);
+        }
+
+        const timerFocus = window.setTimeout(() => {
+            const rowEl = document.querySelector<HTMLElement>(`[data-wali-row="${targetStudent.id}"]`);
+            if (rowEl) {
+                rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            const cellEl = document.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+                `[data-wali-cell="${targetStudentIdx}:${targetKeyIdx}"]`
+            );
+            if (cellEl) {
+                cellEl.focus({ preventScroll: false });
+                if ('select' in cellEl && typeof cellEl.select === 'function') {
+                    cellEl.select();
+                }
+            }
+        }, 90);
+
+        const timerClear = window.setTimeout(() => {
+            setHighlightedSantriId(null);
+            setHighlightedColKey(null);
+        }, 3800);
+
+        setPendingFocusTask(null);
+
+        return () => {
+            window.clearTimeout(timerFocus);
+            window.clearTimeout(timerClear);
+        };
+    }, [pendingFocusTask, filteredStudents, inputKeys, grades, viewMode]);
+
     // Handle global Ctrl+S / Cmd+S save shortcut
     useEffect(() => {
         const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -465,12 +549,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         const loadExisting = async () => {
             if (!tahunAjaran || !semester) return;
 
-            let query;
-            if (activeRombelId) {
-                query = getRaporRecordsByPeriodAndRombel(tahunAjaran, semester, activeRombelId);
-            } else if (adminJenjangId) {
-                query = getRaporRecordsByPeriod(tahunAjaran, semester);
-            } else {
+            if (!activeRombelId && !adminJenjangId) {
                 setExistingPeriodRecords([]);
                 setGrades({});
                 setSavedBaselineJson('{}');
@@ -478,19 +557,31 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                 return;
             }
 
-            let existing = (await query).filter(r => !r.deleted);
+            const allPeriodRecords = (await getRaporRecordsByPeriod(tahunAjaran, semester)).filter(r => !r.deleted);
+            const activeStudentIdSet = new Set(studentsInRombel.map(s => s.id));
 
-            if (!activeRombelId && adminJenjangId) {
-                existing = existing.filter(r => {
-                    const rm = r.rombelId ? settings.rombel.find(x => x.id === r.rombelId) : undefined;
-                    const effKelasId = rm?.kelasId || r.kelasId || 0;
-                    const kl = effKelasId ? settings.kelas.find(x => x.id === effKelasId) : undefined;
-                    const effJenjangId = kl?.jenjangId || r.jenjangId || 0;
-                    if (effJenjangId !== adminJenjangId) return false;
-                    if (adminKelasId && effKelasId !== adminKelasId) return false;
-                    return true;
-                });
-            }
+            // Deduplicate per santriId preferring latest lastModified so moved-rombel students always retain their grades
+            const latestBySantri = new Map<number, RaporRecord>();
+            allPeriodRecords.forEach(r => {
+                if (activeRombelId) {
+                    if (!activeStudentIdSet.has(r.santriId) && r.rombelId !== activeRombelId) return;
+                } else if (adminJenjangId) {
+                    if (!activeStudentIdSet.has(r.santriId)) {
+                        const rm = r.rombelId ? settings.rombel.find(x => x.id === r.rombelId) : undefined;
+                        const effKelasId = rm?.kelasId || r.kelasId || 0;
+                        const kl = effKelasId ? settings.kelas.find(x => x.id === effKelasId) : undefined;
+                        const effJenjangId = kl?.jenjangId || r.jenjangId || 0;
+                        if (effJenjangId !== adminJenjangId) return;
+                        if (adminKelasId && effKelasId !== adminKelasId) return;
+                    }
+                }
+                const prev = latestBySantri.get(r.santriId);
+                if (!prev || (r.lastModified || 0) >= (prev.lastModified || 0)) {
+                    latestBySantri.set(r.santriId, r);
+                }
+            });
+
+            const existing = Array.from(latestBySantri.values());
             setExistingPeriodRecords(existing);
 
             const newGrades: Record<number, Record<string, string>> = {};
@@ -530,7 +621,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
             }
         };
         loadExisting();
-    }, [activeRombelId, adminJenjangId, adminKelasId, tahunAjaran, semester, refreshCounter, draftStorageKey]);
+    }, [activeRombelId, adminJenjangId, adminKelasId, tahunAjaran, semester, refreshCounter, draftStorageKey, studentsInRombel, settings.rombel, settings.kelas]);
 
     // Simpan otomatis ke localStorage saat ada perubahan yang belum disimpan ke DB
     useEffect(() => {
@@ -614,6 +705,89 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         if (num < 0 || num > 100) return { status: 'invalid', kkm: meta.kkm };
         if (num < meta.kkm) return { status: 'below_kkm', kkm: meta.kkm };
         return { status: 'normal', kkm: meta.kkm };
+    };
+
+    const findOutOfScaleGrades = (
+        sourceGrades: Record<number, Record<string, string>>
+    ): Array<{ santriId: number; santriName: string; key: string; label: string; value: string }> => {
+        const issues: Array<{ santriId: number; santriName: string; key: string; label: string; value: string }> = [];
+        studentsInRombel.forEach(s => {
+            const sGrades = sourceGrades[s.id];
+            if (!sGrades) return;
+            inputKeys.forEach(k => {
+                const meta = keyValidationMeta[k.key];
+                if (!meta?.isNumericScore) return;
+                const raw = String(sGrades[k.key] ?? '').trim();
+                if (!raw || raw === '-') return;
+                const num = Number(raw.replace(',', '.'));
+                if (!isNaN(num) && (num < 0 || num > 100)) {
+                    issues.push({
+                        santriId: s.id,
+                        santriName: s.namaLengkap,
+                        key: k.key,
+                        label: k.label,
+                        value: raw
+                    });
+                }
+            });
+        });
+        return issues;
+    };
+
+    const handleFillEmptyColumnWithDash = (key: string, label: string) => {
+        if (isRaporLocked) return;
+        let filledCount = 0;
+        setGrades(prev => {
+            const next = { ...prev };
+            filteredStudents.forEach(s => {
+                const cur = String(next[s.id]?.[key] ?? '').trim();
+                if (!cur) {
+                    next[s.id] = {
+                        ...(next[s.id] || {}),
+                        [key]: '-'
+                    };
+                    filledCount++;
+                }
+            });
+            return next;
+        });
+        if (filledCount > 0) {
+            showToast(
+                `${filledCount} sel kosong pada kolom "${label}" diisi "-" (Belum Diajarkan). Klik Simpan Nilai untuk menyimpan.`,
+                'success'
+            );
+        } else {
+            showToast(`Semua sel pada kolom "${label}" sudah terisi.`, 'info');
+        }
+    };
+
+    const handleClearColumnValues = (key: string, label: string) => {
+        if (isRaporLocked) return;
+        const nonEmptyCount = filteredStudents.filter(s => String(grades[s.id]?.[key] ?? '').trim() !== '').length;
+        if (nonEmptyCount === 0) {
+            showToast(`Kolom "${label}" sudah kosong.`, 'info');
+            return;
+        }
+        showConfirmation(
+            'Kosongkan Nilai Satu Kolom',
+            `Yakin ingin mengosongkan ${nonEmptyCount} nilai terisi pada kolom "${label}" ($${key}) untuk daftar santri yang sedang tampil? Perubahan baru permanen setelah Anda klik Simpan Nilai.`,
+            () => {
+                setGrades(prev => {
+                    const next = { ...prev };
+                    filteredStudents.forEach(s => {
+                        if (String(next[s.id]?.[key] ?? '').trim() !== '') {
+                            next[s.id] = {
+                                ...(next[s.id] || {}),
+                                [key]: ''
+                            };
+                        }
+                    });
+                    return next;
+                });
+                showToast(`Kolom "${label}" dikosongkan. Klik Simpan Nilai untuk menerapkan.`, 'info');
+            },
+            { confirmColor: 'red', confirmText: 'Kosongkan Kolom' }
+        );
     };
 
     // Navigasi keyboard ala Excel di tabel web
@@ -739,12 +913,18 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         if (!selectedTemplateId) throw new Error('Pilih template terlebih dahulu');
         if (studentsInRombel.length === 0) throw new Error('Tidak ada santri untuk disimpan');
 
-        const existingPeriod = await db.raporRecords
+        const existingPeriod = (await db.raporRecords
             .where('[tahunAjaran+semester]')
             .equals([tahunAjaran, semester])
-            .toArray();
+            .toArray()).filter(rec => !rec.deleted);
 
-        const existingBySantri = new Map(existingPeriod.map(rec => [rec.santriId, rec]));
+        const existingBySantri = new Map<number, RaporRecord>();
+        existingPeriod.forEach(rec => {
+            const prev = existingBySantri.get(rec.santriId);
+            if (!prev || (rec.lastModified || 0) >= (prev.lastModified || 0)) {
+                existingBySantri.set(rec.santriId, rec);
+            }
+        });
         let previousBaselineGrades: Record<number, Record<string, string>> = {};
         try {
             previousBaselineGrades = JSON.parse(savedBaselineJson || '{}');
@@ -913,13 +1093,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         }
     };
 
-    const handleSave = async () => {
-        if (isRaporLocked) {
-            return showToast('Rapor rombel ini sedang dikunci. Hubungi Admin jika perlu revisi.', 'error');
-        }
-        if (!selectedTemplateId) return showToast('Pilih template terlebih dahulu', 'error');
-        if (studentsInRombel.length === 0) return showToast('Tidak ada santri untuk disimpan', 'error');
-
+    const executeSaveGrades = async () => {
         setIsSaving(true);
         try {
             const { mergedGradesSnapshot, previousBaselineGrades } = await saveGradesToDb();
@@ -947,6 +1121,34 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const handleSave = async () => {
+        if (isRaporLocked) {
+            return showToast('Rapor rombel ini sedang dikunci. Hubungi Admin jika perlu revisi.', 'error');
+        }
+        if (!selectedTemplateId) return showToast('Pilih template terlebih dahulu', 'error');
+        if (studentsInRombel.length === 0) return showToast('Tidak ada santri untuk disimpan', 'error');
+
+        const outOfScale = findOutOfScaleGrades(grades);
+        if (outOfScale.length > 0) {
+            const previewLines = outOfScale
+                .slice(0, 5)
+                .map(it => `• ${it.santriName} — ${it.label}: ${it.value}`)
+                .join('\n');
+            const moreText = outOfScale.length > 5 ? `\n...dan ${outOfScale.length - 5} nilai lainnya.` : '';
+            showConfirmation(
+                'Peringatan Nilai di Luar Skala 0–100',
+                `Ditemukan ${outOfScale.length} nilai angka di luar rentang wajar 0–100 (kemungkinan salah ketik):\n\n${previewLines}${moreText}\n\nApakah Anda yakin tetap ingin menyimpan nilai tersebut apa adanya?`,
+                () => {
+                    executeSaveGrades();
+                },
+                { confirmColor: 'amber', confirmText: 'Tetap Simpan' }
+            );
+            return;
+        }
+
+        await executeSaveGrades();
     };
 
     const handleManualPushToGas = async () => {
@@ -1095,19 +1297,37 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         importedGrades: Record<number, Record<string, string>>,
         shouldSaveToDb: boolean
     ) => {
-        setGrades(prev => {
-            const next = { ...prev };
-            Object.entries(importedGrades).forEach(([sIdStr, gradesObj]) => {
-                const sId = Number(sIdStr);
-                next[sId] = {
-                    ...(next[sId] || {}),
-                    ...gradesObj
-                };
-            });
-            return next;
+        const mergedPreview: Record<number, Record<string, string>> = { ...grades };
+        Object.entries(importedGrades).forEach(([sIdStr, gradesObj]) => {
+            const sId = Number(sIdStr);
+            mergedPreview[sId] = {
+                ...(mergedPreview[sId] || {}),
+                ...gradesObj
+            };
         });
 
+        setGrades(mergedPreview);
+
         if (shouldSaveToDb) {
+            const outOfScale = findOutOfScaleGrades(mergedPreview);
+            if (outOfScale.length > 0) {
+                const previewLines = outOfScale
+                    .slice(0, 5)
+                    .map(it => `• ${it.santriName} — ${it.label}: ${it.value}`)
+                    .join('\n');
+                const moreText = outOfScale.length > 5 ? `\n...dan ${outOfScale.length - 5} nilai lainnya.` : '';
+                showConfirmation(
+                    'Nilai Impor di Luar Skala 0–100',
+                    `File Excel berhasil dimuat ke tabel, namun terdapat ${outOfScale.length} nilai di luar rentang 0–100:\n\n${previewLines}${moreText}\n\nKlik "Tetap Simpan" jika memang disengaja, atau klik "Batal" untuk memperbaikinya di tabel terlebih dahulu.`,
+                    async () => {
+                        const saved = await saveGradesToDb(undefined, importedGrades);
+                        await syncSnapshotToCloudGas(saved.mergedGradesSnapshot, saved.previousBaselineGrades);
+                        showToast('Nilai hasil impor Excel berhasil disimpan ke database.', 'success');
+                    },
+                    { confirmColor: 'amber', confirmText: 'Tetap Simpan' }
+                );
+                return;
+            }
             const saved = await saveGradesToDb(undefined, importedGrades);
             await syncSnapshotToCloudGas(saved.mergedGradesSnapshot, saved.previousBaselineGrades);
         }
@@ -1942,6 +2162,22 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                         </div>
                     </div>
 
+                    {/* Petunjuk Singkat Pengosongan Nilai vs Tanda Strip "-" */}
+                    <div className="bg-slate-50/90 border border-slate-200/90 rounded-xl px-3.5 py-2 text-[11px] text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                            <i className="bi bi-info-circle-fill text-teal-600"></i> Ketentuan Nilai Kosong:
+                        </span>
+                        <span>
+                            <strong className="text-teal-800">Isi strip <code className="px-1 py-0.5 bg-white border border-teal-200 rounded font-mono text-teal-900">-</code></strong> = Mapel belum diajarkan (terhitung <strong>Lengkap 100%</strong>, diabaikan dari pembagi rata-rata &amp; bebas <em>Remidi</em>).
+                        </span>
+                        <span>
+                            <strong className="text-amber-800">Biarkan kosong</strong> = Nilai belum disetor (rumus aman, status <strong>Belum Lengkap</strong>).
+                        </span>
+                        <span>
+                            <strong className="text-rose-700">Angka <code className="px-1 py-0.5 bg-white border border-rose-200 rounded font-mono text-rose-800">0</code></strong> = Skor nol murni (ikut membagi rata-rata).
+                        </span>
+                    </div>
+
                     {/* TABLE MODE */}
                     {viewMode === 'table' && (
                         <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
@@ -2003,12 +2239,14 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                             {inputKeys.map(k => {
                                                 const meta = keyValidationMeta[k.key];
                                                 const isText = isLongTextKey(k);
+                                                const isDropdownCol = k.type === 'dropdown';
+                                                const isColHighlighted = highlightedColKey === k.key;
                                                 return (
                                                     <th
                                                         key={k.key}
-                                                        className={`p-3 text-center ${
-                                                            isText ? 'min-w-[240px] max-w-[340px]' : 'min-w-[105px]'
-                                                        }`}
+                                                        className={`p-3 text-center transition-colors ${
+                                                            isText ? 'min-w-[240px] max-w-[340px]' : 'min-w-[115px]'
+                                                        } ${isColHighlighted ? 'bg-teal-100/80 ring-2 ring-inset ring-teal-500' : ''}`}
                                                     >
                                                         {activeInputSheetId === 'all' && k.sheetName && (
                                                             <div className="text-[9px] font-bold text-teal-600 uppercase tracking-tight bg-teal-50 px-1.5 py-0.5 rounded inline-block mb-1 border border-teal-100 truncate max-w-[110px]">
@@ -2032,6 +2270,28 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                                         {isText && (
                                                             <div className="text-[9px] font-semibold text-teal-600 mt-0.5">
                                                                 Teks / Catatan
+                                                            </div>
+                                                        )}
+                                                        {!isRaporLocked && filteredStudents.length > 0 && (
+                                                            <div className="mt-1.5 flex items-center justify-center gap-1">
+                                                                {!isDropdownCol && !meta?.isAttendanceCount && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleFillEmptyColumnWithDash(k.key, k.label)}
+                                                                        title={`Isi otomatis tanda "-" pada sel yang masih kosong di kolom ${k.label} (Mapel belum diajarkan)`}
+                                                                        className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white hover:bg-teal-50 text-slate-600 hover:text-teal-700 border border-slate-200 hover:border-teal-300 transition-colors"
+                                                                    >
+                                                                        Isi &quot;-&quot;
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleClearColumnValues(k.key, k.label)}
+                                                                    title={`Kosongkan seluruh isian kolom ${k.label}`}
+                                                                    className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 hover:border-rose-200 transition-colors"
+                                                                >
+                                                                    <i className="bi bi-eraser"></i>
+                                                                </button>
                                                             </div>
                                                         )}
                                                     </th>
@@ -2058,6 +2318,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                                     settings.rombel.find(r => r.id === student.rombelId)?.nama ||
                                                     'Tanpa Rombel';
                                                 const sStat = studentStatsMap.get(student.id);
+                                                const isRowHighlighted = highlightedSantriId === student.id;
 
                                                 return (
                                                     <React.Fragment key={student.id}>
@@ -2072,7 +2333,14 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                                                 </td>
                                                             </tr>
                                                         )}
-                                                        <tr className="group bg-white hover:bg-slate-50/90 focus-within:bg-teal-50/70 transition-colors">
+                                                        <tr
+                                                            data-wali-row={student.id}
+                                                            className={`group transition-colors ${
+                                                                isRowHighlighted
+                                                                    ? 'bg-amber-50/90 ring-2 ring-inset ring-amber-400'
+                                                                    : 'bg-white hover:bg-slate-50/90 focus-within:bg-teal-50/70'
+                                                            }`}
+                                                        >
                                                             <td className="p-3 text-center text-slate-400 sticky left-0 z-10 bg-inherit border-r border-slate-200 font-bold text-xs">
                                                                 {idx + 1}
                                                             </td>
@@ -2526,6 +2794,8 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                 santriList={studentsInRombel}
                 inputKeys={inputKeys}
                 currentGrades={grades}
+                mataPelajaran={settings.mataPelajaran}
+                jenjangId={activeJenjangId || undefined}
                 onApplyBulkUpdates={handleApplyBulkHelper}
             />
 

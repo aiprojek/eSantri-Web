@@ -9,6 +9,7 @@ import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { formatAcademicYearDisplay } from '../../utils/academicYear';
 import { extractTemplateKeys } from '../../services/raporExcelService';
 import { RaporCloudPullControl } from './RaporWaCloudImportModal';
+import { findMapelInMasterPool } from '../../utils/raporFormulaUtils';
 
 export interface TabMonitoringNilaiProps {
     onNavigateToTab?: (
@@ -33,7 +34,9 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
     
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     const [selectedAuditRombel, setSelectedAuditRombel] = useState<any | null>(null);
+    const [auditViewTab, setAuditViewTab] = useState<'santri' | 'mapel'>('santri');
     const currentYear = filterTahun || availableYears[0] || defaultAcademicYear;
+    const jadwalPelajaranList = useLiveQuery(() => db.jadwalPelajaran.toArray(), []) || [];
     const livePeriodRecords = useLiveQuery(
         async () => {
             if (!currentYear || !filterSemester) return [];
@@ -47,11 +50,23 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
     );
     const isLoading = livePeriodRecords === undefined;
 
+    useEffect(() => {
+        if (selectedAuditRombel) {
+            setAuditViewTab('santri');
+        }
+    }, [selectedAuditRombel?.id]);
+
     // Calculate Stats reactively whenever livePeriodRecords, settings, or santriList changes
     const stats = useMemo(() => {
         const records = livePeriodRecords || [];
         const recMap = new Map<number, any>();
-        records.forEach(r => recMap.set(r.santriId, r));
+        records.forEach(r => {
+            if (r.deleted) return;
+            const prev = recMap.get(r.santriId);
+            if (!prev || (r.lastModified || 0) >= (prev.lastModified || 0)) {
+                recMap.set(r.santriId, r);
+            }
+        });
 
         const templates = settings.raporTemplates || [];
 
@@ -123,7 +138,8 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                 else if (completeCount > 0 || partialCount > 0) status = 'Sebagian';
             }
 
-            const rombelRecords = records.filter(r => r.rombelId === rombel.id);
+            const rombelStudentIdSet = new Set(santriInRombel.map(s => s.id));
+            const rombelRecords = records.filter(r => r.rombelId === rombel.id || rombelStudentIdSet.has(r.santriId));
             const lastUpdate =
                 rombelRecords.length > 0
                     ? new Date(
@@ -159,9 +175,14 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
     const auditStudents = useMemo(() => {
         if (!selectedAuditRombel) return [];
         const records = livePeriodRecords || [];
-        const rombelRecs = records.filter(r => !r.deleted && r.rombelId === selectedAuditRombel.id);
         const recMap = new Map<number, any>();
-        rombelRecs.forEach(r => recMap.set(r.santriId, r));
+        records.forEach(r => {
+            if (r.deleted) return;
+            const prev = recMap.get(r.santriId);
+            if (!prev || (r.lastModified || 0) >= (prev.lastModified || 0)) {
+                recMap.set(r.santriId, r);
+            }
+        });
 
         const rombelObj = settings.rombel.find(r => r.id === selectedAuditRombel.id);
         const kelasObj = settings.kelas.find(k => k.id === rombelObj?.kelasId);
@@ -180,6 +201,7 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
             .map(s => {
                 const rec = recMap.get(s.id);
                 let filledCount = 0;
+                let firstMissingKey: string | undefined = undefined;
                 if (rec?.customData) {
                     try {
                         const customData = JSON.parse(rec.customData);
@@ -187,12 +209,18 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                             filledCount = templateKeys.filter(
                                 tk => customData[tk.key] !== undefined && customData[tk.key] !== null && String(customData[tk.key]).trim() !== ''
                             ).length;
+                            const firstMiss = templateKeys.find(
+                                tk => customData[tk.key] === undefined || customData[tk.key] === null || String(customData[tk.key]).trim() === ''
+                            );
+                            firstMissingKey = firstMiss?.key;
                         } else {
                             filledCount = Object.keys(customData).filter(
                                 k => customData[k] !== undefined && customData[k] !== null && String(customData[k]).trim() !== ''
                             ).length;
                         }
                     } catch {}
+                } else if (templateKeys.length > 0) {
+                    firstMissingKey = templateKeys[0].key;
                 }
                 return {
                     santri: s,
@@ -200,10 +228,99 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                     isSubmitted: !!rec,
                     filledCount,
                     expectedCount: templateKeys.length,
+                    firstMissingKey,
                     lastModified: rec?.lastModified || rec?.tanggalRapor || null
                 };
             });
     }, [selectedAuditRombel, livePeriodRecords, settings, santriList]);
+
+    // Audit per-mapel & guru pengampu matrix for selected rombel
+    const auditSubjects = useMemo(() => {
+        if (!selectedAuditRombel) return [];
+        const records = livePeriodRecords || [];
+        const recMap = new Map<number, Record<string, any>>();
+        records.forEach(r => {
+            if (r.deleted) return;
+            const prev = recMap.get(r.santriId);
+            if (!prev || (r.lastModified || 0) >= (prev._lastMod || 0)) {
+                try {
+                    const parsed = JSON.parse(r.customData || '{}');
+                    recMap.set(r.santriId, { ...parsed, _lastMod: r.lastModified || 0 });
+                } catch {
+                    recMap.set(r.santriId, { _lastMod: r.lastModified || 0 });
+                }
+            }
+        });
+
+        const rombelObj = settings.rombel.find(r => r.id === selectedAuditRombel.id);
+        const kelasObj = settings.kelas.find(k => k.id === rombelObj?.kelasId);
+        const templates = settings.raporTemplates || [];
+        const matchedTemplate =
+            templates.find(t => t.rombelId === selectedAuditRombel.id) ||
+            templates.find(t => t.jenjangId === kelasObj?.jenjangId && t.kelasId === kelasObj?.id && !t.rombelId) ||
+            templates.find(t => t.jenjangId === kelasObj?.jenjangId && !t.kelasId && !t.rombelId) ||
+            templates.find(t => !t.jenjangId) ||
+            (templates.length > 0 ? templates[0] : null);
+        const templateKeys = matchedTemplate ? extractTemplateKeys(matchedTemplate, 'all') : [];
+        const activeSantri = santriList.filter(
+            s => !s.deleted && s.rombelId === selectedAuditRombel.id && s.status === 'Aktif'
+        );
+        const totalSantri = activeSantri.length;
+        const rombelSchedules = jadwalPelajaranList.filter(
+            j => !j.deleted && j.rombelId === selectedAuditRombel.id
+        );
+
+        return templateKeys.map(tk => {
+            let filledCount = 0;
+            let dashCount = 0;
+            activeSantri.forEach(s => {
+                const cData = recMap.get(s.id);
+                const raw = cData?.[tk.key];
+                if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+                    filledCount++;
+                    if (String(raw).trim() === '-') dashCount++;
+                }
+            });
+
+            const matchedMapel = findMapelInMasterPool(
+                tk.label,
+                tk.key,
+                settings.mataPelajaran || [],
+                kelasObj?.jenjangId
+            );
+            const teacherIds = new Set<number>();
+            if (matchedMapel) {
+                rombelSchedules
+                    .filter(j => j.mapelId === matchedMapel.id && j.guruId)
+                    .forEach(j => {
+                        if (j.guruId) teacherIds.add(j.guruId);
+                    });
+            }
+            const pengampuNames = Array.from(teacherIds)
+                .map(id => settings.tenagaPengajar.find(t => t.id === id)?.nama)
+                .filter((n): n is string => Boolean(n));
+
+            const percent = totalSantri > 0 ? Math.round((filledCount / totalSantri) * 100) : 0;
+            const status: 'Lengkap' | 'Sebagian' | 'Kosong' =
+                totalSantri === 0 || filledCount === 0
+                    ? 'Kosong'
+                    : filledCount >= totalSantri
+                    ? 'Lengkap'
+                    : 'Sebagian';
+
+            return {
+                key: tk.key,
+                label: tk.label,
+                sheetName: tk.sheetName,
+                pengampuNames,
+                filledCount,
+                dashCount,
+                totalSantri,
+                percent,
+                status
+            };
+        });
+    }, [selectedAuditRombel, livePeriodRecords, settings, santriList, jadwalPelajaranList]);
 
     // Summary Totals
     const summary = useMemo(() => {
@@ -499,55 +616,225 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                             </button>
                         </div>
 
+                        {/* Mode Switcher: Per Santri vs Per Mapel & Pengampu */}
+                        <div className="pt-3 pb-2 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                            <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200">
+                                <button
+                                    type="button"
+                                    onClick={() => setAuditViewTab('santri')}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                        auditViewTab === 'santri'
+                                            ? 'bg-white text-teal-800 shadow-2xs'
+                                            : 'text-slate-600 hover:text-slate-900'
+                                    }`}
+                                >
+                                    <i className="bi bi-people-fill"></i>
+                                    <span>Per Santri ({auditStudents.length})</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setAuditViewTab('mapel')}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                        auditViewTab === 'mapel'
+                                            ? 'bg-white text-teal-800 shadow-2xs'
+                                            : 'text-slate-600 hover:text-slate-900'
+                                    }`}
+                                >
+                                    <i className="bi bi-journal-check"></i>
+                                    <span>Per Mapel &amp; Pengampu ({auditSubjects.length})</span>
+                                </button>
+                            </div>
+                            {auditViewTab === 'mapel' && (
+                                <span className="text-[11px] text-slate-400 font-medium">
+                                    Pengampu dipetakan otomatis dari Jadwal Pelajaran
+                                </span>
+                            )}
+                        </div>
+
                         <div className="py-3 px-1 flex-1 overflow-y-auto">
                             {isAuditLoading ? (
                                 <div className="p-12 text-center text-slate-500">
                                     <div className="w-7 h-7 border-2 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
                                     <p className="mt-2 text-xs font-semibold">Memeriksa data santri...</p>
                                 </div>
-                            ) : auditStudents.length === 0 ? (
+                            ) : auditViewTab === 'santri' ? (
+                                auditStudents.length === 0 ? (
+                                    <div className="p-8 text-center text-slate-400 text-xs">
+                                        Tidak ada santri aktif di rombel ini.
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded-lg text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                            <span>Santri ({auditStudents.length})</span>
+                                            <span>Status &amp; Aksi</span>
+                                        </div>
+                                        {auditStudents.map((item, idx) => (
+                                            <div
+                                                key={item.santri.id}
+                                                className="flex items-center justify-between gap-2 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors"
+                                            >
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-semibold text-slate-400 w-5 shrink-0">{idx + 1}.</span>
+                                                        <span className="text-xs font-bold text-slate-800 truncate">{item.santri.namaLengkap}</span>
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-400 pl-7 font-mono">
+                                                        NIS: {item.santri.nis || '-'}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {item.isSubmitted && item.filledCount > 0 ? (
+                                                        item.expectedCount > 0 && item.filledCount < item.expectedCount ? (
+                                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                                                <i className="bi bi-exclamation-circle-fill"></i>
+                                                                <span>Sebagian ({item.filledCount}/{item.expectedCount})</span>
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                                <i className="bi bi-check-circle-fill"></i>
+                                                                <span>Lengkap ({item.expectedCount > 0 ? `${item.filledCount}/${item.expectedCount}` : `${item.filledCount} field`})</span>
+                                                            </span>
+                                                        )
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                                            <i className="bi bi-x-circle-fill"></i>
+                                                            <span>Belum Ada Data</span>
+                                                        </span>
+                                                    )}
+                                                    {onNavigateToTab && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const rId = selectedAuditRombel.id;
+                                                                const period = {
+                                                                    tahunAjaran: filterTahun || availableYears[0] || defaultAcademicYear,
+                                                                    semester: filterSemester
+                                                                };
+                                                                setSelectedAuditRombel(null);
+                                                                onNavigateToTab(
+                                                                    'input_wali',
+                                                                    {
+                                                                        rombelId: rId,
+                                                                        santriId: item.santri.id,
+                                                                        focusKey: item.firstMissingKey,
+                                                                        focusNonce: Date.now()
+                                                                    },
+                                                                    period
+                                                                );
+                                                            }}
+                                                            title="Lompat langsung ke baris & sel kosong santri ini"
+                                                            className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white hover:bg-teal-50 text-teal-700 border border-slate-200 hover:border-teal-300 transition-colors flex items-center gap-1"
+                                                        >
+                                                            <i className="bi bi-box-arrow-in-right"></i>
+                                                            <span>Input</span>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
+                            ) : auditSubjects.length === 0 ? (
                                 <div className="p-8 text-center text-slate-400 text-xs">
-                                    Tidak ada santri aktif di rombel ini.
+                                    Belum ada kolom input ($KEY) pada template rapor untuk rombel ini.
                                 </div>
                             ) : (
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded-lg text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                        <span>Santri ({auditStudents.length})</span>
-                                        <span>Status Nilai</span>
+                                        <span>Kolom Mapel &amp; Guru Pengampu</span>
+                                        <span>Progres Rombel</span>
                                     </div>
-                                    {auditStudents.map((item, idx) => (
+                                    {auditSubjects.map((subj, idx) => (
                                         <div
-                                            key={item.santri.id}
-                                            className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors"
+                                            key={subj.key}
+                                            className="p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                                         >
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-semibold text-slate-400 w-5">{idx + 1}.</span>
-                                                    <span className="text-xs font-bold text-slate-800">{item.santri.namaLengkap}</span>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="text-xs font-semibold text-slate-400">{idx + 1}.</span>
+                                                    <span className="text-xs font-bold text-slate-800">{subj.label}</span>
+                                                    <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                        ${subj.key}
+                                                    </span>
+                                                    {subj.sheetName && (
+                                                        <span className="text-[9px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">
+                                                            {subj.sheetName}
+                                                        </span>
+                                                    )}
                                                 </div>
-                                                <div className="text-[10px] text-slate-400 pl-7 font-mono">
-                                                    NIS: {item.santri.nis || '-'}
+                                                <div className="mt-1 pl-5 flex items-center gap-1.5 flex-wrap text-[11px]">
+                                                    {subj.pengampuNames.length > 0 ? (
+                                                        <span className="inline-flex items-center gap-1 text-indigo-700 font-semibold">
+                                                            <i className="bi bi-person-workspace text-[10px]"></i>
+                                                            <span>{subj.pengampuNames.join(', ')}</span>
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-400">
+                                                            Wali Kelas / Umum
+                                                        </span>
+                                                    )}
+                                                    {subj.dashCount > 0 && (
+                                                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                            {subj.dashCount} bertanda &quot;-&quot;
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
 
-                                            <div>
-                                                {item.isSubmitted && item.filledCount > 0 ? (
-                                                    item.expectedCount > 0 && item.filledCount < item.expectedCount ? (
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                                            <i className="bi bi-exclamation-circle-fill"></i>
-                                                            <span>Sebagian ({item.filledCount}/{item.expectedCount})</span>
+                                            <div className="flex items-center gap-2.5 shrink-0 pl-5 sm:pl-0">
+                                                <div className="w-28">
+                                                    <div className="flex items-center justify-between text-[10px] font-bold mb-1">
+                                                        <span className={
+                                                            subj.status === 'Lengkap'
+                                                                ? 'text-emerald-700'
+                                                                : subj.status === 'Sebagian'
+                                                                ? 'text-amber-700'
+                                                                : 'text-rose-600'
+                                                        }>
+                                                            {subj.filledCount}/{subj.totalSantri}
                                                         </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                            <i className="bi bi-check-circle-fill"></i>
-                                                            <span>Lengkap ({item.expectedCount > 0 ? `${item.filledCount}/${item.expectedCount}` : `${item.filledCount} field`})</span>
-                                                        </span>
-                                                    )
-                                                ) : (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                                                        <i className="bi bi-x-circle-fill"></i>
-                                                        <span>Belum Ada Data</span>
-                                                    </span>
+                                                        <span className="text-slate-600">{subj.percent}%</span>
+                                                    </div>
+                                                    <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={`h-full rounded-full ${
+                                                                subj.status === 'Lengkap'
+                                                                    ? 'bg-emerald-500'
+                                                                    : subj.status === 'Sebagian'
+                                                                    ? 'bg-amber-500'
+                                                                    : 'bg-rose-400'
+                                                            }`}
+                                                            style={{ width: `${subj.percent}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                {onNavigateToTab && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const rId = selectedAuditRombel.id;
+                                                            const period = {
+                                                                tahunAjaran: filterTahun || availableYears[0] || defaultAcademicYear,
+                                                                semester: filterSemester
+                                                            };
+                                                            setSelectedAuditRombel(null);
+                                                            onNavigateToTab(
+                                                                'input_wali',
+                                                                {
+                                                                    rombelId: rId,
+                                                                    focusKey: subj.key,
+                                                                    focusNonce: Date.now()
+                                                                },
+                                                                period
+                                                            );
+                                                        }}
+                                                        title={`Buka & fokus ke kolom ${subj.label}`}
+                                                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white hover:bg-teal-50 text-teal-700 border border-slate-200 hover:border-teal-300 transition-colors flex items-center gap-1"
+                                                    >
+                                                        <i className="bi bi-pencil-square"></i>
+                                                        <span>Isi</span>
+                                                    </button>
                                                 )}
                                             </div>
                                         </div>

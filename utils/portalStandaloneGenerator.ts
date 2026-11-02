@@ -437,8 +437,11 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
             (rapor ? (
               '<div style="margin-top:16px;padding:12px;border-radius:12px;background:var(--p-light);border:1px solid var(--p-border);">' +
                 '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">' +
-                  '<div style="font-size:12px;font-weight:800;color:var(--p-dark);">Ringkasan Rapor Terakhir (' + esc(rapor.semester) + ' - ' + esc(rapor.tahunAjaran) + ')</div>' +
-                  '<span class="badge" style="background:var(--p-color);color:#fff;">Rata-rata: ' + esc(rapor.rataRata) + '</span>' +
+                  '<div>' +
+                    '<div style="font-size:12px;font-weight:800;color:var(--p-dark);">Ringkasan Rapor Terakhir (' + esc(rapor.semester) + ' - ' + esc(rapor.tahunAjaran) + ')</div>' +
+                    (rapor.keputusan ? '<div style="font-size:11px;font-weight:600;color:var(--p-dark);margin-top:2px;">Status: ' + esc(rapor.keputusan) + '</div>' : '') +
+                  '</div>' +
+                  '<span class="badge" style="background:var(--p-color);color:#fff;">Rata-rata: ' + esc((rapor.hasNumericScores === false || (!rapor.rataRata && (!rapor.mapel || rapor.mapel.length === 0))) ? '-' : rapor.rataRata) + '</span>' +
                 '</div>' +
                 (rapor.mapel && rapor.mapel.length > 0 ? (
                   '<div style="overflow-x:auto;background:#fff;border-radius:8px;border:1px solid #e2e8f0;"><table class="table-clean">' +

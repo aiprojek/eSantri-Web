@@ -9,6 +9,7 @@ import {
     buildRombelLegerData,
     classifyRaporInputField,
     exportLegerToExcel,
+    RankingBasis,
     StudentLegerRow
 } from '../../services/raporCalculationService';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
@@ -19,7 +20,7 @@ import { printToPdfNative } from '../../utils/pdfGenerator';
 import { RaporCloudPullControl } from './RaporWaCloudImportModal';
 
 interface TabLegerNilaiProps {
-    onNavigateToInputWali?: (rombelId?: number) => void;
+    onNavigateToInputWali?: (rombelId?: number, santriId?: number, focusKey?: string) => void;
     initialRombelId?: number;
     initialTahunAjaran?: string;
     initialSemester?: 'Ganjil' | 'Genap';
@@ -91,6 +92,13 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
         } catch {}
         return 2;
     });
+    const [rankingBasis, setRankingBasis] = useState<RankingBasis>(() => {
+        try {
+            const saved = localStorage.getItem('esantri_leger_ranking_basis');
+            if (saved === 'auto' || saved === 'rata_rata' || saved === 'total_nilai') return saved;
+        } catch {}
+        return 'auto';
+    });
     const [mobileViewMode, setMobileViewMode] = useState<'table' | 'cards'>('table');
     const [freezeMobileColumns, setFreezeMobileColumns] = useState<boolean>(false);
 
@@ -99,6 +107,12 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
             localStorage.setItem('esantri_leger_decimal_places', String(decimalPlaces));
         } catch {}
     }, [decimalPlaces]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('esantri_leger_ranking_basis', rankingBasis);
+        } catch {}
+    }, [rankingBasis]);
 
     // Modals
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
@@ -238,13 +252,23 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
         async () => {
             if (!selectedRombelId || !currentYear || !filterSemester) return [];
             const rId = parseInt(selectedRombelId);
+            const studentIdSet = new Set(rombelStudents.map(s => s.id));
             const recs = await db.raporRecords
                 .where('[tahunAjaran+semester]')
                 .equals([currentYear, filterSemester])
                 .toArray();
-            return recs.filter(r => !r.deleted && r.rombelId === rId);
+            const bySantri = new Map<number, RaporRecord>();
+            recs.forEach(r => {
+                if (r.deleted) return;
+                if (!studentIdSet.has(r.santriId) && r.rombelId !== rId) return;
+                const prev = bySantri.get(r.santriId);
+                if (!prev || (r.lastModified || 0) >= (prev.lastModified || 0)) {
+                    bySantri.set(r.santriId, r);
+                }
+            });
+            return Array.from(bySantri.values());
         },
-        [selectedRombelId, currentYear, filterSemester]
+        [selectedRombelId, currentYear, filterSemester, rombelStudents]
     );
     const isLoading = Boolean(selectedRombelId) && liveRecords === undefined;
     const records = liveRecords || [];
@@ -256,9 +280,12 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
             santriList: rombelStudents,
             records,
             targetSheetId: activeLegerSheetId,
-            decimalPlaces
+            decimalPlaces,
+            mataPelajaran: settings.mataPelajaran,
+            jenjangId: currentJenjang?.id || template?.jenjangId,
+            rankingBasis
         });
-    }, [template, rombelStudents, records, activeLegerSheetId, decimalPlaces]);
+    }, [template, rombelStudents, records, activeLegerSheetId, decimalPlaces, settings.mataPelajaran, currentJenjang?.id, rankingBasis]);
 
     // Filter & Sort Students for UI display
     const displayedStudents = useMemo(() => {
@@ -721,6 +748,24 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                 ))}
                             </div>
                         </div>
+
+                        {showRanking && (
+                            <div className="inline-flex items-center gap-1.5 pl-2 border-l border-slate-200">
+                                <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Basis Rank:</span>
+                                <select
+                                    value={rankingBasis}
+                                    onChange={e => setRankingBasis(e.target.value as RankingBasis)}
+                                    title="Dasar penentuan peringkat: Otomatis Adil akan memakai Rata-Rata jika jumlah mapel aktif antar santri berbeda (misal ada tanda '-')"
+                                    className="px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                                >
+                                    <option value="auto">
+                                        Otomatis ({legerData.effectiveRankingBasis === 'rata_rata' ? 'Rerata' : 'Total'})
+                                    </option>
+                                    <option value="rata_rata">Rata-Rata Nilai</option>
+                                    <option value="total_nilai">Total Nilai</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     {/* Mobile UX Controls: View Switcher (Tabel vs Kartu) & Freeze Toggle */}
@@ -880,7 +925,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                         <div className="text-xs font-black text-emerald-700">
                                             Rerata: {row.rataRataFormatted}
                                         </div>
-                                        {showPredikat && row.rataRata > 0 && (
+                                        {showPredikat && Object.keys(row.numericGrades).length > 0 && (
                                             <div className="text-[10px] font-bold text-slate-500">
                                                 Predikat: <span className="text-emerald-800 font-black">{row.predikat.predikatHuruf}</span>
                                             </div>
@@ -892,7 +937,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                 <div className="bg-slate-50/70 rounded-xl p-2.5 border border-slate-200/60">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
                                         <span>Nilai Mata Pelajaran ({legerData.gradeKeys.length})</span>
-                                        <span className="font-bold text-slate-600">Total: <strong className="text-slate-900">{row.totalNilai || 0}</strong></span>
+                                        <span className="font-bold text-slate-600">Total: <strong className="text-slate-900">{Object.keys(row.numericGrades).length > 0 ? row.totalNilai : '-'}</strong></span>
                                     </div>
 
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
@@ -1044,8 +1089,11 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                         </th>
                                     )}
                                     {showRanking && (
-                                        <th className="p-3 min-w-[80px] text-center font-bold border-r border-slate-200">
-                                            Ranking
+                                        <th className="p-3 min-w-[85px] text-center font-bold border-r border-slate-200">
+                                            <div>Ranking</div>
+                                            <div className="text-[9px] font-semibold text-slate-400 mt-0.5">
+                                                {legerData.effectiveRankingBasis === 'rata_rata' ? 'Basis: Rerata' : 'Basis: Total'}
+                                            </div>
                                         </th>
                                     )}
 
@@ -1122,12 +1170,12 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
 
                                         {/* Total Score */}
                                         <td className="p-3 text-center font-black text-slate-900 bg-slate-50/50 border-r border-slate-100">
-                                            {row.totalNilai > 0 ? row.totalNilai : '-'}
+                                            {Object.keys(row.numericGrades).length > 0 ? row.totalNilai : '-'}
                                         </td>
 
                                         {/* Rata-Rata */}
                                         <td className="p-3 text-center font-black text-emerald-700 bg-emerald-50/30 border-r border-slate-100">
-                                            {row.rataRata > 0 ? (
+                                            {Object.keys(row.numericGrades).length > 0 ? (
                                                 <span className="inline-block px-1.5 py-0.5 bg-emerald-100/70 rounded">
                                                     {row.rataRataFormatted}
                                                 </span>
@@ -1137,7 +1185,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                         {/* Predikat */}
                                         {showPredikat && (
                                             <td className="p-3 text-center border-r border-slate-100">
-                                                {row.rataRata > 0 ? (
+                                                {Object.keys(row.numericGrades).length > 0 ? (
                                                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
                                                         row.predikat.predikatHuruf === 'A' ? 'bg-emerald-100 text-emerald-800' :
                                                         row.predikat.predikatHuruf === 'B' ? 'bg-teal-100 text-teal-800' :
@@ -1282,10 +1330,29 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                         Kolom yang Masih Kosong ({inspectStudent.missingKeys.length}):
                                     </label>
                                     <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-                                        {inspectStudent.missingKeys.map((k, idx) => (
-                                            <div key={idx} className="flex items-center gap-2 p-2 bg-rose-50/60 text-rose-800 rounded-lg text-xs font-medium border border-rose-100">
-                                                <i className="bi bi-x-circle-fill text-rose-500"></i>
-                                                <span>{k}</span>
+                                        {(inspectStudent.missingKeyItems || inspectStudent.missingKeys.map(lbl => ({ key: '', label: lbl }))).map((item, idx) => (
+                                            <div
+                                                key={idx}
+                                                className="flex items-center justify-between gap-2 p-2 bg-rose-50/60 text-rose-800 rounded-lg text-xs font-medium border border-rose-100"
+                                            >
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <i className="bi bi-x-circle-fill text-rose-500 shrink-0"></i>
+                                                    <span className="truncate">{item.label}</span>
+                                                </div>
+                                                {onNavigateToInputWali && currentRombel && item.key && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const sId = inspectStudent.santri.id;
+                                                            const fKey = item.key;
+                                                            setInspectStudent(null);
+                                                            onNavigateToInputWali(currentRombel.id, sId, fKey);
+                                                        }}
+                                                        className="px-2 py-0.5 rounded bg-white hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold shrink-0 transition-colors"
+                                                    >
+                                                        Isi Sel
+                                                    </button>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -1308,8 +1375,10 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                             {onNavigateToInputWali && currentRombel && (
                                 <button
                                     onClick={() => {
+                                        const sId = inspectStudent.santri.id;
+                                        const firstKey = inspectStudent.missingKeyItems?.[0]?.key;
                                         setInspectStudent(null);
-                                        onNavigateToInputWali(currentRombel.id);
+                                        onNavigateToInputWali(currentRombel.id, sId, firstKey);
                                     }}
                                     className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm"
                                 >
@@ -1421,9 +1490,9 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                                         {row.numericGrades[k.key] ?? (row.grades[k.key] || '-')}
                                                     </td>
                                                 ))}
-                                                <td className="border border-black p-1 text-center font-bold">{row.totalNilai || '-'}</td>
+                                                <td className="border border-black p-1 text-center font-bold">{Object.keys(row.numericGrades).length > 0 ? row.totalNilai : '-'}</td>
                                                 <td className="border border-black p-1 text-center font-bold">{row.rataRataFormatted}</td>
-                                                <td className="border border-black p-1 text-center">{row.rataRata > 0 ? row.predikat.predikatHuruf : '-'}</td>
+                                                <td className="border border-black p-1 text-center">{Object.keys(row.numericGrades).length > 0 ? row.predikat.predikatHuruf : '-'}</td>
                                                 <td className="border border-black p-1 text-center font-bold">{row.ranking || '-'}</td>
                                                 <td className="border border-black p-1 text-center">{row.sakit}</td>
                                                 <td className="border border-black p-1 text-center">{row.izin}</td>

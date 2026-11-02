@@ -255,16 +255,21 @@ export const isSubjectGradeKey = (
     key: string,
     inputMode?: RaporInputMode,
     label?: string,
-    type?: string
+    type?: string,
+    mataPelajaran?: MataPelajaran[],
+    jenjangId?: number
 ): boolean => {
-    return classifyRaporInputField({ key, label, type, inputMode }).isNumericScore;
+    return classifyRaporInputField({ key, label, type, inputMode, mataPelajaran, jenjangId }).isNumericScore;
 };
+
+export type RankingBasis = 'auto' | 'rata_rata' | 'total_nilai';
 
 export interface StudentLegerRow {
     santri: Santri;
     record: RaporRecord | null;
     grades: Record<string, string>;
     numericGrades: Record<string, number>;
+    numericCount: number;
     totalNilai: number;
     rataRata: number;
     rataRataFormatted: string;
@@ -283,6 +288,7 @@ export interface StudentLegerRow {
     keputusan: string;
     completenessStatus: 'Lengkap' | 'Sebagian' | 'Kosong';
     missingKeys: string[];
+    missingKeyItems: Array<{ key: string; label: string }>;
     filledCount: number;
     totalKeys: number;
     percentComplete: number;
@@ -315,17 +321,86 @@ export interface RombelLegerData {
     incompleteCount: number;
     emptyCount: number;
     overallCompletionRate: number;
+    effectiveRankingBasis: 'rata_rata' | 'total_nilai';
+    hasVaryingSubjectCounts: boolean;
 }
+
+/**
+ * Menghitung peringkat kohort secara adil:
+ * - Mode 'auto': menggunakan 'total_nilai' jika jumlah mapel numerik aktif seragam,
+ *   dan otomatis beralih ke 'rata_rata' (tie-breaker 'total_nilai') bila ada santri/rombel
+ *   dengan jumlah mapel aktif berbeda (misal tanda "-" karena mapel belum diajarkan).
+ * - Mode 'rata_rata' / 'total_nilai': memaksa dasar pemeringkatan sesuai pilihan pengguna.
+ */
+export const assignCohortRankings = <
+    T extends {
+        santri: { id: number };
+        numericGrades: Record<string, number>;
+        totalNilai: number;
+        rataRata: number;
+    }
+>(
+    rows: T[],
+    basis: RankingBasis = 'auto'
+): {
+    rankMap: Map<number, number>;
+    effectiveBasis: 'rata_rata' | 'total_nilai';
+    hasVaryingSubjectCounts: boolean;
+} => {
+    const scored = rows.filter(s => Object.keys(s.numericGrades).length > 0);
+    const countsSet = new Set(scored.map(s => Object.keys(s.numericGrades).length));
+    const hasVaryingSubjectCounts = countsSet.size > 1;
+    const effectiveBasis: 'rata_rata' | 'total_nilai' =
+        basis === 'rata_rata'
+            ? 'rata_rata'
+            : basis === 'total_nilai'
+            ? 'total_nilai'
+            : hasVaryingSubjectCounts
+            ? 'rata_rata'
+            : 'total_nilai';
+
+    const sorted = [...scored].sort((a, b) => {
+        if (effectiveBasis === 'rata_rata') {
+            if (Math.abs(b.rataRata - a.rataRata) > 1e-6) return b.rataRata - a.rataRata;
+            return b.totalNilai - a.totalNilai;
+        }
+        if (Math.abs(b.totalNilai - a.totalNilai) > 1e-6) return b.totalNilai - a.totalNilai;
+        return b.rataRata - a.rataRata;
+    });
+
+    const rankMap = new Map<number, number>();
+    let currentRank = 1;
+    for (let i = 0; i < sorted.length; i++) {
+        if (i > 0) {
+            const prev = sorted[i - 1];
+            const curr = sorted[i];
+            const isTied =
+                effectiveBasis === 'rata_rata'
+                    ? Math.abs(curr.rataRata - prev.rataRata) <= 1e-6 &&
+                      Math.abs(curr.totalNilai - prev.totalNilai) <= 1e-6
+                    : Math.abs(curr.totalNilai - prev.totalNilai) <= 1e-6;
+            if (!isTied) {
+                currentRank = i + 1;
+            }
+        }
+        rankMap.set(sorted[i].santri.id, currentRank);
+    }
+
+    return { rankMap, effectiveBasis, hasVaryingSubjectCounts };
+};
 
 /**
  * Menghitung rata-rata nilai per kode variabel ($KEY) dan rata-rata umum kelas dari sekumpulan RaporRecord rombel
  */
 export const computeClassAveragesFromRecords = (
     records: RaporRecord[],
-    template?: RaporTemplate | null
+    template?: RaporTemplate | null,
+    mataPelajaran?: MataPelajaran[],
+    jenjangId?: number
 ): { classAverages: Record<string, number>; classOverallAverage: number } => {
     const accum = new Map<string, { sum: number; count: number }>();
     const studentAvgs: number[] = [];
+    const effectiveJenjangId = jenjangId ?? template?.jenjangId;
 
     const templateKeyMap = new Map<string, ExtractedTemplateKey>();
     if (template) {
@@ -334,7 +409,23 @@ export const computeClassAveragesFromRecords = (
         });
     }
 
+    // Deduplicate active records per santriId (preferring latest lastModified)
+    const dedupedRecords: RaporRecord[] = [];
+    const latestBySantri = new Map<number, RaporRecord>();
     for (const rec of records) {
+        if (!rec || rec.deleted) continue;
+        if (rec.santriId) {
+            const prev = latestBySantri.get(rec.santriId);
+            if (!prev || (rec.lastModified || 0) >= (prev.lastModified || 0)) {
+                latestBySantri.set(rec.santriId, rec);
+            }
+        } else {
+            dedupedRecords.push(rec);
+        }
+    }
+    latestBySantri.forEach(r => dedupedRecords.push(r));
+
+    for (const rec of dedupedRecords) {
         if (!rec?.customData) continue;
         let parsed: Record<string, any> = {};
         try {
@@ -362,7 +453,7 @@ export const computeClassAveragesFromRecords = (
             accum.set(normKey, cur);
 
             const tplMeta = templateKeyMap.get(normKey);
-            if (isSubjectGradeKey(rawKey, tplMeta?.inputMode, tplMeta?.label, tplMeta?.type)) {
+            if (isSubjectGradeKey(rawKey, tplMeta?.inputMode, tplMeta?.label, tplMeta?.type, mataPelajaran, effectiveJenjangId)) {
                 sSum += num;
                 sCount += 1;
             }
@@ -410,18 +501,35 @@ export const buildRombelLegerData = (params: {
     records: RaporRecord[];
     targetSheetId?: string;
     decimalPlaces?: 0 | 1 | 2 | 3;
+    mataPelajaran?: MataPelajaran[];
+    jenjangId?: number;
+    rankingBasis?: RankingBasis;
 }): RombelLegerData => {
-    const { template = null, santriList, records, targetSheetId = 'all', decimalPlaces = 2 } = params;
+    const {
+        template = null,
+        santriList,
+        records,
+        targetSheetId = 'all',
+        decimalPlaces = 2,
+        mataPelajaran,
+        jenjangId,
+        rankingBasis = 'auto'
+    } = params;
     const decFactor = Math.pow(10, decimalPlaces);
+    const effectiveJenjangId = jenjangId ?? template?.jenjangId;
 
     const availableSheets = getTemplateSheets(template);
     const allKeys = extractTemplateKeys(template, targetSheetId);
-    const gradeKeys = allKeys.filter(k => isSubjectGradeKey(k.key, k.inputMode, k.label, k.type));
-    const nonGradeKeys = allKeys.filter(k => !isSubjectGradeKey(k.key, k.inputMode, k.label, k.type));
+    const gradeKeys = allKeys.filter(k => isSubjectGradeKey(k.key, k.inputMode, k.label, k.type, mataPelajaran, effectiveJenjangId));
+    const nonGradeKeys = allKeys.filter(k => !isSubjectGradeKey(k.key, k.inputMode, k.label, k.type, mataPelajaran, effectiveJenjangId));
 
     const recordBySantri = new Map<number, RaporRecord>();
     records.forEach(r => {
-        if (!r.deleted) recordBySantri.set(r.santriId, r);
+        if (r.deleted) return;
+        const prev = recordBySantri.get(r.santriId);
+        if (!prev || (r.lastModified || 0) >= (prev.lastModified || 0)) {
+            recordBySantri.set(r.santriId, r);
+        }
     });
 
     // 1. Initial pass: parse values per student
@@ -443,20 +551,24 @@ export const buildRombelLegerData = (params: {
 
         gradeKeys.forEach(k => {
             const rawVal = customData[k.key];
-            if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') {
-                const num = Number(String(rawVal).trim().replace(',', '.'));
-                if (!isNaN(num)) {
-                    numericGrades[k.key] = num;
-                    totalNilai += num;
-                    numericCount += 1;
+            if (rawVal !== undefined && rawVal !== null) {
+                const strVal = String(rawVal).trim();
+                if (strVal !== '' && strVal !== '-') {
+                    const num = Number(strVal.replace(',', '.'));
+                    if (!isNaN(num) && isFinite(num)) {
+                        numericGrades[k.key] = num;
+                        totalNilai += num;
+                        numericCount += 1;
+                    }
                 }
             }
         });
 
+        totalNilai = numericCount > 0 ? Math.round((totalNilai + Number.EPSILON) * 10000) / 10000 : 0;
         const rawAvg = numericCount > 0 ? totalNilai / numericCount : 0;
         const rataRata = numericCount > 0 ? Math.round((rawAvg + Number.EPSILON) * 10000) / 10000 : 0;
         const roundedForDisplay = numericCount > 0 ? Math.round((rawAvg + Number.EPSILON) * decFactor) / decFactor : 0;
-        const rataRataFormatted = numericCount > 0 && rataRata > 0 ? roundedForDisplay.toFixed(decimalPlaces) : '-';
+        const rataRataFormatted = numericCount > 0 ? roundedForDisplay.toFixed(decimalPlaces) : '-';
         const predikat = calculatePredikat(rataRata);
 
         // Attendance resolution
@@ -490,6 +602,7 @@ export const buildRombelLegerData = (params: {
 
         // Completeness check across all template keys
         const missingKeys: string[] = [];
+        const missingKeyItems: Array<{ key: string; label: string }> = [];
         let filledCount = 0;
 
         allKeys.forEach(k => {
@@ -497,7 +610,9 @@ export const buildRombelLegerData = (params: {
             if (v !== undefined && v !== null && String(v).trim() !== '') {
                 filledCount += 1;
             } else {
-                missingKeys.push(k.label || k.key);
+                const label = k.label || k.key;
+                missingKeys.push(label);
+                missingKeyItems.push({ key: k.key, label });
             }
         });
 
@@ -518,6 +633,7 @@ export const buildRombelLegerData = (params: {
             record,
             grades: customData,
             numericGrades,
+            numericCount,
             totalNilai,
             rataRata,
             rataRataFormatted,
@@ -530,26 +646,19 @@ export const buildRombelLegerData = (params: {
             keputusan,
             completenessStatus,
             missingKeys,
+            missingKeyItems,
             filledCount,
             totalKeys,
             percentComplete
         };
     });
 
-    // 2. Assign standard rankings (ranked by total score descending; tied scores get the same rank)
-    // Only rank students who have at least one numeric grade filled; others get rank 0 / unranked
-    const studentsWithScores = studentRows
-        .filter(s => Object.keys(s.numericGrades).length > 0)
-        .sort((a, b) => b.totalNilai - a.totalNilai);
-
-    const rankMap = new Map<number, number>();
-    let currentRank = 1;
-    for (let i = 0; i < studentsWithScores.length; i++) {
-        if (i > 0 && studentsWithScores[i].totalNilai < studentsWithScores[i - 1].totalNilai) {
-            currentRank = i + 1;
-        }
-        rankMap.set(studentsWithScores[i].santri.id, currentRank);
-    }
+    // 2. Assign fair rankings (automatically switches to average when active subject counts vary, or respects manual override)
+    const {
+        rankMap,
+        effectiveBasis: effectiveRankingBasis,
+        hasVaryingSubjectCounts
+    } = assignCohortRankings(studentRows, rankingBasis);
 
     const students: StudentLegerRow[] = studentRows.map(row => ({
         ...row,
@@ -606,7 +715,12 @@ export const buildRombelLegerData = (params: {
         ? Math.round((completeCount / totalStudents) * 100)
         : 0;
 
-    const { classAverages: rawClassAverages } = computeClassAveragesFromRecords(records, template);
+    const { classAverages: rawClassAverages } = computeClassAveragesFromRecords(
+        records,
+        template,
+        mataPelajaran,
+        effectiveJenjangId
+    );
     for (const [k, stat] of Object.entries(subjectStats)) {
         if (stat.count > 0 && rawClassAverages[normalizeSubjectKeyForAvg(k)] === undefined) {
             rawClassAverages[normalizeSubjectKeyForAvg(k)] = stat.average;
@@ -630,7 +744,9 @@ export const buildRombelLegerData = (params: {
         completeCount,
         incompleteCount,
         emptyCount,
-        overallCompletionRate
+        overallCompletionRate,
+        effectiveRankingBasis,
+        hasVaryingSubjectCounts
     };
 };
 

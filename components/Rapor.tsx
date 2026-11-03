@@ -11,6 +11,7 @@ const TabCetakRapor = lazy(() => import('./akademik/TabCetakRapor').then((module
 const TabMonitoringNilai = lazy(() => import('./akademik/TabMonitoringNilai').then((module) => ({ default: module.TabMonitoringNilai })));
 const TabInputNilaiWali = lazy(() => import('./akademik/TabInputNilaiWali').then((module) => ({ default: module.TabInputNilaiWali })));
 const TabLegerNilai = lazy(() => import('./akademik/TabLegerNilai').then((module) => ({ default: module.TabLegerNilai })));
+const TabTranskripNilai = lazy(() => import('./akademik/TabTranskripNilai').then((module) => ({ default: module.TabTranskripNilai })));
 
 const TabLoadingFallback = () => (
     <div className="flex h-48 items-center justify-center">
@@ -29,7 +30,7 @@ export interface SharedRaporContext {
     generatorMode?: 'ledger' | 'audit_portal';
 }
 
-type RaporTabId = 'designer' | 'generator' | 'import' | 'monitoring' | 'data' | 'print' | 'input_wali' | 'leger';
+type RaporTabId = 'designer' | 'generator' | 'import' | 'monitoring' | 'data' | 'print' | 'input_wali' | 'leger' | 'transkrip';
 
 const RAPOR_ACTIVE_TAB_KEY = 'esantri_rapor_active_tab';
 
@@ -85,9 +86,10 @@ const Rapor: React.FC = () => {
         }
         if (isWaliKelas || isAdmin || canWriteAkademik) {
             tabs.push({ value: 'input_wali', label: 'Input Nilai', icon: 'bi-pencil-square', mobileLabel: 'Input' });
-            tabs.push({ value: 'leger', label: 'Leger Nilai', icon: 'bi-table', mobileLabel: 'Leger' });
         }
         if (canReadAkademik) {
+            tabs.push({ value: 'leger', label: 'Leger Nilai', icon: 'bi-table', mobileLabel: 'Leger' });
+            tabs.push({ value: 'transkrip', label: 'Transkrip & Buku Induk', icon: 'bi-mortarboard', mobileLabel: 'Transkrip' });
             tabs.push({ value: 'print', label: 'Cetak Rapor', icon: 'bi-printer', mobileLabel: 'Cetak' });
         }
         if (!isWaliKelas && canReadAkademik) {
@@ -188,6 +190,19 @@ const Rapor: React.FC = () => {
                                     focusNonce: Date.now()
                                 })
                             } 
+                        />
+                    )}
+                    {activeTab === 'transkrip' && (
+                        <TabTranskripNilai
+                            initialRombelId={sharedContext.rombelId}
+                            initialSantriId={sharedContext.santriId}
+                            onNavigateToInputWali={(rId, sId) =>
+                                handleNavigateWithContext('input_wali', {
+                                    rombelId: rId,
+                                    santriId: sId,
+                                    focusNonce: Date.now()
+                                })
+                            }
                         />
                     )}
                 </Suspense>

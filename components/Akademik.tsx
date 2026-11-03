@@ -11,6 +11,7 @@ const TabDataNilai = lazy(() => import('./akademik/TabDataNilai').then((module) 
 const TabCetakRapor = lazy(() => import('./akademik/TabCetakRapor').then((module) => ({ default: module.TabCetakRapor })));
 const TabMonitoringNilai = lazy(() => import('./akademik/TabMonitoringNilai').then((module) => ({ default: module.TabMonitoringNilai })));
 const TabLegerNilai = lazy(() => import('./akademik/TabLegerNilai').then((module) => ({ default: module.TabLegerNilai })));
+const TabTranskripNilai = lazy(() => import('./akademik/TabTranskripNilai').then((module) => ({ default: module.TabTranskripNilai })));
 const TabJadwalPelajaran = lazy(() => import('./akademik/TabJadwalPelajaran').then((module) => ({ default: module.TabJadwalPelajaran })));
 const TabInputNilaiWali = lazy(() => import('./akademik/TabInputNilaiWali').then((module) => ({ default: module.TabInputNilaiWali })));
 const TabJurnalMengajar = lazy(() => import('./akademik/TabJurnalMengajar').then((module) => ({ default: module.TabJurnalMengajar })));
@@ -22,10 +23,13 @@ const TabLoadingFallback = () => (
 );
 
 type AkademikCategory = 'kurikulum' | 'rapor';
-type AkademikTabId = 'jadwal' | 'designer' | 'generator' | 'import' | 'monitoring' | 'leger' | 'data' | 'print' | 'input_wali' | 'jurnal';
+type AkademikTabId = 'jadwal' | 'designer' | 'generator' | 'import' | 'monitoring' | 'leger' | 'transkrip' | 'data' | 'print' | 'input_wali' | 'jurnal';
 
 interface RaporNavigationContext {
     rombelId?: number;
+    santriId?: number;
+    focusKey?: string;
+    focusNonce?: number;
     tahunAjaran?: string;
     semester?: 'Ganjil' | 'Genap';
     templateId?: string;
@@ -73,6 +77,7 @@ const Akademik: React.FC = () => {
 
         if (canReadAkademik) {
             tabs.push({ value: 'leger', label: 'Leger Nilai', icon: 'bi-table' });
+            tabs.push({ value: 'transkrip', label: 'Transkrip & Buku Induk', icon: 'bi-mortarboard' });
         }
 
         if (!isWaliKelas && canReadAkademik) {
@@ -217,7 +222,27 @@ const Akademik: React.FC = () => {
                             initialRombelId={raporNavContext.rombelId}
                             initialTahunAjaran={raporNavContext.tahunAjaran}
                             initialSemester={raporNavContext.semester}
-                            onNavigateToInputWali={(rId) => handleNavigateRaporTab('input_wali', rId)}
+                            onNavigateToInputWali={(rId, sId, fKey) =>
+                                handleNavigateRaporTab('input_wali', {
+                                    rombelId: rId,
+                                    santriId: sId,
+                                    focusKey: fKey,
+                                    focusNonce: Date.now()
+                                })
+                            }
+                        />
+                    )}
+                    {activeTab === 'transkrip' && (
+                        <TabTranskripNilai
+                            initialRombelId={raporNavContext.rombelId}
+                            initialSantriId={raporNavContext.santriId}
+                            onNavigateToInputWali={(rId, sId) =>
+                                handleNavigateRaporTab('input_wali', {
+                                    rombelId: rId,
+                                    santriId: sId,
+                                    focusNonce: Date.now()
+                                })
+                            }
                         />
                     )}
                     {activeTab === 'data' && <TabDataNilai initialContext={raporNavContext} />}

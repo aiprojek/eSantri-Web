@@ -1050,6 +1050,57 @@ export const raporPanduan: PanduanSectionData = {
                     </div>
                 </div>
             )
+        },
+        {
+            title: '10. Transkrip Nilai Kumulatif & Buku Induk Akademik Lintas Semester',
+            color: 'blue',
+            content: (
+                <div className="space-y-4 text-sm">
+                    <p className="text-gray-700 leading-relaxed">
+                        Tab <strong>Transkrip &amp; Buku Induk</strong> mengagregasi seluruh riwayat <code>RaporRecord</code> santri lintas tahun ajaran dan semester (Semester 1 s.d. 6+) secara otomatis untuk kebutuhan ijazah lokal pesantren, surat pindah/mutasi, seleksi beasiswa, maupun arsip induk akademik:
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl space-y-1.5">
+                            <strong className="text-blue-950 font-bold flex items-center gap-1.5">
+                                <i className="bi bi-mortarboard-fill text-blue-600"></i> Mode Transkrip Kumulatif (Kelulusan &amp; Mutasi)
+                            </strong>
+                            <p className="text-gray-600 leading-relaxed">
+                                Menampilkan daftar mata pelajaran terkelompok per <strong>Rumpun Kurikulum</strong> beserta rincian nilai tiap semester, <strong>Nilai Rata-Rata Akhir per Mapel</strong>, predikat huruf (A–D), serta <strong>Indeks Prestasi / Rata-Rata Kumulatif (IPK Skala 100)</strong>. Cocok diterbitkan untuk santri akhir jenjang (<code>Lulus</code>) maupun santri mutasi.
+                            </p>
+                        </div>
+
+                        <div className="p-3.5 bg-teal-50/80 border border-teal-200 rounded-xl space-y-1.5">
+                            <strong className="text-teal-950 font-bold flex items-center gap-1.5">
+                                <i className="bi bi-journal-bookmark-fill text-teal-600"></i> Mode Buku Induk Akademik (Matriks 6 Semester)
+                            </strong>
+                            <p className="text-gray-600 leading-relaxed">
+                                Menyajikan matriks kronologis minimal <strong>6 kolom semester standar (Smt 1–Smt 6)</strong> lengkap dengan baris ringkasan tiap semester: <em>Jumlah Nilai, Rata-Rata Semester, Peringkat Rombel, Rekap Kehadiran (Sakit/Izin/Alfa),</em> dan <em>Status Kenaikan/Keputusan</em>.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+                        <strong className="text-slate-900 font-bold flex items-center gap-1.5">
+                            <i className="bi bi-cpu text-indigo-600"></i> Kecerdasan Rekonsiliasi Mapel &amp; Perlakuan Nilai &quot;-&quot; (Belum Diajarkan)
+                        </strong>
+                        <ul className="list-disc pl-4 space-y-1 text-gray-600 text-[11px] leading-relaxed">
+                            <li>
+                                <strong>Penyatuan Lintas Template:</strong> Meskipun desain template rapor berganti antar tahun ajaran (misal kode kolom <code>$FIQIH</code> di kelas 1 dan <code>$NILAI_FIQIH</code> di kelas 2), mesin transkrip otomatis menyatukannya ke baris Mata Pelajaran Master yang sama.
+                            </li>
+                            <li>
+                                <strong>Keadilan Pembagi untuk Mapel Bertanda <code>-</code>:</strong> Mata pelajaran yang belum diajarkan pada semester tertentu (diisi tanda strip <code>-</code> atau kosong) ditampilkan sebagai <code>-</code> dan <strong>tidak ikut membagi rata-rata</strong> baik pada rata-rata mapel lintas semester maupun rata-rata kumulatif santri.
+                            </li>
+                            <li>
+                                <strong>Cakupan Marhalah &amp; Filter Status Alumni:</strong> Pilih cakupan <em>Jenjang Aktif Santri</em> (agar nilai Wustha tidak tercampur saat mencetak transkrip Ulya) atau <em>Seluruh Riwayat Lintas Jenjang</em>, serta filter status <strong>Aktif</strong>, <strong>Lulus (Alumni)</strong>, atau <strong>Mutasi/Keluar</strong>.
+                            </li>
+                            <li>
+                                <strong>Ekspor Excel &amp; Cetak PDF Resmi:</strong> Unduh file <code>.xlsx</code> (rekap kumulatif satu angkatan/rombel maupun transkrip per individu) atau cetak PDF satuan &amp; masal lengkap dengan Kop Resmi, Pasfoto 3&times;4, Ringkasan Tahfizh, Titimangsa Masehi/Hijriah, serta TTD &amp; Stempel Digital.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            )
         }
     ]
 };

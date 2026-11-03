@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useAppContext } from '../AppContext';
 import { PosInterface } from './koperasi/PosInterface';
 import { KasirView } from './koperasi/KasirView';
 import { ProductManager } from './koperasi/ProductManager';
@@ -12,9 +13,38 @@ import { WarehouseManager } from './koperasi/WarehouseManager';
 import { PageHeader } from './common/PageHeader';
 import { HeaderTabs } from './common/HeaderTabs';
 
+type KoperasiTab = 'kasir' | 'teller' | 'produk' | 'gudang' | 'supplier' | 'kasbon' | 'riwayat' | 'keuangan' | 'pengaturan';
+
 // --- MAIN WRAPPER ---
 const Cooperativa: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'kasir' | 'teller' | 'produk' | 'gudang' | 'supplier' | 'kasbon' | 'riwayat' | 'keuangan' | 'pengaturan'>('kasir');
+    const { currentUser } = useAppContext();
+    const canManageKoperasi =
+        currentUser?.role === 'admin' || currentUser?.permissions?.koperasi_manajer === 'write';
+    const canWritePos =
+        canManageKoperasi || currentUser?.permissions?.koperasi === 'write';
+
+    const availableTabs = useMemo(() => {
+        const allTabs: { value: KoperasiTab; label: string; icon: string; visible: boolean }[] = [
+            { value: 'kasir', label: 'Kasir (POS)', icon: 'bi-shop', visible: canWritePos },
+            { value: 'teller', label: 'Kasir Tabungan', icon: 'bi-person-badge', visible: canWritePos },
+            { value: 'produk', label: 'Produk', icon: 'bi-box-seam', visible: true },
+            { value: 'gudang', label: 'Gudang', icon: 'bi-houses', visible: canManageKoperasi },
+            { value: 'supplier', label: 'Vendor / Supplier', icon: 'bi-truck', visible: canManageKoperasi },
+            { value: 'kasbon', label: 'Kasbon (Hutang)', icon: 'bi-journal-minus', visible: true },
+            { value: 'riwayat', label: 'Riwayat', icon: 'bi-receipt', visible: true },
+            { value: 'keuangan', label: 'Laba Rugi', icon: 'bi-cash-stack', visible: canManageKoperasi },
+            { value: 'pengaturan', label: 'Pengaturan', icon: 'bi-gear', visible: canManageKoperasi },
+        ];
+        return allTabs.filter((t) => t.visible);
+    }, [canWritePos, canManageKoperasi]);
+
+    const [activeTab, setActiveTab] = useState<KoperasiTab>(() => (canWritePos ? 'kasir' : 'produk'));
+
+    useEffect(() => {
+        if (!availableTabs.some((t) => t.value === activeTab) && availableTabs.length > 0) {
+            setActiveTab(availableTabs[0].value);
+        }
+    }, [availableTabs, activeTab]);
 
     return (
         <div className="flex h-full flex-col space-y-6">
@@ -26,31 +56,21 @@ const Cooperativa: React.FC = () => {
                     <HeaderTabs
                         value={activeTab}
                         onChange={setActiveTab}
-                        tabs={[
-                            { value: 'kasir', label: 'Kasir (POS)', icon: 'bi-shop' },
-                            { value: 'teller', label: 'Kasir Tabungan', icon: 'bi-person-badge' },
-                            { value: 'produk', label: 'Produk', icon: 'bi-box-seam' },
-                            { value: 'gudang', label: 'Gudang', icon: 'bi-houses' },
-                            { value: 'supplier', label: 'Vendor / Supplier', icon: 'bi-truck' },
-                            { value: 'kasbon', label: 'Kasbon (Hutang)', icon: 'bi-journal-minus' },
-                            { value: 'riwayat', label: 'Riwayat', icon: 'bi-receipt' },
-                            { value: 'keuangan', label: 'Laba Rugi', icon: 'bi-cash-stack' },
-                            { value: 'pengaturan', label: 'Pengaturan', icon: 'bi-gear' },
-                        ]}
+                        tabs={availableTabs}
                     />
                 }
             />
 
             <div className="flex-grow min-h-0">
-                {activeTab === 'kasir' && <PosInterface />}
-                {activeTab === 'teller' && <KasirView />}
+                {activeTab === 'kasir' && canWritePos && <PosInterface />}
+                {activeTab === 'teller' && canWritePos && <KasirView />}
                 {activeTab === 'produk' && <ProductManager />}
-                {activeTab === 'gudang' && <WarehouseManager />}
-                {activeTab === 'supplier' && <SupplierManager />}
+                {activeTab === 'gudang' && canManageKoperasi && <WarehouseManager />}
+                {activeTab === 'supplier' && canManageKoperasi && <SupplierManager />}
                 {activeTab === 'kasbon' && <KasbonManager />}
                 {activeTab === 'riwayat' && <TransactionHistory />}
-                {activeTab === 'keuangan' && <KoperasiFinance />}
-                {activeTab === 'pengaturan' && <KoperasiSettingsView />}
+                {activeTab === 'keuangan' && canManageKoperasi && <KoperasiFinance />}
+                {activeTab === 'pengaturan' && canManageKoperasi && <KoperasiSettingsView />}
             </div>
         </div>
     );

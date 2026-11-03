@@ -673,7 +673,7 @@ const AppContent: React.FC = () => {
                         case Page.BukuKas:
                             return checkAccess('bukukas') ? <BukuKas /> : <AccessDenied />;
                         case Page.Koperasi: 
-                            return checkAccess('koperasi') ? <Koperasi /> : <AccessDenied />;
+                            return (checkAccess('koperasi') || checkAccess('koperasi_manajer')) ? <Koperasi /> : <AccessDenied />;
                         case Page.Surat:
                             return checkAccess('surat') ? <SuratMenyurat /> : <AccessDenied />;
                         case Page.PSB:
@@ -681,7 +681,7 @@ const AppContent: React.FC = () => {
                         case Page.Pengaturan:
                             return checkAccess('pengaturan') ? <Settings /> : <AccessDenied />;
                         case Page.PortalWali:
-                            return checkAccess('pengaturan') ? <PortalManagement /> : <AccessDenied />;
+                            return (checkAccess('portalwali') || checkAccess('pengaturan')) ? <PortalManagement /> : <AccessDenied />;
                         case Page.Laporan:
                             return checkAccess('laporan') ? <Reports /> : <AccessDenied />;
                         case Page.AuditLog:

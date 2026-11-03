@@ -65,13 +65,13 @@ export const AdminSyncDashboard: React.FC = () => {
 
     const localSummaryStats = useLiveQuery(async () => {
         const [santri, tagihan, pembayaran, absensi, tahfizh, pendaftar, transaksiKas] = await Promise.all([
-            db.santri.count(),
-            db.tagihan.count(),
-            db.pembayaran.count(),
-            db.absensi.count(),
-            db.tahfizh.count(),
-            db.pendaftar.count(),
-            db.transaksiKas.count(),
+            db.santri.filter(r => !r.deleted).count(),
+            db.tagihan.filter(r => !r.deleted).count(),
+            db.pembayaran.filter(r => !r.deleted).count(),
+            db.absensi.filter(r => !r.deleted).count(),
+            db.tahfizh.filter(r => !r.deleted).count(),
+            db.pendaftar.filter(r => !r.deleted).count(),
+            db.transaksiKas.filter(r => !r.deleted).count(),
         ]);
         return { santri, tagihan, pembayaran, absensi, tahfizh, pendaftar, transaksiKas };
     }, []);

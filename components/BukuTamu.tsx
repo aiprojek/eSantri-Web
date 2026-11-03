@@ -12,12 +12,15 @@ import { HeaderTabs } from './common/HeaderTabs';
 import { TiketPassTamuModal, generateVisitorBadgeWaMessage } from './bukutamu/TiketPassTamuModal';
 import { RekapBukuTamuPrintModal } from './bukutamu/RekapBukuTamuPrintModal';
 import { exportBukuTamuToExcel } from '../services/excelService';
+import { generateSyncSafeId } from '../utils/idGenerator';
+import { logActivity } from '../services/logService';
 
 interface BukuTamuModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSave: (data: Omit<BukuTamuType, 'id'>) => Promise<void>;
     todayGuestsCount: number;
+    todayGuestBadges: string[];
     activeGuestBadges: string[];
 }
 
@@ -26,6 +29,7 @@ const BukuTamuModal: React.FC<BukuTamuModalProps> = ({
     onClose,
     onSave,
     todayGuestsCount,
+    todayGuestBadges,
     activeGuestBadges
 }) => {
     const { santriList } = useSantriContext();
@@ -50,7 +54,18 @@ const BukuTamuModal: React.FC<BukuTamuModalProps> = ({
     const watchNomorBadge = watch('nomorBadge', '');
 
     const getNextDailyBadge = (prefix: string = badgePrefix) => {
-        const nextNum = todayGuestsCount + 1;
+        const normalizedPrefix = prefix.toUpperCase();
+        let maxParsedNum = 0;
+        todayGuestBadges.forEach((badge) => {
+            const upper = badge.trim().toUpperCase();
+            if (upper.startsWith(normalizedPrefix)) {
+                const parsed = parseInt(upper.slice(normalizedPrefix.length), 10);
+                if (!Number.isNaN(parsed) && parsed > maxParsedNum) {
+                    maxParsedNum = parsed;
+                }
+            }
+        });
+        const nextNum = Math.max(todayGuestsCount, maxParsedNum) + 1;
         return `${prefix}${nextNum.toString().padStart(2, '0')}`;
     };
 
@@ -70,7 +85,7 @@ const BukuTamuModal: React.FC<BukuTamuModalProps> = ({
             const nextBadge = getNextDailyBadge(badgePrefix);
             setValue('nomorBadge', nextBadge);
         }
-    }, [isOpen, todayGuestsCount, badgePrefix, badgeMode, setValue]);
+    }, [isOpen, todayGuestsCount, todayGuestBadges, badgePrefix, badgeMode, setValue]);
 
     useEffect(() => {
         if (watchKategori !== 'Wali Santri' && watchTipeEntri !== 'Titipan Paket') {
@@ -631,7 +646,7 @@ export const BukuTamu: React.FC = () => {
     const [selectedGuestForTicket, setSelectedGuestForTicket] = useState<BukuTamuType | null>(null);
     const [isRekapPrintOpen, setIsRekapPrintOpen] = useState(false);
 
-    const records = useLiveQuery(() => db.bukuTamu.toArray(), []) || [];
+    const records = useLiveQuery(() => db.bukuTamu.filter((r) => !r.deleted).toArray(), []) || [];
 
     // Active Visitors in Premises
     const activeGuests = useMemo(() => {
@@ -698,20 +713,50 @@ export const BukuTamu: React.FC = () => {
         return records.filter((r) => r.tanggal === todayStr && r.tipeEntri !== 'Titipan Paket');
     }, [records, todayStr]);
 
+    const todayGuestBadges = useMemo(() => {
+        return todayGuests
+            .map((g) => g.nomorBadge)
+            .filter(Boolean) as string[];
+    }, [todayGuests]);
+
     const activeGuestBadges = useMemo(() => {
         return activeGuests
             .map((g) => g.nomorBadge)
             .filter(Boolean) as string[];
     }, [activeGuests]);
 
+    const openExternalUrlSafely = (url: string) => {
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const handleAddGuest = async (data: Omit<BukuTamuType, 'id'>) => {
         if (!canWrite) return;
-        const newId = await db.bukuTamu.add({ ...data, lastModified: Date.now() } as BukuTamuType);
+        const newId = generateSyncSafeId();
+        const addedRecord: BukuTamuType = {
+            ...data,
+            id: newId,
+            deleted: false,
+            lastModified: Date.now()
+        };
+        await db.bukuTamu.put(addedRecord);
+        void logActivity(
+            'INSERT',
+            'bukuTamu',
+            newId,
+            null,
+            { namaTamu: data.namaTamu, tipeEntri: data.tipeEntri, nomorBadge: data.nomorBadge },
+            currentUser?.username
+        );
         showToast('Registrasi pos berhasil disimpan', 'success');
 
         // Automatically offer ticket printing for regular visits
         if (data.tipeEntri !== 'Titipan Paket') {
-            const addedRecord = { ...data, id: Number(newId) } as BukuTamuType;
             setSelectedGuestForTicket(addedRecord);
         }
     };
@@ -722,11 +767,20 @@ export const BukuTamu: React.FC = () => {
             'Check-Out Tamu Pengunjung',
             `Konfirmasi kepulangan tamu: ${guest.namaTamu}?\n\n⚠️ Pastikan Nomor Badge ${guest.nomorBadge || '-'} & Identitas Fisik (${guest.jenisIdentitas || 'KTP'}) telah dikembalikan ke tamu.`,
             async () => {
+                const jamKeluar = new Date().toISOString();
                 await db.bukuTamu.update(guest.id, {
                     status: 'Selesai',
-                    jamKeluar: new Date().toISOString(),
+                    jamKeluar,
                     lastModified: Date.now()
                 });
+                void logActivity(
+                    'UPDATE',
+                    'bukuTamu',
+                    guest.id,
+                    { status: guest.status },
+                    { status: 'Selesai', jamKeluar, nomorBadge: guest.nomorBadge },
+                    currentUser?.username
+                );
                 showToast(`Tamu ${guest.namaTamu} berhasil check-out. Kartu badge kembali.`, 'success');
             },
             { confirmColor: 'blue', confirmText: 'Ya, Check-Out Tamu' }
@@ -739,11 +793,20 @@ export const BukuTamu: React.FC = () => {
             'Serah Terima Paket',
             `Konfirmasi serah terima paket dari ${pkg.namaKurirEkspedisi || pkg.namaTamu}?\nBarang: "${pkg.deskripsiPaket || 'Paket'}"`,
             async () => {
+                const waktuDiambil = new Date().toISOString();
                 await db.bukuTamu.update(pkg.id, {
                     statusPaket: 'Sudah Diambil',
-                    waktuDiambil: new Date().toISOString(),
+                    waktuDiambil,
                     lastModified: Date.now()
                 });
+                void logActivity(
+                    'UPDATE',
+                    'bukuTamu',
+                    pkg.id,
+                    { statusPaket: pkg.statusPaket },
+                    { statusPaket: 'Sudah Diambil', waktuDiambil },
+                    currentUser?.username
+                );
                 showToast('Paket berhasil ditandai sudah diambil', 'success');
             },
             { confirmColor: 'emerald', confirmText: 'Tandai Sudah Diambil' }
@@ -754,9 +817,21 @@ export const BukuTamu: React.FC = () => {
         if (!canWrite) return;
         showConfirmation(
             'Hapus Catatan Buku Tamu',
-            `Apakah Anda yakin ingin menghapus catatan ${item.tipeEntri === 'Titipan Paket' ? 'paket' : 'kunjungan'} dari "${item.namaTamu}"?\n\nTindakan ini akan menghapus data dari sistem secara permanen.`,
+            `Apakah Anda yakin ingin menghapus catatan ${item.tipeEntri === 'Titipan Paket' ? 'paket' : 'kunjungan'} dari "${item.namaTamu}"?\n\nData akan dinonaktifkan dari daftar aktif dan disinkronkan ke cloud.`,
             async () => {
-                await db.bukuTamu.delete(item.id);
+                await db.bukuTamu.put({
+                    ...item,
+                    deleted: true,
+                    lastModified: Date.now()
+                });
+                void logActivity(
+                    'DELETE',
+                    'bukuTamu',
+                    item.id,
+                    { namaTamu: item.namaTamu, tipeEntri: item.tipeEntri, nomorBadge: item.nomorBadge },
+                    null,
+                    currentUser?.username
+                );
                 showToast('Catatan buku tamu berhasil dihapus.', 'success');
             },
             { confirmColor: 'red', confirmText: 'Ya, Hapus Data' }
@@ -793,7 +868,7 @@ export const BukuTamu: React.FC = () => {
         const cleanPhone = phone.startsWith('0') ? '62' + phone.substring(1) : phone;
         const santri = getSantri(guest.santriId);
         const msg = generateVisitorBadgeWaMessage(guest, settings, santri);
-        window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+        openExternalUrlSafely(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`);
         showToast('Membuka WhatsApp untuk mengirim kartu badge...', 'info');
     };
 
@@ -810,9 +885,9 @@ export const BukuTamu: React.FC = () => {
         }\nDeskripsi: ${pkg.deskripsiPaket || 'Paket Kiriman'}\nStatus: *Sudah Tiba di Pos Satpam*\n\nSilakan diambil di Pos Gerbang Utama dengan menunjukkan identitas penerima. Jazakumullah khair.`;
 
         if (cleanPhone) {
-            window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+            openExternalUrlSafely(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`);
         } else {
-            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+            openExternalUrlSafely(`https://wa.me/?text=${encodeURIComponent(msg)}`);
         }
     };
 
@@ -1467,6 +1542,7 @@ export const BukuTamu: React.FC = () => {
                 onClose={() => setIsModalOpen(false)}
                 onSave={handleAddGuest}
                 todayGuestsCount={todayGuests.length}
+                todayGuestBadges={todayGuestBadges}
                 activeGuestBadges={activeGuestBadges}
             />
 

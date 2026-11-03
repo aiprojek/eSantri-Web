@@ -5,6 +5,8 @@ import { Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, ChartOf
 import { db } from '../db';
 import { generateTagihanBulanan, generateTagihanAwal } from '../services/financeService';
 import { useSettingsContext } from './SettingsContext';
+import { generateSyncSafeId } from '../utils/idGenerator';
+import { logActivity } from '../services/logService';
 
 const DEFAULT_PESANTREN_COA: Array<Omit<ChartOfAccount, 'id'>> = [
   { kode: '401', nama: 'Syahriah / SPP Santri', kategori: 'Pendapatan' },
@@ -56,11 +58,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const coaList = useLiveQuery(() => db.chartOfAccounts.filter((c: ChartOfAccount) => !c.deleted).toArray(), []) || [];
 
   const addTimestamp = (data: any) => ({ ...data, lastModified: Date.now() });
-  const idCounterRef = React.useRef(0);
-  const generateUniqueId = () => {
-    idCounterRef.current = (idCounterRef.current + 1) % 1000;
-    return Date.now() * 1000 + idCounterRef.current;
-  };
+  const generateUniqueId = () => generateSyncSafeId();
 
   const calculateActiveKasSaldo = async (upToDateIso?: string, excludeId?: number): Promise<number> => {
     const allActive = await db.transaksiKas.filter((t: TransaksiKas) => !t.deleted && t.id !== excludeId).toArray();
@@ -186,6 +184,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
     });
 
+    await logActivity('INSERT', 'pembayaran', id, null, savedPembayaran);
     return savedPembayaran;
   };
 
@@ -226,6 +225,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const onAddTransaksiKas = async (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'> & { tanggal?: string }) => {
+      const createdId = generateUniqueId();
+      let createdRecord: TransaksiKas | null = null;
       await (db as any).transaction('rw', db.transaksiKas, async () => {
           const targetIso = data.tanggal || new Date().toISOString();
           const lastSaldo = await calculateActiveKasSaldo(targetIso);
@@ -233,22 +234,29 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           if (data.jenis === 'Pemasukan') newSaldo += data.jumlah;
           else newSaldo -= data.jumlah;
 
-          await db.transaksiKas.put({
+          createdRecord = {
               ...data,
               rekening: data.rekening || 'Kas Tunai Bendahara',
-              id: generateUniqueId(),
+              id: createdId,
               tanggal: targetIso,
               saldoSetelah: newSaldo,
               deleted: false,
               lastModified: Date.now()
-          } as TransaksiKas);
+          } as TransaksiKas;
+          await db.transaksiKas.put(createdRecord);
       });
+      if (createdRecord) {
+          await logActivity('INSERT', 'transaksiKas', createdId, null, createdRecord);
+      }
   };
 
   const onUpdateTransaksiKas = async (id: number, data: Partial<Omit<TransaksiKas, 'id'>>) => {
+      let oldRecord: TransaksiKas | undefined;
+      let newRecord: TransaksiKas | null = null;
       await (db as any).transaction('rw', db.transaksiKas, async () => {
           const existing = await db.transaksiKas.get(id);
           if (!existing) throw new Error('Transaksi tidak ditemukan.');
+          oldRecord = existing;
           const merged = {
               ...existing,
               ...data,
@@ -257,26 +265,37 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           };
           const priorSaldo = await calculateActiveKasSaldo(merged.tanggal, id);
           const updatedSaldo = priorSaldo + (merged.jenis === 'Pemasukan' ? merged.jumlah : -merged.jumlah);
-          await db.transaksiKas.put({
+          newRecord = {
               ...merged,
               saldoSetelah: updatedSaldo,
               deleted: false,
               lastModified: Date.now()
-          } as TransaksiKas);
+          } as TransaksiKas;
+          await db.transaksiKas.put(newRecord);
       });
+      if (newRecord) {
+          await logActivity('UPDATE', 'transaksiKas', id, oldRecord || null, newRecord);
+      }
   };
 
   const onDeleteTransaksiKas = async (id: number) => {
+      let oldRecord: TransaksiKas | undefined;
+      let deletedRecord: TransaksiKas | null = null;
       await (db as any).transaction('rw', db.transaksiKas, async () => {
           const existing = await db.transaksiKas.get(id);
           if (!existing) return;
-          await db.transaksiKas.put({
+          oldRecord = existing;
+          deletedRecord = {
               ...existing,
               id,
               deleted: true,
               lastModified: Date.now()
-          } as TransaksiKas);
+          } as TransaksiKas;
+          await db.transaksiKas.put(deletedRecord);
       });
+      if (deletedRecord) {
+          await logActivity('DELETE', 'transaksiKas', id, oldRecord || null, deletedRecord);
+      }
   };
 
   const onMutasiKas = async (fromRekening: string, toRekening: string, jumlah: number, deskripsi: string, pj: string, tanggal?: string) => {

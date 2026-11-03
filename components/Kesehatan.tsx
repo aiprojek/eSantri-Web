@@ -20,6 +20,7 @@ import {
 } from './kesehatan/KesehatanPrintTemplates';
 import { WhatsAppHealthModal } from './kesehatan/WhatsAppHealthModal';
 import { MedicalPrintPreviewModal, MedicalDocumentType } from './kesehatan/MedicalPrintPreviewModal';
+import { generateSyncSafeId } from '../utils/idGenerator';
 
 // --- SUB COMPONENTS: STOK OBAT ---
 
@@ -64,6 +65,7 @@ const StokObatView: React.FC<{ canWrite: boolean; initialFilter?: string | null 
     };
 
     const onSubmit = async (data: Obat) => {
+        if (!canWrite) return;
         try {
             const sanitized = {
                 ...data,
@@ -77,7 +79,7 @@ const StokObatView: React.FC<{ canWrite: boolean; initialFilter?: string | null 
                 await db.obat.put({ ...sanitized, id: editingObat.id });
                 showToast('Data obat berhasil diperbarui.', 'success');
             } else {
-                await db.obat.add({ ...sanitized, id: Date.now() });
+                await db.obat.put({ ...sanitized, id: generateSyncSafeId(), deleted: false });
                 showToast('Obat baru berhasil ditambahkan.', 'success');
             }
             setIsModalOpen(false);
@@ -664,6 +666,7 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
 
     // Quick Discharge: Tandai Sembuh
     const handleQuickDischarge = (record: KesehatanRecord) => {
+        if (!canWrite) return;
         const santri = santriList.find(s => s.id === record.santriId);
         const nama = santri ? santri.namaLengkap : 'Santri';
 
@@ -752,7 +755,7 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
         if (!obat) return;
 
         if (jumlahObat > obat.stok) {
-            alert(`Stok di inventaris saat ini hanya: ${obat.stok}.`);
+            showToast(`Stok di inventaris saat ini hanya: ${obat.stok}.`, 'error');
             return;
         }
 
@@ -773,17 +776,8 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
         setResepList(prev => prev.filter((_, i) => i !== index));
     };
 
-    const onSubmit = async (data: KesehatanRecord) => {
-        if (!selectedSantriId) {
-            alert("Silakan pilih santri terlebih dahulu.");
-            return;
-        }
-
-        if (selectedObatId) {
-            const confirmSkip = window.confirm("Anda memilih obat di dropdown tapi belum menekan tombol Tambah (+). Obat ini TIDAK akan dicatat ke resep. Lanjutkan?");
-            if (!confirmSkip) return;
-        }
-
+    const executeSaveRekamMedis = async (data: KesehatanRecord) => {
+        if (!canWrite || !selectedSantriId) return;
         try {
             let absensiUpdated = false;
 
@@ -836,7 +830,7 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
                 if (editingRecord) {
                     await db.kesehatanRecords.put({ ...recordData, id: editingRecord.id } as KesehatanRecord);
                 } else {
-                    await db.kesehatanRecords.add({ ...recordData, id: Date.now() } as KesehatanRecord);
+                    await db.kesehatanRecords.put({ ...recordData, id: generateSyncSafeId(), deleted: false } as KesehatanRecord);
                 }
 
                 // 5. Integrasi presensi santri jika rawat inap / rujuk
@@ -846,7 +840,7 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
                     if (santri) {
                         const existingAbsen = await db.absensi
                             .where({ santriId: santri.id })
-                            .filter(a => a.tanggal === data.tanggal)
+                            .filter(a => !a.deleted && a.tanggal === data.tanggal)
                             .first();
 
                         const keteranganAbsen = `[Poskestren] ${data.status}: ${data.diagnosa || 'Pemeriksaan Kesehatan'}`;
@@ -858,14 +852,16 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
                                 lastModified: Date.now()
                             });
                         } else {
-                            await db.absensi.add({
-                                id: Date.now() + Math.random(),
+                            await db.absensi.put({
+                                id: generateSyncSafeId(),
                                 santriId: santri.id,
                                 rombelId: santri.rombelId,
                                 tanggal: data.tanggal,
+                                sesi: 'KBM Pagi',
                                 status: 'S',
                                 keterangan: keteranganAbsen,
                                 recordedBy: currentUser?.username || 'Poskestren',
+                                deleted: false,
                                 lastModified: Date.now()
                             });
                         }
@@ -884,6 +880,28 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
         } catch (e: any) {
             showToast(`Gagal: ${e.message}`, 'error');
         }
+    };
+
+    const onSubmit = async (data: KesehatanRecord) => {
+        if (!canWrite) return;
+        if (!selectedSantriId) {
+            showToast('Silakan pilih santri terlebih dahulu.', 'error');
+            return;
+        }
+
+        if (selectedObatId) {
+            showConfirmation(
+                'Obat Belum Ditambahkan ke Resep',
+                'Anda memilih obat di dropdown tetapi belum menekan tombol Tambah (+). Obat ini TIDAK akan dicatat ke resep. Tetap simpan rekam medis?',
+                () => {
+                    void executeSaveRekamMedis(data);
+                },
+                { confirmText: 'Tetap Simpan', confirmColor: 'amber' }
+            );
+            return;
+        }
+
+        await executeSaveRekamMedis(data);
     };
 
     return (

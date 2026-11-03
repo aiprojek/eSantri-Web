@@ -58,7 +58,9 @@ export interface UserPermissions {
     laporan?: AccessLevel;
     auditlog?: AccessLevel;
     pengaturan?: AccessLevel;
+    portalwali?: AccessLevel;
     koperasi?: AccessLevel;
+    koperasi_manajer?: AccessLevel;
     syncAdmin?: boolean;
 }
 
@@ -76,6 +78,7 @@ export interface User {
     isDefaultAdmin?: boolean;
     lastLogin?: string;
     permissionVersion?: number;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -354,6 +357,7 @@ export interface InspeksiKamar {
     predikat: 'Mumtaz' | 'Jayyid Jiddan' | 'Jayyid' | 'Maqbul' | 'Rasib';
     catatan?: string;
     musyrifPemeriksa?: string;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -369,6 +373,7 @@ export interface JurnalAsrama {
     tindakan?: string;
     musyrifId?: number;
     namaMusyrif?: string;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -916,6 +921,7 @@ export interface SaldoSantri {
     santriId: number;
     saldo: number;
     limitHarian?: number;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1187,6 +1193,7 @@ export interface AbsensiRecord {
     keterangan?: string;
     sesi?: SesiAbsensi | string;
     recordedBy?: string;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1207,6 +1214,7 @@ export interface JurnalMengajarRecord {
     kompetensiMateri: string;
     catatanKejadian?: string;
     recordedBy?: string;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1248,6 +1256,7 @@ export interface TahfizhRecord {
     muhaffizhId?: number;
     halaqahId?: number;
     nilaiAngka?: number; // 0 - 100
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1346,6 +1355,7 @@ export interface Sirkulasi {
     status: 'Dipinjam' | 'Kembali' | 'Hilang' | 'Rusak';
     denda?: number;
     catatan?: string;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1447,6 +1457,7 @@ export interface BukuTamu {
     deskripsiPaket?: string;
     penerimaPaket?: string; // Santri / Ustadz penerima paket
     waktuDiambil?: string;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1459,6 +1470,7 @@ export interface JadwalPelajaran {
     guruId?: number;
     ruangan?: string;
     keterangan?: string; // Istirahat, Upacara
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1470,6 +1482,7 @@ export interface ArsipJadwal {
     jenjangId: number;
     tanggalArsip: string;
     dataJSON: string; // Stringified JadwalPelajaran[]
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1491,6 +1504,7 @@ export interface JadwalUjian {
     pengawas2Id?: number;
     ruangan?: string;
     keterangan?: string;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1517,6 +1531,7 @@ export interface PayrollRecord {
     
     totalDiterima: number;
     catatan?: string;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1526,6 +1541,7 @@ export interface PiketSchedule {
     sholat: 'Subuh' | 'Dzuhur' | 'Ashar' | 'Maghrib' | 'Isya';
     muadzinSantriId?: number;
     imamSantriId?: number;
+    deleted?: boolean;
     lastModified?: number;
 }
 

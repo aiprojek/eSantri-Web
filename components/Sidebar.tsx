@@ -92,7 +92,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
           items: [
               { page: Page.Keuangan, icon: 'bi-cash-coin', show: canAccess('keuangan') },
               { page: Page.BukuKas, icon: 'bi-journal-album', show: canAccess('bukukas') },
-              { page: Page.Koperasi, icon: 'bi-shop', show: canAccess('koperasi'), label: 'Koperasi / Mart' }, // NEW
+              { page: Page.Koperasi, icon: 'bi-shop', show: canAccess('koperasi') || canAccess('koperasi_manajer'), label: 'Koperasi / Mart' },
               { page: Page.Sarpras, icon: 'bi-box-seam-fill', show: canAccess('sarpras') },
           ]
       },
@@ -101,7 +101,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
           key: "sistem",
           items: [
               { page: Page.AuditLog, icon: 'bi-activity', show: canAccess('auditlog') },
-              { page: Page.PortalWali, icon: 'bi-globe2', show: canAccess('pengaturan'), label: 'Portal Wali' },
+              { page: Page.PortalWali, icon: 'bi-globe2', show: canAccess('portalwali') || canAccess('pengaturan'), label: 'Portal Wali' },
               { page: Page.Pengaturan, icon: 'bi-gear-fill', show: canAccess('pengaturan') },
               { page: Page.SyncAdmin, icon: 'bi-cloud-check-fill', show: canManageSync },
               { page: Page.Tentang, icon: 'bi-info-circle-fill', show: true },

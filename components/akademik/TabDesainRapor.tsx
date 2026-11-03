@@ -1712,7 +1712,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
 
                     let parsed: Record<string, any>;
                     try {
-                        parsed = typeof rec.customData === 'string' ? JSON.parse(rec.customData) : { ...rec.customData };
+                        parsed = typeof rec.customData === 'string' ? JSON.parse(rec.customData) : { ...(rec.customData as Record<string, any>) };
                     } catch {
                         continue;
                     }

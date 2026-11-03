@@ -11,6 +11,8 @@ import { generateKoperasiId } from './Shared';
 
 export const ProductManager: React.FC = () => {
     const { showToast, showConfirmation, currentUser } = useAppContext();
+    const canManageKoperasi =
+        currentUser?.role === 'admin' || currentUser?.permissions?.koperasi_manajer === 'write';
     const products = useLiveQuery(() => db.produkKoperasi.filter(p => !p.deleted).toArray(), []) || [];
     const suppliers = useLiveQuery(() => db.suppliers.filter(s => !s.deleted).toArray(), []) || [];
     const warehouses = useLiveQuery(() => db.warehouses.filter(w => !w.deleted).toArray(), []) || [];
@@ -107,6 +109,7 @@ export const ProductManager: React.FC = () => {
     };
 
     const handleSaveStockAction = async () => {
+        if (!canManageKoperasi) return;
         if (!selectedStockProduct || stockQty <= 0) {
             showToast('Pilih produk dan masukkan jumlah yang valid.', 'error');
             return;
@@ -219,6 +222,7 @@ export const ProductManager: React.FC = () => {
     };
 
     const onSubmitProduct = async (data: ProdukKoperasi) => {
+        if (!canManageKoperasi) return;
         try {
             if (!data.nama?.trim()) {
                 showToast('Nama produk wajib diisi.', 'error');
@@ -310,8 +314,11 @@ export const ProductManager: React.FC = () => {
     };
 
     const handleDelete = (id: number) => {
+        if (!canManageKoperasi) return;
         showConfirmation('Hapus Produk?', 'Produk akan dihapus permanen.', async () => {
-            await db.produkKoperasi.put({ ...products.find(p => p.id === id)!, deleted: true, lastModified: Date.now() });
+            const target = products.find(p => p.id === id);
+            if (!target) return;
+            await db.produkKoperasi.put({ ...target, deleted: true, lastModified: Date.now() });
             showToast('Produk dihapus.', 'success');
         }, { confirmColor: 'red' });
     };
@@ -349,6 +356,7 @@ export const ProductManager: React.FC = () => {
     };
 
     const handleSaveOpname = async () => {
+        if (!canManageKoperasi) return;
         const updates: any[] = [];
         const logs: any[] = [];
         const now = Date.now();
@@ -401,6 +409,7 @@ export const ProductManager: React.FC = () => {
 
     // --- Bulk & CSV Logic ---
     const handleBulkSave = async (newProducts: Omit<ProdukKoperasi, 'id'>[]) => {
+        if (!canManageKoperasi) return;
         try {
             const timestamp = Date.now();
             const defWh = warehouses.find(w => w.isDefault) || warehouses[0];
@@ -463,7 +472,7 @@ export const ProductManager: React.FC = () => {
                         Log Riwayat Stok
                     </button>
                 </div>
-                {activeTab === 'manage' && (
+                {activeTab === 'manage' && canManageKoperasi && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full md:w-auto">
                          <button onClick={() => { setOpnameData({}); setIsOpnameModalOpen(true); }} className="bg-purple-50 text-purple-600 border border-purple-200 px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-purple-100">
                             <i className="bi bi-clipboard-check"></i> Stok Opname
@@ -493,16 +502,20 @@ export const ProductManager: React.FC = () => {
                              <input type="text" placeholder="Cari Produk..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 p-2 border rounded-lg text-sm" />
                              <i className="bi bi-search absolute left-3 top-2.5 text-gray-400"></i>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                        <div className={`grid grid-cols-1 ${canManageKoperasi ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-2`}>
                              <button onClick={() => setFilterLowStock(!filterLowStock)} className={`px-3 py-2 rounded-lg border text-xs font-bold flex items-center justify-center gap-2 whitespace-nowrap ${filterLowStock ? 'bg-red-100 border-red-300 text-red-700' : 'bg-white text-gray-600'}`}>
                                 <i className="bi bi-exclamation-triangle"></i> Stok Menipis
                              </button>
-                            <button onClick={() => setIsBulkEditorOpen(true)} className="bg-teal-50 text-teal-700 border border-teal-200 px-3 py-2 rounded-lg text-xs font-bold hover:bg-teal-100 flex items-center justify-center gap-2">
-                                <i className="bi bi-table"></i> Tambah Massal
-                            </button>
-                            <button onClick={() => openProductModal(null)} className="bg-teal-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 flex items-center justify-center gap-2">
-                                <i className="bi bi-plus-lg"></i> Tambah Baru
-                            </button>
+                            {canManageKoperasi && (
+                                <>
+                                    <button onClick={() => setIsBulkEditorOpen(true)} className="bg-teal-50 text-teal-700 border border-teal-200 px-3 py-2 rounded-lg text-xs font-bold hover:bg-teal-100 flex items-center justify-center gap-2">
+                                        <i className="bi bi-table"></i> Tambah Massal
+                                    </button>
+                                    <button onClick={() => openProductModal(null)} className="bg-teal-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 flex items-center justify-center gap-2">
+                                        <i className="bi bi-plus-lg"></i> Tambah Baru
+                                    </button>
+                                </>
+                            )}
                             <button
                                 onClick={() => {
                                     setSearchTerm('');
@@ -521,10 +534,10 @@ export const ProductManager: React.FC = () => {
                                 <tr>
                                     <th className="p-3">Nama Produk</th>
                                     <th className="p-3">Kategori</th>
-                                    <th className="p-3 text-right">H. Beli</th>
+                                    {canManageKoperasi && <th className="p-3 text-right">H. Beli</th>}
                                     <th className="p-3 text-right">H. Jual</th>
                                     <th className="p-3 text-center">Stok</th>
-                                    <th className="p-3 text-center">Aksi</th>
+                                    {canManageKoperasi && <th className="p-3 text-center">Aksi</th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
@@ -540,32 +553,34 @@ export const ProductManager: React.FC = () => {
                                                 {isLow && <span className="text-[9px] bg-red-200 text-red-800 px-1 rounded ml-1 font-bold">Stok Rendah</span>}
                                             </td>
                                             <td className="p-3">{p.kategori}</td>
-                                            <td className="p-3 text-right text-gray-500">{formatRupiah(p.hargaBeli)}</td>
+                                            {canManageKoperasi && <td className="p-3 text-right text-gray-500">{formatRupiah(p.hargaBeli)}</td>}
                                             <td className="p-3 text-right font-bold text-green-700">{formatRupiah(p.hargaJual)}</td>
                                             <td className="p-3 text-center">
                                                 <div className={`font-bold ${isLow ? 'text-red-600' : 'text-gray-800'}`}>{p.stok} {p.satuan}</div>
                                                 <div className="text-[9px] text-gray-400">Min: {p.minStok || 5}</div>
                                             </td>
-                                            <td className="p-3 text-center">
-                                                <div className="flex justify-center gap-1.5">
-                                                    <button
-                                                        onClick={() => {
-                                                            handleOpenStockModal('Masuk');
-                                                            handleSelectProductForStock(p);
-                                                        }}
-                                                        className="px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold hover:bg-emerald-100"
-                                                        title="Tambah Stok Cepat"
-                                                    >
-                                                        +Stok
-                                                    </button>
-                                                    <button onClick={() => openProductModal(p)} className="w-8 h-8 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 inline-flex items-center justify-center"><i className="bi bi-pencil-square"></i></button>
-                                                    <button onClick={() => handleDelete(p.id)} className="w-8 h-8 rounded border border-red-200 text-red-600 hover:bg-red-50 inline-flex items-center justify-center"><i className="bi bi-trash"></i></button>
-                                                </div>
-                                            </td>
+                                            {canManageKoperasi && (
+                                                <td className="p-3 text-center">
+                                                    <div className="flex justify-center gap-1.5">
+                                                        <button
+                                                            onClick={() => {
+                                                                handleOpenStockModal('Masuk');
+                                                                handleSelectProductForStock(p);
+                                                            }}
+                                                            className="px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold hover:bg-emerald-100"
+                                                            title="Tambah Stok Cepat"
+                                                        >
+                                                            +Stok
+                                                        </button>
+                                                        <button onClick={() => openProductModal(p)} className="w-8 h-8 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 inline-flex items-center justify-center"><i className="bi bi-pencil-square"></i></button>
+                                                        <button onClick={() => handleDelete(p.id)} className="w-8 h-8 rounded border border-red-200 text-red-600 hover:bg-red-50 inline-flex items-center justify-center"><i className="bi bi-trash"></i></button>
+                                                    </div>
+                                                </td>
+                                            )}
                                         </tr>
                                     );
                                 })}
-                                {filteredProducts.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-gray-400">Tidak ada produk ditemukan.</td></tr>}
+                                {filteredProducts.length === 0 && <tr><td colSpan={canManageKoperasi ? 6 : 4} className="p-6 text-center text-gray-400">Tidak ada produk ditemukan.</td></tr>}
                             </tbody>
                         </table>
                     </div>
@@ -580,30 +595,34 @@ export const ProductManager: React.FC = () => {
                                             <div className="font-bold text-sm text-slate-800">{p.nama}</div>
                                             <div className="text-xs text-slate-500">{p.kategori} {p.barcode ? `· ${p.barcode}` : ''}</div>
                                         </div>
-                                        <div className="flex gap-1.5 shrink-0">
-                                            <button
-                                                onClick={() => {
-                                                    handleOpenStockModal('Masuk');
-                                                    handleSelectProductForStock(p);
-                                                }}
-                                                className="min-h-[36px] px-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-1"
-                                            >
-                                                <i className="bi bi-plus-circle"></i> Stok
-                                            </button>
-                                            <button onClick={() => openProductModal(p)} className="w-9 h-9 rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 flex items-center justify-center" aria-label="Edit Produk"><i className="bi bi-pencil-square"></i></button>
-                                            <button onClick={() => handleDelete(p.id)} className="w-9 h-9 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 flex items-center justify-center" aria-label="Hapus Produk"><i className="bi bi-trash"></i></button>
-                                        </div>
+                                        {canManageKoperasi && (
+                                            <div className="flex gap-1.5 shrink-0">
+                                                <button
+                                                    onClick={() => {
+                                                        handleOpenStockModal('Masuk');
+                                                        handleSelectProductForStock(p);
+                                                    }}
+                                                    className="min-h-[36px] px-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-1"
+                                                >
+                                                    <i className="bi bi-plus-circle"></i> Stok
+                                                </button>
+                                                <button onClick={() => openProductModal(p)} className="w-9 h-9 rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 flex items-center justify-center" aria-label="Edit Produk"><i className="bi bi-pencil-square"></i></button>
+                                                <button onClick={() => handleDelete(p.id)} className="w-9 h-9 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 flex items-center justify-center" aria-label="Hapus Produk"><i className="bi bi-trash"></i></button>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="mt-2 flex flex-wrap gap-1.5">
                                         {p.hasVarian && <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold">Varian</span>}
                                         {p.grosir && p.grosir.length > 0 && <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">Grosir</span>}
                                         {isLow && <span className="px-2 py-0.5 rounded bg-red-200 text-red-800 text-[10px] font-bold">Stok Menipis</span>}
                                     </div>
-                                    <div className="mt-2.5 grid grid-cols-3 gap-2 text-xs">
-                                        <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">
-                                            <div className="text-[10px] text-slate-500">H. Beli</div>
-                                            <div className="font-semibold text-slate-700 tabular-nums">{formatRupiah(p.hargaBeli)}</div>
-                                        </div>
+                                    <div className={`mt-2.5 grid ${canManageKoperasi ? 'grid-cols-3' : 'grid-cols-2'} gap-2 text-xs`}>
+                                        {canManageKoperasi && (
+                                            <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">
+                                                <div className="text-[10px] text-slate-500">H. Beli</div>
+                                                <div className="font-semibold text-slate-700 tabular-nums">{formatRupiah(p.hargaBeli)}</div>
+                                            </div>
+                                        )}
                                         <div className="rounded-lg bg-teal-50 border border-teal-200 p-2">
                                             <div className="text-[10px] text-teal-700">H. Jual</div>
                                             <div className="font-bold text-teal-900 tabular-nums">{formatRupiah(p.hargaJual)}</div>

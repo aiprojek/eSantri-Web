@@ -46,7 +46,9 @@ export const ADMIN_PERMISSIONS = {
     laporan: 'write',
     auditlog: 'write',
     pengaturan: 'write',
-    koperasi: 'write', // NEW
+    portalwali: 'write',
+    koperasi: 'write',
+    koperasi_manajer: 'write',
     syncAdmin: true,
 };
 
@@ -72,7 +74,9 @@ export const DEFAULT_STAFF_PERMISSIONS = {
     laporan: 'read',
     auditlog: 'none',
     pengaturan: 'none',
-    koperasi: 'write', // Staff usually handles sales
+    portalwali: 'none',
+    koperasi: 'write', // Staff usually handles POS cashier sales
+    koperasi_manajer: 'none', // Cost price, warehouse, supplier & P/L restricted to manager/bendahara
     syncAdmin: false,
 };
 
@@ -102,6 +106,7 @@ export const ROLE_TEMPLATES = [
             keuangan: 'write',
             bukukas: 'write',
             koperasi: 'write',
+            koperasi_manajer: 'write',
             santri: 'read'
         }
     },
@@ -114,6 +119,7 @@ export const ROLE_TEMPLATES = [
             akademik: 'write',
             surat: 'write',
             psb: 'write',
+            portalwali: 'write',
             kalender: 'write',
             santri: 'write',
             datamaster: 'read'
@@ -160,6 +166,8 @@ export const DEFAULT_WALI_KELAS_PERMISSIONS = {
     laporan: 'read',
     auditlog: 'none',
     pengaturan: 'none',
+    portalwali: 'none',
     koperasi: 'none',
+    koperasi_manajer: 'none',
     syncAdmin: false,
 };

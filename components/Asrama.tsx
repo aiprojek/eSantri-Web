@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAppContext } from '../AppContext';
 import { PageHeader } from './common/PageHeader';
 import { HeaderTabs } from './common/HeaderTabs';
 import { AsramaDashboard } from './asrama/AsramaDashboard';
@@ -7,7 +8,25 @@ import { PenempatanMutasiSantri } from './asrama/PenempatanMutasiSantri';
 import { JurnalInspeksiAsrama } from './asrama/JurnalInspeksiAsrama';
 
 export const Asrama: React.FC = () => {
+    const { currentUser } = useAppContext();
+    const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.keasramaan === 'write';
     const [activeTab, setActiveTab] = useState<'dashboard' | 'manajemen' | 'penempatan' | 'jurnal'>('dashboard');
+
+    const handleNavigateTab = (tab: 'dashboard' | 'manajemen' | 'penempatan' | 'jurnal') => {
+        if (!canWrite && (tab === 'manajemen' || tab === 'penempatan')) return;
+        setActiveTab(tab);
+    };
+
+    const availableTabs = [
+        { value: 'dashboard' as const, label: 'Dashboard Asrama', icon: 'bi-grid-1x2-fill' },
+        ...(canWrite
+            ? [
+                  { value: 'manajemen' as const, label: 'Gedung & Kamar', icon: 'bi-building-gear' },
+                  { value: 'penempatan' as const, label: 'Penempatan & Mutasi', icon: 'bi-people-fill' },
+              ]
+            : []),
+        { value: 'jurnal' as const, label: 'Jurnal & Inspeksi', icon: 'bi-shield-check' },
+    ];
 
     return (
         <div className="space-y-6">
@@ -18,21 +37,16 @@ export const Asrama: React.FC = () => {
                 tabs={
                     <HeaderTabs
                         value={activeTab}
-                        onChange={setActiveTab}
-                        tabs={[
-                            { value: 'dashboard', label: 'Dashboard Asrama', icon: 'bi-grid-1x2-fill' },
-                            { value: 'manajemen', label: 'Gedung & Kamar', icon: 'bi-building-gear' },
-                            { value: 'penempatan', label: 'Penempatan & Mutasi', icon: 'bi-people-fill' },
-                            { value: 'jurnal', label: 'Jurnal & Inspeksi', icon: 'bi-shield-check' },
-                        ]}
+                        onChange={handleNavigateTab}
+                        tabs={availableTabs}
                     />
                 }
                 className="mb-6"
             />
 
-            {activeTab === 'dashboard' && <AsramaDashboard onNavigateTab={setActiveTab} />}
-            {activeTab === 'manajemen' && <ManajemenGedungKamar />}
-            {activeTab === 'penempatan' && <PenempatanMutasiSantri />}
+            {activeTab === 'dashboard' && <AsramaDashboard onNavigateTab={handleNavigateTab} />}
+            {activeTab === 'manajemen' && canWrite && <ManajemenGedungKamar />}
+            {activeTab === 'penempatan' && canWrite && <PenempatanMutasiSantri />}
             {activeTab === 'jurnal' && <JurnalInspeksiAsrama />}
         </div>
     );

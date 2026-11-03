@@ -127,6 +127,7 @@
         "halaqahId": { "type": "string" },
         "catatan": { "type": "string" },
         "statusMutqin": { "type": "boolean" },
+        "deleted": { "type": "boolean" },
         "lastModified": { "type": "number" }
       },
       "required": ["id", "santriId", "tanggal", "tipe", "lastModified"]
@@ -144,6 +145,7 @@
         "keterangan": { "type": "string" },
         "sesi": { "type": "string" },
         "recordedBy": { "type": "string" },
+        "deleted": { "type": "boolean" },
         "lastModified": { "type": "number" }
       },
       "required": ["id", "santriId", "rombelId", "tanggal", "status", "lastModified"]
@@ -161,6 +163,7 @@
         "tipeEntri": { "type": "string" },
         "materi": { "type": "string" },
         "catatan": { "type": "string" },
+        "deleted": { "type": "boolean" },
         "lastModified": { "type": "number" }
       },
       "required": ["id", "tanggal", "rombelId", "guruId", "lastModified"]
@@ -219,6 +222,7 @@
         "deskripsiPaket": { "type": "string" },
         "penerimaPaket": { "type": "string" },
         "waktuDiambil": { "type": "string" },
+        "deleted": { "type": "boolean" },
         "lastModified": { "type": "number" }
       },
       "required": ["id", "tanggal", "jamMasuk", "namaTamu", "status", "petugas", "lastModified"]
@@ -297,6 +301,7 @@
         "pengawas2Id": { "type": "number" },
         "ruangan": { "type": "string" },
         "keterangan": { "type": "string" },
+        "deleted": { "type": "boolean" },
         "lastModified": { "type": "number" }
       },
       "required": ["id", "jenjangId", "rombelId", "jenisUjian", "tanggal", "hari", "sesiKe", "jamMulai", "jamSelesai", "lastModified"]
@@ -334,6 +339,7 @@
         "status": { "type": "string", "enum": ["Dipinjam", "Kembali", "Hilang", "Rusak"] },
         "denda": { "type": "number" },
         "catatan": { "type": "string" },
+        "deleted": { "type": "boolean" },
         "lastModified": { "type": "number" }
       },
       "required": ["id", "santriId", "bukuId", "tanggalPinjam", "tanggalKembaliSeharusnya", "status", "lastModified"]
@@ -722,6 +728,34 @@
         "lastModified": { "type": "number" }
       },
       "required": ["id", "table_name", "operation", "record_id", "created_at"]
+    },
+    "TenantInvite": {
+      "title": "TenantInvite",
+      "description": "Token undangan pairing sementara antar perangkat dalam satu tenant pesantren",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "ownerUid", "createdAt", "expiresAt"]
+    },
+    "PublicPortal": {
+      "title": "PublicPortal",
+      "description": "Konfigurasi publik Portal Wali Santri dan PSB Online per tenant (tanpa kredensial rahasia)",
+      "type": "object",
+      "properties": {
+        "namaPonpes": { "type": "string" },
+        "logoPonpesUrl": { "type": "string" },
+        "telepon": { "type": "string" },
+        "email": { "type": "string" },
+        "website": { "type": "string" },
+        "portalConfig": { "type": "object" },
+        "psbConfig": { "type": "object" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["namaPonpes", "updatedAt"]
     }
   },
   "firestore": {
@@ -860,6 +894,14 @@
     "tenants/{tenantId}/settings": {
       "schema": "object",
       "description": "Pengaturan aplikasi per tenant"
+    },
+    "tenantInvites/{inviteId}": {
+      "schema": "TenantInvite",
+      "description": "Koleksi kode pairing perangkat sementara dengan proteksi anti-scraping"
+    },
+    "publicPortals/{tenantId}": {
+      "schema": "PublicPortal",
+      "description": "Dokumen konfigurasi publik Portal Wali Santri dan PSB per tenant"
     }
   }
 }

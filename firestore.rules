@@ -1,85 +1,160 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+    // Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // Helper Functions
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    function isValidId(id) {
+      return id is string &&
+        id.size() >= 1 &&
+        id.size() <= 128 &&
+        id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
     function tenantOwner(tenantId) {
-      return isAuthenticated() && request.auth.uid == tenantId;
+      return isAuthenticated() && isValidId(tenantId) && request.auth.uid == tenantId;
     }
 
     function hasLegacyMemberAccess(tenantId) {
-      return exists(/databases/$(database)/documents/tenants/$(tenantId)/metadata/members) && 
+      return isValidId(tenantId) &&
+        exists(/databases/$(database)/documents/tenants/$(tenantId)/metadata/members) &&
         request.auth.uid in get(/databases/$(database)/documents/tenants/$(tenantId)/metadata/members).data.uids;
     }
 
     function hasMemberLink(tenantId) {
-      return exists(/databases/$(database)/documents/tenants/$(tenantId)/metadata/memberLinks/$(request.auth.uid));
+      return isValidId(tenantId) &&
+        exists(/databases/$(database)/documents/tenants/$(tenantId)/metadata/memberLinks/$(request.auth.uid));
     }
-    
+
     function isTenantMember(tenantId) {
-      return isAuthenticated() && (
-        tenantOwner(tenantId) || 
+      return isAuthenticated() && isValidId(tenantId) && (
+        tenantOwner(tenantId) ||
         hasMemberLink(tenantId) ||
         hasLegacyMemberAccess(tenantId)
       );
     }
 
     function validInviteForTenant(inviteId, tenantId) {
-      return inviteId is string &&
+      return isValidId(inviteId) &&
+        isValidId(tenantId) &&
         exists(/databases/$(database)/documents/tenantInvites/$(inviteId)) &&
         get(/databases/$(database)/documents/tenantInvites/$(inviteId)).data.tenantId == tenantId &&
         get(/databases/$(database)/documents/tenantInvites/$(inviteId)).data.expiresAt > request.time;
     }
 
+    function isValidTenantInvite(data) {
+      return data is map &&
+        data.keys().hasAll(['tenantId', 'ownerUid', 'createdAt', 'expiresAt']) &&
+        data.keys().hasOnly(['tenantId', 'ownerUid', 'createdAt', 'expiresAt']) &&
+        isValidId(data.tenantId) &&
+        isValidId(data.ownerUid) &&
+        data.ownerUid == request.auth.uid &&
+        data.tenantId == request.auth.uid &&
+        data.createdAt == request.time &&
+        data.expiresAt is timestamp &&
+        data.expiresAt > request.time;
+    }
+
+    function isValidPublicPendaftar(data) {
+      return data is map &&
+        data.keys().size() <= 65 &&
+        data.keys().hasAll(['id', 'namaLengkap', 'status']) &&
+        (data.id is int || data.id is number) &&
+        data.namaLengkap is string &&
+        data.namaLengkap.size() >= 1 &&
+        data.namaLengkap.size() <= 200 &&
+        data.status == 'Baru' &&
+        (!('deleted' in data) || data.deleted == false) &&
+        (!('catatan' in data) || data.catatan == null || (data.catatan is string && data.catatan.size() <= 2000)) &&
+        (!('customData' in data) || data.customData == null || (data.customData is string && data.customData.size() <= 50000)) &&
+        (!('nomorRegistrasi' in data) || data.nomorRegistrasi == null || (data.nomorRegistrasi is string && data.nomorRegistrasi.size() <= 100)) &&
+        (!('nomorHpWali' in data) || data.nomorHpWali == null || (data.nomorHpWali is string && data.nomorHpWali.size() <= 50));
+    }
+
     match /publicPortals/{tenantId} {
-      allow read: if true;
-      allow write: if isTenantMember(tenantId);
+      allow get: if isValidId(tenantId);
+      allow list: if false;
+      allow create, update, delete: if isValidId(tenantId) && isTenantMember(tenantId);
     }
 
     match /tenantInvites/{inviteId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
-        request.resource.data.ownerUid == request.auth.uid &&
-        request.resource.data.tenantId == request.auth.uid &&
-        request.resource.data.expiresAt > request.time;
-      allow update, delete: if isAuthenticated() && (
-        resource.data.ownerUid == request.auth.uid ||
-        isTenantMember(resource.data.tenantId)
-      );
+      allow get: if isAuthenticated() && isValidId(inviteId);
+      allow list: if isAuthenticated() && resource.data.ownerUid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidId(inviteId) && isValidTenantInvite(request.resource.data);
+      allow update: if isAuthenticated() &&
+        isValidId(inviteId) &&
+        resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.ownerUid == resource.data.ownerUid &&
+        request.resource.data.tenantId == resource.data.tenantId &&
+        request.resource.data.expiresAt is timestamp;
+      allow delete: if isAuthenticated() &&
+        isValidId(inviteId) &&
+        (resource.data.ownerUid == request.auth.uid || isTenantMember(resource.data.tenantId));
     }
 
     // Tenant Data
     match /tenants/{tenantId} {
-      allow read: if isTenantMember(tenantId); 
-      allow write: if isTenantMember(tenantId);
-      
-      // PSB Registrations - Allow public create
+      allow get: if isValidId(tenantId) && isTenantMember(tenantId);
+      allow list: if false;
+      allow create, update, delete: if isValidId(tenantId) && isTenantMember(tenantId);
+
+      // PSB Registrations - Validated public create, restricted tenant read/write
       match /pendaftar/{pendaftarId} {
-        allow create: if true;
-        allow read, update, delete: if isTenantMember(tenantId);
+        allow create: if isValidId(tenantId) && isValidId(pendaftarId) && (
+          isTenantMember(tenantId) ||
+          isValidPublicPendaftar(request.resource.data)
+        );
+        allow get, update, delete: if isValidId(tenantId) && isValidId(pendaftarId) && isTenantMember(tenantId);
+        allow list: if isTenantMember(tenantId);
       }
 
-      match /{allSubcollections=**} {
-        allow read, write: if isTenantMember(tenantId);
-      }
-      
       match /metadata/memberLinks/{userId} {
-        allow read: if isAuthenticated() && (request.auth.uid == userId || isTenantMember(tenantId));
+        allow get: if isAuthenticated() && isValidId(tenantId) && isValidId(userId) && (request.auth.uid == userId || isTenantMember(tenantId));
+        allow list: if isTenantMember(tenantId);
         allow create: if isAuthenticated() &&
+          isValidId(tenantId) &&
+          isValidId(userId) &&
           request.auth.uid == userId &&
+          request.resource.data is map &&
+          request.resource.data.keys().hasAll(['uid', 'inviteId', 'joinedAt']) &&
+          request.resource.data.keys().hasOnly(['uid', 'inviteId', 'joinedAt']) &&
           validInviteForTenant(request.resource.data.inviteId, tenantId) &&
-          request.resource.data.uid == request.auth.uid;
-        allow update, delete: if isAuthenticated() && (tenantOwner(tenantId) || request.auth.uid == userId);
+          request.resource.data.uid == request.auth.uid &&
+          request.resource.data.joinedAt == request.time;
+        allow update: if isAuthenticated() &&
+          isValidId(tenantId) &&
+          isValidId(userId) &&
+          (tenantOwner(tenantId) || request.auth.uid == userId) &&
+          request.resource.data.uid == resource.data.uid;
+        allow delete: if isAuthenticated() &&
+          isValidId(tenantId) &&
+          isValidId(userId) &&
+          (tenantOwner(tenantId) || request.auth.uid == userId);
       }
 
       match /metadata/members {
-        allow read: if isTenantMember(tenantId);
-        allow write: if tenantOwner(tenantId);
+        allow read: if isValidId(tenantId) && isTenantMember(tenantId);
+        allow write: if isValidId(tenantId) && tenantOwner(tenantId);
+      }
+
+      match /{collectionName}/{docId} {
+        allow get, create, update, delete: if collectionName != 'pendaftar' &&
+          collectionName != 'metadata' &&
+          isValidId(tenantId) &&
+          isValidId(docId) &&
+          isTenantMember(tenantId);
+        allow list: if collectionName != 'pendaftar' &&
+          collectionName != 'metadata' &&
+          isTenantMember(tenantId);
       }
     }
   }
 }
+

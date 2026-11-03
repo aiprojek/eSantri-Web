@@ -1,6 +1,7 @@
 
-import React, { Suspense, lazy, useMemo, useState, useEffect } from 'react';
-import { Santri, PondokSettings, Page } from '../types';
+import React, { Suspense, lazy, useMemo, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { Santri, PondokSettings, Page, UserPermissions } from '../types';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { db } from '../db';
@@ -136,21 +137,34 @@ const DashboardAvatar: React.FC<{ santri: Santri }> = ({ santri }) => {
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
-  const { settings } = useAppContext();
+  const { settings, currentUser } = useAppContext();
   const { santriList } = useSantriContext();
-  const [totalTunggakan, setTotalTunggakan] = useState(0); 
   const [activeTab, setActiveTab] = useState<'ikhtisar' | 'analitik'>('ikhtisar');
   const [viewScope, setViewScope] = useState<'aktif' | 'semua'>('aktif');
-  
-  // Calculate tunggakan asynchronously to avoid heavy load on mount
-  useEffect(() => {
-    const calc = async () => {
-        const tagihan = await db.tagihan.where('status').equals('Belum Lunas').toArray();
-        const total = tagihan.reduce((sum, t) => sum + t.nominal, 0);
-        setTotalTunggakan(total);
-    };
-    calc();
-  }, []);
+
+  const hasPerm = (key: keyof UserPermissions): boolean => {
+      if (!currentUser) return true;
+      if (currentUser.role === 'admin') return true;
+      const val = currentUser.permissions?.[key];
+      return Boolean(val && val !== 'none');
+  };
+
+  const canViewSantri = hasPerm('santri');
+  const canViewFinance = hasPerm('keuangan') || hasPerm('bukukas');
+
+  const totalTunggakan = useLiveQuery(
+      async () => {
+          if (!canViewFinance) return 0;
+          const tagihan = await db.tagihan
+              .where('status')
+              .equals('Belum Lunas')
+              .filter(t => !t.deleted)
+              .toArray();
+          return tagihan.reduce((sum, t) => sum + (t.nominal || 0), 0);
+      },
+      [canViewFinance],
+      0
+  );
 
   // Total counts across entire database
   const totalSantri = santriList.length;
@@ -289,15 +303,17 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <button 
-                            onClick={() => navigateTo(Page.Santri)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 transition-colors"
-                        >
-                            <i className="bi bi-person-lines-fill"></i>
-                            <span>Buka Data Santri</span>
-                        </button>
-                    </div>
+                    {canViewSantri && (
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => navigateTo(Page.Santri)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 transition-colors"
+                            >
+                                <i className="bi bi-person-lines-fill"></i>
+                                <span>Buka Data Santri</span>
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 print:grid-cols-3 print:gap-4">
@@ -312,7 +328,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                                 {viewScope === 'aktif' ? 'Aktif' : 'Semua'}
                             </span>
                         }
-                        onClick={() => navigateTo(Page.Santri, { status: viewScope === 'aktif' ? 'Aktif' : undefined })} 
+                        onClick={canViewSantri ? () => navigateTo(Page.Santri, { status: viewScope === 'aktif' ? 'Aktif' : undefined }) : undefined} 
                     />
                     <StatCard 
                         title={viewScope === 'aktif' ? "Santri Putra (Aktif)" : "Santri Putra"} 
@@ -320,7 +336,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                         subtitle={`${totalSantri > 0 ? ((currentPutra / (currentTotal || 1)) * 100).toFixed(0) : 0}% dari ${viewScope === 'aktif' ? 'santri aktif' : 'total'}`}
                         icon={<i className="bi bi-person text-2xl text-white"></i>} 
                         color="bg-sky-500" 
-                        onClick={() => navigateTo(Page.Santri, { gender: 'Laki-laki', status: viewScope === 'aktif' ? 'Aktif' : undefined })} 
+                        onClick={canViewSantri ? () => navigateTo(Page.Santri, { gender: 'Laki-laki', status: viewScope === 'aktif' ? 'Aktif' : undefined }) : undefined} 
                     />
                     <StatCard 
                         title={viewScope === 'aktif' ? "Santri Putri (Aktif)" : "Santri Putri"} 
@@ -328,15 +344,15 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                         subtitle={`${totalSantri > 0 ? ((currentPutri / (currentTotal || 1)) * 100).toFixed(0) : 0}% dari ${viewScope === 'aktif' ? 'santri aktif' : 'total'}`}
                         icon={<i className="bi bi-person text-2xl text-white"></i>} 
                         color="bg-pink-500" 
-                        onClick={() => navigateTo(Page.Santri, { gender: 'Perempuan', status: viewScope === 'aktif' ? 'Aktif' : undefined })} 
+                        onClick={canViewSantri ? () => navigateTo(Page.Santri, { gender: 'Perempuan', status: viewScope === 'aktif' ? 'Aktif' : undefined }) : undefined} 
                     />
                     <StatCard 
                         title="Total Tunggakan" 
-                        value={(totalTunggakan / 1000000).toFixed(1) + ' Jt'} 
-                        subtitle="SPP & tagihan belum lunas"
+                        value={canViewFinance ? (totalTunggakan / 1000000).toFixed(1) + ' Jt' : 'Terbatas'} 
+                        subtitle={canViewFinance ? "SPP & tagihan belum lunas" : "Khusus akses Keuangan"}
                         icon={<i className="bi-cash-coin text-2xl text-white"></i>} 
                         color="bg-amber-500" 
-                        onClick={() => navigateTo(Page.Keuangan)} 
+                        onClick={hasPerm('keuangan') ? () => navigateTo(Page.Keuangan) : undefined} 
                     />
                     <StatCard 
                         title="Rombel Aktif" 
@@ -358,7 +374,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                             statusData={statusData} 
                             total={totalSantri} 
                             activeCount={activeSantriCount} 
-                            onSelectStatus={(status) => navigateTo(Page.Santri, { status })}
+                            onSelectStatus={canViewSantri ? (status) => navigateTo(Page.Santri, { status }) : undefined}
                         />
                     </div>
 
@@ -371,11 +387,11 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                     <div className="app-panel rounded-panel p-6 no-print">
                         <h2 className="mb-4 text-xl font-bold text-app-text">Aksi Cepat</h2>
                         <div className="grid grid-cols-2 gap-4 w-full">
-                            <QuickActionButton icon="bi-person-plus-fill" label="Tambah Santri" onClick={() => navigateTo(Page.Santri)} />
-                            <QuickActionButton icon="bi-diagram-3-fill" label="Data Master" onClick={() => navigateTo(Page.DataMaster)} />
-                            <QuickActionButton icon="bi-cash-coin" label="Keuangan" onClick={() => navigateTo(Page.Keuangan)} />
-                            <QuickActionButton icon="bi-printer-fill" label="Cetak Laporan" onClick={() => navigateTo(Page.Laporan)} />
-                            <QuickActionButton icon="bi-gear-fill" label="Pengaturan" onClick={() => navigateTo(Page.Pengaturan)} />
+                            {canViewSantri && <QuickActionButton icon="bi-person-plus-fill" label="Data Santri" onClick={() => navigateTo(Page.Santri)} />}
+                            {hasPerm('datamaster') && <QuickActionButton icon="bi-diagram-3-fill" label="Data Master" onClick={() => navigateTo(Page.DataMaster)} />}
+                            {hasPerm('keuangan') && <QuickActionButton icon="bi-cash-coin" label="Keuangan" onClick={() => navigateTo(Page.Keuangan)} />}
+                            {hasPerm('laporan') && <QuickActionButton icon="bi-printer-fill" label="Cetak Laporan" onClick={() => navigateTo(Page.Laporan)} />}
+                            {hasPerm('pengaturan') && <QuickActionButton icon="bi-gear-fill" label="Pengaturan" onClick={() => navigateTo(Page.Pengaturan)} />}
                             <QuickActionButton icon="bi-info-circle-fill" label="Tentang" onClick={() => navigateTo(Page.Tentang)} />
                         </div>
                     </div>
@@ -384,7 +400,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                     <div className="app-panel flex flex-col rounded-panel p-6 print:break-inside-avoid print:border print:border-gray-300 print:shadow-none">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold text-app-text">Santri Terbaru</h2>
-                            <button onClick={() => navigateTo(Page.Santri)} className="text-sm font-medium text-app-primary hover:underline no-print">Lihat Semua</button>
+                            {canViewSantri && <button onClick={() => navigateTo(Page.Santri)} className="text-sm font-medium text-app-primary hover:underline no-print">Lihat Semua</button>}
                         </div>
                         <div className="flex-grow flex flex-col justify-center">
                             <ul className="space-y-4">

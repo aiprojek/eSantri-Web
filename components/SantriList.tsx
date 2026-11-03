@@ -16,6 +16,7 @@ import { PageHeader } from './common/PageHeader';
 import { SectionCard } from './common/SectionCard';
 import { EmptyState } from './common/EmptyState';
 import { buildStandardExportFileName } from '../utils/exportFileName';
+import { generateSyncSafeId } from '../utils/idGenerator';
 
 const SantriList: React.FC = () => {
     const { settings, showToast, showConfirmation, currentUser } = useAppContext();
@@ -74,6 +75,7 @@ const SantriList: React.FC = () => {
     };
 
     const handleSave = async (data: any) => {
+        if (!canWrite) return;
         if (editingSantri) {
             await onUpdateSantri(data);
             showToast('Data santri diperbarui', 'success');
@@ -86,6 +88,7 @@ const SantriList: React.FC = () => {
 
     // Bulk Actions
     const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!canWrite) return;
         const currentPageIds = paginatedSantri.map(s => s.id);
         if (e.target.checked) {
             setSelectedIds(prev => Array.from(new Set([...prev, ...currentPageIds])));
@@ -95,6 +98,7 @@ const SantriList: React.FC = () => {
     };
 
     const handleSelectOne = (id: number) => {
+        if (!canWrite) return;
         if (selectedIds.includes(id)) {
             setSelectedIds(selectedIds.filter(i => i !== id));
         } else {
@@ -103,11 +107,12 @@ const SantriList: React.FC = () => {
     };
 
     const handleBulkStatusSave = async (newStatus: Santri['status'], date?: string) => {
+        if (!canWrite) return;
         const updates = santriList.filter(s => selectedIds.includes(s.id)).map(s => ({
             ...s,
             status: newStatus,
             tanggalStatus: date || s.tanggalStatus,
-            riwayatStatus: [...(s.riwayatStatus || []), { id: Date.now(), status: newStatus, tanggal: date || new Date().toISOString(), keterangan: 'Update Massal' }]
+            riwayatStatus: [...(s.riwayatStatus || []), { id: generateSyncSafeId(), status: newStatus, tanggal: date || new Date().toISOString(), keterangan: 'Update Massal' }]
         }));
         await onBulkUpdateSantri(updates);
         setIsBulkStatusOpen(false);
@@ -116,6 +121,7 @@ const SantriList: React.FC = () => {
     };
 
     const handleBulkMoveSave = async (jenjangId: number, kelasId: number, rombelId: number) => {
+        if (!canWrite) return;
         const updates = santriList.filter(s => selectedIds.includes(s.id)).map(s => ({
             ...s,
             jenjangId,
@@ -129,6 +135,7 @@ const SantriList: React.FC = () => {
     };
 
     const handleBulkEditSelected = () => {
+        if (!canWrite) return;
         const selectedSantri = santriList.filter(s => selectedIds.includes(s.id));
         if (selectedSantri.length === 0) {
             showToast('Pilih santri terlebih dahulu.', 'info');
@@ -143,6 +150,7 @@ const SantriList: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>, mode: 'add' | 'update') => {
+        if (!canWrite) return;
         const file = e.target.files?.[0];
         if (!file) return;
         const reader = new FileReader();
@@ -306,14 +314,16 @@ const SantriList: React.FC = () => {
                 <table className="app-table text-sm text-left">
                     <thead>
                         <tr>
-                            <th className="p-4 w-10 text-center">
-                                <input 
-                                    type="checkbox" 
-                                    onChange={handleSelectAll} 
-                                    checked={paginatedSantri.length > 0 && paginatedSantri.every(s => selectedIds.includes(s.id))} 
-                                    className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" 
-                                />
-                            </th>
+                            {canWrite && (
+                                <th className="p-4 w-10 text-center">
+                                    <input 
+                                        type="checkbox" 
+                                        onChange={handleSelectAll} 
+                                        checked={paginatedSantri.length > 0 && paginatedSantri.every(s => selectedIds.includes(s.id))} 
+                                        className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" 
+                                    />
+                                </th>
+                            )}
                             <th className="p-4">Nama Santri</th>
                             <th className="p-4">NIS / NISN</th>
                             <th className="p-4">Kelas</th>
@@ -325,7 +335,9 @@ const SantriList: React.FC = () => {
                     <tbody className="divide-y divide-slate-100 bg-white">
                         {paginatedSantri.map(s => (
                             <tr key={s.id} className={`transition-colors hover:bg-teal-50/50 ${selectedIds.includes(s.id) ? 'bg-teal-50/40' : ''}`}>
-                                <td className="p-4 text-center"><input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => handleSelectOne(s.id)} className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" /></td>
+                                {canWrite && (
+                                    <td className="p-4 text-center"><input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => handleSelectOne(s.id)} className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" /></td>
+                                )}
                                 <td className="flex items-center gap-3 p-4 font-bold text-slate-800">
                                     <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full border border-teal-100 bg-teal-50">
                                          {s.fotoUrl && !s.fotoUrl.includes('text=Foto') ? <img src={s.fotoUrl} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-xs font-bold text-teal-600">{s.namaLengkap.charAt(0)}</div>}
@@ -386,7 +398,7 @@ const SantriList: React.FC = () => {
                 </table>
             </div>
             <div className="md:hidden space-y-3 p-4">
-                {filteredSantri.length > 0 && (
+                {canWrite && filteredSantri.length > 0 && (
                     <label className="mb-1 flex items-center gap-2 text-xs font-semibold text-slate-600">
                         <input
                             type="checkbox"
@@ -401,12 +413,14 @@ const SantriList: React.FC = () => {
                 {paginatedSantri.map((s) => (
                     <article key={s.id} className={`rounded-2xl border p-4 shadow-sm ${selectedIds.includes(s.id) ? 'border-teal-300 bg-teal-50/40' : 'border-app-border bg-white'}`}>
                         <div className="mb-3 flex items-start gap-3">
-                            <input
-                                type="checkbox"
-                                checked={selectedIds.includes(s.id)}
-                                onChange={() => handleSelectOne(s.id)}
-                                className="mt-1 h-4 w-4 cursor-pointer rounded text-teal-600 focus:ring-teal-500"
-                            />
+                            {canWrite && (
+                                <input
+                                    type="checkbox"
+                                    checked={selectedIds.includes(s.id)}
+                                    onChange={() => handleSelectOne(s.id)}
+                                    className="mt-1 h-4 w-4 cursor-pointer rounded text-teal-600 focus:ring-teal-500"
+                                />
+                            )}
                             <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border border-teal-100 bg-teal-50">
                                 {s.fotoUrl && !s.fotoUrl.includes('text=Foto')
                                     ? <img src={s.fotoUrl} alt="" className="h-full w-full object-cover" />

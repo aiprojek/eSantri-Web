@@ -4,6 +4,7 @@ import { User, UserPermissions, AccessLevel } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS, DEFAULT_WALI_KELAS_PERMISSIONS, ROLE_TEMPLATES } from '../../../services/authService';
 import { CURRENT_PERMISSION_VERSION } from '../../../services/permissionMigrationService';
+import { generateSyncSafeId } from '../../../utils/idGenerator';
 
 interface UserModalProps {
     isOpen: boolean;
@@ -88,7 +89,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         }
 
         const newUser: User = {
-            id: userData?.id || Date.now(),
+            id: userData?.id || generateSyncSafeId(),
             username: username.trim(),
             fullName: fullName.trim(),
             role,
@@ -97,7 +98,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             securityQuestion: securityQuestion.trim(),
             securityAnswerHash,
             isDefaultAdmin: userData?.isDefaultAdmin,
-            permissionVersion: userData?.permissionVersion ?? CURRENT_PERMISSION_VERSION,
+            permissionVersion: CURRENT_PERMISSION_VERSION,
             lastModified: Date.now(),
         };
 
@@ -108,7 +109,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         { key: 'santri', label: 'Data Santri' },
         { key: 'psb', label: 'PSB Online' },
         { key: 'whatsapp', label: 'WhatsApp Center' },
-        { key: 'bukutamu', label: 'Buku Tamu (Security)' }, // NEW
+        { key: 'bukutamu', label: 'Buku Tamu (Security)' },
         { key: 'akademik', label: 'Akademik & Rapor' },
         { key: 'absensi', label: 'Absensi' },
         { key: 'tahfizh', label: 'Tahfizh Al-Qur\'an' },
@@ -119,10 +120,13 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         { key: 'kalender', label: 'Kalender Akademik' },
         { key: 'keuangan', label: 'Keuangan & SPP' },
         { key: 'bukukas', label: 'Buku Kas Umum' },
+        { key: 'koperasi', label: 'Kasir Koperasi / Mart (POS)' },
+        { key: 'koperasi_manajer', label: 'Manajer Koperasi (Modal, Gudang & Laba Rugi)' },
         { key: 'keasramaan', label: 'Keasramaan' },
         { key: 'surat', label: 'Surat Menyurat' },
         { key: 'laporan', label: 'Laporan & Cetak' },
         { key: 'datamaster', label: 'Data Master (Struktur)' },
+        { key: 'portalwali', label: 'Portal Wali Santri' },
         { key: 'auditlog', label: 'Log Aktivitas' },
         { key: 'pengaturan', label: 'Pengaturan Sistem' },
     ];

@@ -1,7 +1,7 @@
 import type { AccessLevel, User, UserPermissions } from '../types';
 import { ADMIN_PERMISSIONS, DEFAULT_STAFF_PERMISSIONS, DEFAULT_WALI_KELAS_PERMISSIONS } from './authService';
 
-export const CURRENT_PERMISSION_VERSION = 2;
+export const CURRENT_PERMISSION_VERSION = 3;
 
 const ACCESS_LEVELS: AccessLevel[] = ['none', 'read', 'write'];
 
@@ -26,7 +26,9 @@ const PERMISSION_KEYS: Array<keyof UserPermissions> = [
     'laporan',
     'auditlog',
     'pengaturan',
+    'portalwali',
     'koperasi',
+    'koperasi_manajer',
 ];
 
 type RoleTemplate = {
@@ -64,13 +66,29 @@ export const normalizeUserPermissions = (user: User): UserPermissions => {
     const template = getRoleTemplate(user);
     const source = user.permissions || {};
     const normalized: UserPermissions = {};
+    const isAdminUser = user.role === 'admin' || Boolean(user.isDefaultAdmin);
 
     for (const key of PERMISSION_KEYS) {
-        const fallback = (template.base[key] as AccessLevel) || 'none';
-        (normalized as any)[key] = normalizeAccessLevel(source[key], fallback);
+        let fallback = (template.base[key] as AccessLevel) || 'none';
+
+        if (!isAdminUser && key === 'portalwali' && source.portalwali === undefined) {
+            if (source.pengaturan && source.pengaturan !== 'none') {
+                fallback = source.pengaturan;
+            }
+        }
+
+        if (!isAdminUser && key === 'koperasi_manajer' && source.koperasi_manajer === undefined) {
+            if (source.keuangan === 'write' || source.bukukas === 'write') {
+                fallback = 'write';
+            }
+        }
+
+        (normalized as any)[key] = isAdminUser
+            ? 'write'
+            : normalizeAccessLevel(source[key], fallback);
     }
 
-    normalized.syncAdmin = user.role === 'admin' || user.isDefaultAdmin
+    normalized.syncAdmin = isAdminUser
         ? true
         : typeof source.syncAdmin === 'boolean'
             ? source.syncAdmin

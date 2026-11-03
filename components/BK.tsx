@@ -14,6 +14,7 @@ import { BkSuratModal } from './bk/BkSuratModal';
 import { BkAnalyticsCard } from './bk/BkAnalyticsCard';
 import { loadXLSX } from '../utils/lazyClientLibs';
 import { logActivity } from '../services/logService';
+import { generateSyncSafeId } from '../utils/idGenerator';
 
 const BK: React.FC = () => {
     const { currentUser, settings, showToast, showConfirmation } = useAppContext();
@@ -21,6 +22,7 @@ const BK: React.FC = () => {
 
     // Permission Check
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.bk === 'write';
+    const isConfidential = (s: BkSession) => s.privasi === 'Rahasia' || s.privasi === 'Sangat Rahasia';
 
     // Live query for active (non-deleted) sessions
     const sessions = useLiveQuery(
@@ -86,11 +88,12 @@ const BK: React.FC = () => {
     const filteredSessions = useMemo(() => {
         return sessions.filter((s) => {
             const santri = santriList.find((sa) => sa.id === s.santriId);
+            const canSearchComplaint = canWrite || !isConfidential(s);
             const nameMatch =
                 !searchTerm ||
                 (santri?.namaLengkap.toLowerCase().includes(searchTerm.toLowerCase()) ||
                     santri?.nis.includes(searchTerm) ||
-                    s.keluhan.toLowerCase().includes(searchTerm.toLowerCase()));
+                    (canSearchComplaint && s.keluhan.toLowerCase().includes(searchTerm.toLowerCase())));
 
             const statusMatch = !filterStatus || s.status === filterStatus;
             const kategoriMatch = !filterKategori || s.kategori === filterKategori;
@@ -99,7 +102,7 @@ const BK: React.FC = () => {
 
             return nameMatch && statusMatch && kategoriMatch && privasiMatch && jadwalMatch;
         });
-    }, [sessions, santriList, searchTerm, filterStatus, filterKategori, filterPrivasi, filterJadwal]);
+    }, [sessions, santriList, searchTerm, filterStatus, filterKategori, filterPrivasi, filterJadwal, canWrite]);
 
     // Statistics
     const stats = useMemo(() => {
@@ -117,8 +120,10 @@ const BK: React.FC = () => {
     const handleSave = async (data: Omit<BkSession, 'id'>) => {
         if (!canWrite) return;
         const now = Date.now();
-        const newId = await db.bkSessions.add({ ...data, lastModified: now } as BkSession);
-        await logActivity('INSERT', 'bkSessions', newId, null, { ...data, id: newId, lastModified: now }, currentUser?.username || 'Konselor');
+        const newId = generateSyncSafeId();
+        const newRecord: BkSession = { ...data, id: newId, deleted: false, lastModified: now } as BkSession;
+        await db.bkSessions.put(newRecord);
+        await logActivity('INSERT', 'bkSessions', newId, null, newRecord, currentUser?.username || 'Konselor');
         setIsCreateEditModalOpen(false);
         showToast('Sesi BK berhasil dicatat.', 'success');
     };
@@ -153,16 +158,18 @@ const BK: React.FC = () => {
 
     const toggleMask = (sessionId: number, e: React.MouseEvent) => {
         e.stopPropagation();
+        if (!canWrite) return;
         setUnmaskedRows((prev) => ({ ...prev, [sessionId]: !prev[sessionId] }));
     };
 
     // Export to Excel
-    const handleExportExcel = async () => {
+    const exportBkToExcel = async (maskConfidential: boolean) => {
         try {
             const XLSX = await loadXLSX();
             const exportRows = filteredSessions.map((s, idx) => {
                 const santri = santriList.find((sa) => sa.id === s.santriId);
                 const kamarName = santri?.kamarId ? (settings.kamar?.find((k) => k.id === santri.kamarId)?.nama || `Kamar #${santri.kamarId}`) : '-';
+                const shouldMask = maskConfidential && isConfidential(s);
                 return {
                     'No': idx + 1,
                     'Tanggal Konseling': s.tanggal,
@@ -174,10 +181,10 @@ const BK: React.FC = () => {
                     'Tingkat Privasi': s.privasi,
                     'Konselor': s.konselor,
                     'Pihak Terlibat': (s.pihakTerlibat || []).join(', '),
-                    'Keluhan / Masalah': s.keluhan,
-                    'Arahan / Solusi': s.penanganan,
-                    'Komitmen Santri': s.komitmenSantri || '-',
-                    'Hasil Evaluasi': s.hasil || '-',
+                    'Keluhan / Masalah': shouldMask ? '[Dirahasiakan]' : s.keluhan,
+                    'Arahan / Solusi': shouldMask ? '[Dirahasiakan]' : s.penanganan,
+                    'Komitmen Santri': shouldMask ? '[Dirahasiakan]' : (s.komitmenSantri || '-'),
+                    'Hasil Evaluasi': shouldMask ? '[Dirahasiakan]' : (s.hasil || '-'),
                     'Jadwal Kontrol Berikutnya': s.tanggalBerikutnya || '-',
                     'Jumlah Sesi Lanjutan': s.followUpLogs?.length || 0,
                 };
@@ -195,6 +202,25 @@ const BK: React.FC = () => {
             console.error('Failed to export Excel', err);
             showToast('Gagal mengekspor data Excel.', 'error');
         }
+    };
+
+    const handleExportExcel = () => {
+        if (!canWrite) {
+            void exportBkToExcel(true);
+            return;
+        }
+        if (filteredSessions.some(isConfidential)) {
+            showConfirmation(
+                'Ekspor Data Konseling Rahasia?',
+                'Terdapat sesi konseling berstatus Rahasia / Sangat Rahasia dalam daftar ini. Konfirmasi untuk mengekspor isi lengkap (khusus arsip konselor BK), atau batalkan dan filter tingkat privasi Biasa.',
+                () => {
+                    void exportBkToExcel(false);
+                },
+                { confirmText: 'Ekspor Isi Lengkap', confirmColor: 'amber' }
+            );
+            return;
+        }
+        void exportBkToExcel(false);
     };
 
     return (
@@ -288,10 +314,18 @@ const BK: React.FC = () => {
                 sessions={sessions}
                 santriList={santriList}
                 onOpenFollowUp={(session, santri) => {
+                    if (!canWrite && isConfidential(session)) {
+                        showToast('Akses terbatas: Sesi konseling rahasia hanya dapat dibuka oleh Konselor BK.', 'error');
+                        return;
+                    }
                     setFollowUpSession(session);
                     setFollowUpSantri(santri);
                 }}
                 onOpenSurat={(session, santri) => {
+                    if (!canWrite && isConfidential(session)) {
+                        showToast('Akses terbatas: Surat konseling rahasia hanya dapat dicetak oleh Konselor BK.', 'error');
+                        return;
+                    }
                     setSuratSession(session);
                     setSuratSantri(santri);
                 }}
@@ -564,7 +598,8 @@ const BK: React.FC = () => {
                                 const kamarName = santri?.kamarId ? (settings.kamar?.find((k) => k.id === santri.kamarId)?.nama || `Kamar #${santri.kamarId}`) : '-';
                                 const isExpanded = expandedRow === s.id;
                                 const isOverdue = s.tanggalBerikutnya && s.status !== 'Selesai' && s.tanggalBerikutnya < today;
-                                const isMasked = s.privasi === 'Sangat Rahasia' && !unmaskedRows[s.id];
+                                const isRowConfidential = isConfidential(s);
+                                const isMasked = !canWrite ? isRowConfidential : (s.privasi === 'Sangat Rahasia' && !unmaskedRows[s.id]);
 
                                 return (
                                     <React.Fragment key={s.id}>
@@ -626,35 +661,39 @@ const BK: React.FC = () => {
                                             <td className="p-3 text-gray-600 whitespace-nowrap">{s.konselor}</td>
                                             <td className="p-3 text-center">
                                                 <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                                    {/* Timeline Sesi Lanjutan Button */}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            if (santri) {
-                                                                setFollowUpSession(s);
-                                                                setFollowUpSantri(santri);
-                                                            }
-                                                        }}
-                                                        className="p-1.5 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50 transition"
-                                                        title="Catatan Sesi Lanjutan & Timeline"
-                                                    >
-                                                        <i className="bi bi-clock-history"></i>
-                                                    </button>
+                                                    {(canWrite || !isRowConfidential) && (
+                                                        <>
+                                                            {/* Timeline Sesi Lanjutan Button */}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (santri) {
+                                                                        setFollowUpSession(s);
+                                                                        setFollowUpSantri(santri);
+                                                                    }
+                                                                }}
+                                                                className="p-1.5 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50 transition"
+                                                                title="Catatan Sesi Lanjutan & Timeline"
+                                                            >
+                                                                <i className="bi bi-clock-history"></i>
+                                                            </button>
 
-                                                    {/* Cetak Surat Administrasi */}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            if (santri) {
-                                                                setSuratSession(s);
-                                                                setSuratSantri(santri);
-                                                            }
-                                                        }}
-                                                        className="p-1.5 rounded-lg border border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition"
-                                                        title="Cetak Surat Panggilan / Undangan Wali / Komitmen"
-                                                    >
-                                                        <i className="bi bi-printer"></i>
-                                                    </button>
+                                                            {/* Cetak Surat Administrasi */}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (santri) {
+                                                                        setSuratSession(s);
+                                                                        setSuratSantri(santri);
+                                                                    }
+                                                                }}
+                                                                className="p-1.5 rounded-lg border border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition"
+                                                                title="Cetak Surat Panggilan / Undangan Wali / Komitmen"
+                                                            >
+                                                                <i className="bi bi-printer"></i>
+                                                            </button>
+                                                        </>
+                                                    )}
 
                                                     {canWrite && (
                                                         <>
@@ -705,7 +744,7 @@ const BK: React.FC = () => {
                                                                     {s.privasi}
                                                                 </span>
 
-                                                                {s.privasi === 'Sangat Rahasia' && (
+                                                                {canWrite && s.privasi === 'Sangat Rahasia' && (
                                                                     <button
                                                                         type="button"
                                                                         onClick={(e) => toggleMask(s.id, e)}
@@ -736,17 +775,21 @@ const BK: React.FC = () => {
                                                         {isMasked ? (
                                                             <div className="p-6 bg-rose-50/50 border border-dashed border-rose-200 rounded-xl text-center text-gray-500">
                                                                 <i className="bi bi-shield-lock text-3xl text-rose-400"></i>
-                                                                <p className="mt-1 font-bold text-gray-700">Konten Sesi Sangat Rahasia Disamarkan</p>
+                                                                <p className="mt-1 font-bold text-gray-700">Konten Sesi {s.privasi} Disamarkan</p>
                                                                 <p className="text-[11px] text-gray-500 mb-2">
-                                                                    Untuk menjaga kerahasiaan santri di lingkungan kantor/sekolah, detail keluhan disembunyikan.
+                                                                    {canWrite
+                                                                        ? 'Untuk menjaga kerahasiaan santri di lingkungan kantor/sekolah, detail keluhan disembunyikan.'
+                                                                        : 'Rincian keluhan dan penanganan berstatus rahasia hanya dapat dibuka oleh Konselor BK.'}
                                                                 </p>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={(e) => toggleMask(s.id, e)}
-                                                                    className="px-3 py-1 bg-rose-600 text-white rounded-lg text-xs font-bold"
-                                                                >
-                                                                    Buka Tampilan Catatan
-                                                                </button>
+                                                                {canWrite && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => toggleMask(s.id, e)}
+                                                                        className="px-3 py-1 bg-rose-600 text-white rounded-lg text-xs font-bold"
+                                                                    >
+                                                                        Buka Tampilan Catatan
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         ) : (
                                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -803,7 +846,7 @@ const BK: React.FC = () => {
                                                                 )}
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                {santri && (
+                                                                {santri && (canWrite || !isRowConfidential) && (
                                                                     <>
                                                                         <button
                                                                             type="button"
@@ -856,7 +899,8 @@ const BK: React.FC = () => {
                     {filteredSessions.map((s) => {
                         const santri = santriList.find((sa) => sa.id === s.santriId);
                         const kamarName = santri?.kamarId ? (settings.kamar?.find((k) => k.id === santri.kamarId)?.nama || `Kamar #${santri.kamarId}`) : '-';
-                        const isMasked = s.privasi === 'Sangat Rahasia' && !unmaskedRows[s.id];
+                        const isRowConfidential = isConfidential(s);
+                        const isMasked = !canWrite ? isRowConfidential : (s.privasi === 'Sangat Rahasia' && !unmaskedRows[s.id]);
 
                         return (
                             <article key={s.id} className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-xs space-y-3 text-xs">
@@ -893,14 +937,18 @@ const BK: React.FC = () => {
 
                                 {isMasked ? (
                                     <div className="p-3 bg-rose-50 border border-dashed border-rose-200 rounded-lg text-center">
-                                        <p className="text-[11px] text-rose-700 font-bold">Catatan Sangat Rahasia Disamarkan</p>
-                                        <button
-                                            type="button"
-                                            onClick={(e) => toggleMask(s.id, e)}
-                                            className="mt-1 px-2.5 py-1 bg-rose-600 text-white rounded text-[10px] font-bold"
-                                        >
-                                            Buka Teks
-                                        </button>
+                                        <p className="text-[11px] text-rose-700 font-bold">Catatan {s.privasi} Disamarkan</p>
+                                        {canWrite ? (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => toggleMask(s.id, e)}
+                                                className="mt-1 px-2.5 py-1 bg-rose-600 text-white rounded text-[10px] font-bold"
+                                            >
+                                                Buka Teks
+                                            </button>
+                                        ) : (
+                                            <p className="text-[10px] text-rose-600 mt-0.5">Hanya dapat dibuka oleh Konselor BK.</p>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
@@ -926,7 +974,7 @@ const BK: React.FC = () => {
                                 <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                                     <span className="text-[11px] text-gray-400">Konselor: {s.konselor}</span>
                                     <div className="flex items-center gap-1.5">
-                                        {santri && (
+                                        {santri && (canWrite || !isRowConfidential) && (
                                             <>
                                                 <button
                                                     type="button"

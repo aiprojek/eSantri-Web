@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { KatalogBuku } from './perpustakaan/KatalogBuku';
 import { Sirkulasi } from './perpustakaan/Sirkulasi';
 import { CetakPerpus } from './perpustakaan/CetakPerpus';
@@ -11,6 +11,7 @@ import { PageHeader } from './common/PageHeader';
 import { HeaderTabs } from './common/HeaderTabs';
 import { formatRupiah } from '../utils/formatters';
 import { logActivity } from '../services/logService';
+import { generateSyncSafeId } from '../utils/idGenerator';
 
 const Perpustakaan: React.FC = () => {
     const { currentUser, showToast } = useAppContext();
@@ -20,9 +21,15 @@ const Perpustakaan: React.FC = () => {
 
     // Central Data Fetching for Library Module
     const bukuList = useLiveQuery(() => db.buku.filter(b => !b.deleted).toArray(), []) || [];
-    const sirkulasiList = useLiveQuery(() => db.sirkulasi.toArray(), []) || [];
+    const sirkulasiList = useLiveQuery(() => db.sirkulasi.filter(s => !s.deleted).toArray(), []) || [];
 
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.perpustakaan === 'write';
+
+    useEffect(() => {
+        if (!canWrite && activeTab === 'pengaturan') {
+            setActiveTab('katalog');
+        }
+    }, [canWrite, activeTab]);
 
     // Library Statistics & KPI metrics
     const stats = useMemo(() => {
@@ -50,15 +57,17 @@ const Perpustakaan: React.FC = () => {
     // Shared Actions
     const handleAddBuku = async (buku: Omit<Buku, 'id'>) => {
         if (!canWrite) return;
-        const newId = await db.buku.add({ ...buku, lastModified: Date.now() } as Buku);
+        const newId = generateSyncSafeId();
+        await db.buku.put({ ...buku, id: newId, deleted: false, lastModified: Date.now() } as Buku);
         void logActivity('INSERT', 'buku', String(newId), null, buku, staffName);
         showToast('Buku berhasil ditambahkan ke katalog', 'success');
     };
 
     const handleBulkAddBuku = async (data: Omit<Buku, 'id'>[]) => {
         if (!canWrite) return;
-        const withTs = data.map(b => ({ ...b, lastModified: Date.now() }));
-        await db.buku.bulkAdd(withTs as Buku[]);
+        const now = Date.now();
+        const withTs = data.map(b => ({ ...b, id: generateSyncSafeId(), deleted: false, lastModified: now }));
+        await db.buku.bulkPut(withTs as Buku[]);
         void logActivity('INSERT', 'buku', 'bulk', null, { count: data.length }, staffName);
         showToast(`${data.length} buku berhasil ditambahkan massal.`, 'success');
     };
@@ -111,17 +120,21 @@ const Perpustakaan: React.FC = () => {
          dueDate.setDate(today.getDate() + durationDays);
 
          await (db as any).transaction('rw', db.sirkulasi, db.buku, async () => {
+             const now = Date.now();
+             const sirkId = generateSyncSafeId();
              // Kurangi stok buku
-             await db.buku.update(bukuId, { stok: buku.stok - 1, lastModified: Date.now() });
+             await db.buku.update(bukuId, { stok: buku.stok - 1, lastModified: now });
              // Catat sirkulasi
-             const sirkId = await db.sirkulasi.add({
+             await db.sirkulasi.put({
+                 id: sirkId,
                  santriId,
                  bukuId,
                  tanggalPinjam: today.toISOString().split('T')[0],
                  tanggalKembaliSeharusnya: dueDate.toISOString().split('T')[0],
                  status: 'Dipinjam',
                  denda: 0,
-                 lastModified: Date.now()
+                 deleted: false,
+                 lastModified: now
              } as SirkulasiType);
              void logActivity('INSERT', 'sirkulasi', String(sirkId), null, { santriId, bukuId, dueDate: dueDate.toISOString().split('T')[0] }, staffName);
          });
@@ -205,7 +218,7 @@ const Perpustakaan: React.FC = () => {
                             { value: 'katalog', label: 'Katalog Koleksi', icon: 'bi-journal-bookmark-fill' },
                             { value: 'sirkulasi', label: 'Sirkulasi & Peminjaman', icon: 'bi-arrow-left-right' },
                             { value: 'cetak', label: 'Cetak Kartu & Label', icon: 'bi-printer-fill' },
-                            { value: 'pengaturan', label: 'Pengaturan & Kategori', icon: 'bi-gear-fill' },
+                            ...(canWrite ? [{ value: 'pengaturan' as const, label: 'Pengaturan & Kategori', icon: 'bi-gear-fill' }] : []),
                         ]}
                     />
                 }
@@ -332,7 +345,7 @@ const Perpustakaan: React.FC = () => {
                         onDelete={handleDeleteBuku}
                         onAdjustStok={handleAdjustStok}
                         onBulkAdd={handleBulkAddBuku}
-                        onOpenPengaturan={() => setActiveTab('pengaturan')}
+                        onOpenPengaturan={() => { if (canWrite) setActiveTab('pengaturan'); }}
                         canWrite={canWrite}
                     />
                 )}
@@ -344,14 +357,14 @@ const Perpustakaan: React.FC = () => {
                         onKembali={handleKembali}
                         onPerpanjang={handlePerpanjang}
                         initialFilter={sirkulasiInitialFilter}
-                        onOpenPengaturan={() => setActiveTab('pengaturan')}
+                        onOpenPengaturan={() => { if (canWrite) setActiveTab('pengaturan'); }}
                         canWrite={canWrite}
                     />
                 )}
                 {activeTab === 'cetak' && (
                     <CetakPerpus bukuList={bukuList} />
                 )}
-                {activeTab === 'pengaturan' && (
+                {activeTab === 'pengaturan' && canWrite && (
                     <PengaturanPerpus 
                         bukuList={bukuList}
                         canWrite={canWrite}

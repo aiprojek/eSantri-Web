@@ -1,5 +1,5 @@
 
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAppContext } from '../AppContext';
 import { Pendaftar, PsbConfig } from '../types';
@@ -10,6 +10,8 @@ import { PageHeader } from './common/PageHeader';
 import { HeaderTabs } from './common/HeaderTabs';
 import { getPsbAcademicYearOptions } from './psb/utils/psbUtils';
 import { PsbShareLinkModal } from './psb/modals/PsbShareLinkModal';
+import { generateSyncSafeId } from '../utils/idGenerator';
+import { logActivity } from '../services/logService';
 
 const PsbDashboard = React.lazy(() => import('./psb/PsbDashboard').then((module) => ({ default: module.PsbDashboard })));
 const PsbRekap = React.lazy(() => import('./psb/PsbRekap').then((module) => ({ default: module.PsbRekap })));
@@ -22,11 +24,17 @@ const PSB: React.FC = () => {
     const [isShareLinkModalOpen, setIsShareLinkModalOpen] = useState(false);
     
     // Reactive live query ensures Firebase Realtime updates from Hub replicate to UI instantly
-    const livePendaftarList = useLiveQuery(() => db.pendaftar.toArray(), []);
+    const livePendaftarList = useLiveQuery(() => db.pendaftar.filter(p => !p.deleted).toArray(), []);
     const pendaftarList = livePendaftarList || [];
 
     // Permission Check
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.psb === 'write';
+
+    useEffect(() => {
+        if (!canWrite && (activeTab === 'form' || activeTab === 'poster')) {
+            setActiveTab('dashboard');
+        }
+    }, [canWrite, activeTab]);
 
     // Fallback Config (Safe access)
     const psbConfig = settings.psbConfig || initialSettings.psbConfig;
@@ -47,20 +55,26 @@ const PSB: React.FC = () => {
     };
 
     const handleImportFromWA = (text: string) => {
+        if (!canWrite) return;
         try {
             const match = text.match(/PSB_START([\s\S]*?)PSB_END/);
             if (match && match[1]) {
                 const data = JSON.parse(match[1].trim());
+                const now = Date.now();
+                const newId = generateSyncSafeId();
                 const newPendaftar: Pendaftar = {
-                    id: Date.now(),
                     ...data,
-                    jenjangId: parseInt(data.jenjangId),
+                    id: newId,
+                    jenjangId: parseInt(data.jenjangId) || 0,
                     tanggalDaftar: data.tanggalDaftar || new Date().toISOString(),
                     status: 'Baru',
                     kewarganegaraan: 'WNI',
-                    gelombang: psbConfig.activeGelombang
+                    gelombang: psbConfig.activeGelombang,
+                    deleted: false,
+                    lastModified: now,
                 };
-                db.pendaftar.add(newPendaftar).then(() => {
+                db.pendaftar.put(newPendaftar).then(() => {
+                    void logActivity('INSERT', 'pendaftar', newId, null, { namaLengkap: newPendaftar.namaLengkap, source: 'WhatsApp' }, currentUser?.username || 'Admin');
                     fetchPendaftar();
                     showToast('Data dari WhatsApp berhasil diimpor.', 'success');
                 });
@@ -103,8 +117,12 @@ const PSB: React.FC = () => {
                         tabs={[
                             { value: 'dashboard', label: 'Dashboard', icon: 'bi-speedometer2' },
                             { value: 'rekap', label: 'Rekap Pendaftar', icon: 'bi-people-fill' },
-                            ...(canWrite ? [{ value: 'form' as const, label: 'Desain Formulir', icon: 'bi-ui-checks' }] : []),
-                            { value: 'poster', label: 'Poster AI', icon: 'bi-stars' },
+                            ...(canWrite
+                                ? [
+                                      { value: 'form' as const, label: 'Desain Formulir', icon: 'bi-ui-checks' },
+                                      { value: 'poster' as const, label: 'Poster AI', icon: 'bi-stars' },
+                                  ]
+                                : []),
                         ]}
                     />
                 }
@@ -113,7 +131,7 @@ const PSB: React.FC = () => {
                 {activeTab === 'dashboard' && <PsbDashboard pendaftarList={pendaftarList} config={psbConfig} settings={settings} onSaveConfig={handleSaveConfig} />}
                 {activeTab === 'rekap' && <PsbRekap pendaftarList={pendaftarList} settings={settings} onImportFromWA={handleImportFromWA} onUpdateList={fetchPendaftar} canWrite={canWrite} onSaveConfig={handleSaveConfig} />}
                 {activeTab === 'form' && canWrite && <PsbFormBuilder config={psbConfig} settings={settings} onSave={handleSaveConfig} />}
-                {activeTab === 'poster' && <PsbPosterMaker config={psbConfig} onSave={handleSaveConfig} settings={settings} />}
+                {activeTab === 'poster' && canWrite && <PsbPosterMaker config={psbConfig} onSave={handleSaveConfig} settings={settings} />}
             </Suspense>
 
             {isShareLinkModalOpen && (

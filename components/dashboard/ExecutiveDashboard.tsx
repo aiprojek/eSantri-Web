@@ -6,17 +6,24 @@ import {
 } from 'recharts';
 import { getDashboardAnalytics, AnalyticsData } from '../../services/analyticsService';
 import { generateDashboardInsight } from '../../services/aiService';
+import { useAppContext } from '../../AppContext';
 
 const COLORS = ['#0d9488', '#0891b2', '#4f46e5', '#7c3aed', '#c026d3', '#db2777'];
 
 export const ExecutiveDashboard: React.FC = () => {
+    const { currentUser } = useAppContext();
+    const canViewFinance =
+        currentUser?.role === 'admin' ||
+        (Boolean(currentUser?.permissions?.keuangan) && currentUser?.permissions?.keuangan !== 'none') ||
+        (Boolean(currentUser?.permissions?.bukukas) && currentUser?.permissions?.bukukas !== 'none');
+
     const [data, setData] = useState<AnalyticsData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [insight, setInsight] = useState<string>("Menganalisis data...");
 
     useEffect(() => {
         const fetch = async () => {
-            const result = await getDashboardAnalytics();
+            const result = await getDashboardAnalytics({ includeCashflow: canViewFinance });
             setData(result);
             setIsLoading(false);
             
@@ -25,7 +32,7 @@ export const ExecutiveDashboard: React.FC = () => {
             setInsight(aiInsight);
         };
         fetch();
-    }, []);
+    }, [canViewFinance]);
 
     if (isLoading || !data) {
         return (
@@ -53,22 +60,30 @@ export const ExecutiveDashboard: React.FC = () => {
                     <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
                         <i className="bi bi-cash-stack text-green-500"></i> Tren Arus Kas (6 Bulan Terakhir)
                     </h3>
-                    <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={data.cashflow}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                                <Tooltip 
-                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(value: any) => [`Rp ${Number(value).toLocaleString('id-ID')}`, '']}
-                                />
-                                <Legend iconType="circle" wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
-                                <Bar dataKey="income" name="Pemasukan" fill="#0d9488" radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="expense" name="Pengeluaran" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
+                    {canViewFinance ? (
+                        <div className="h-64">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={data.cashflow}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                                    <Tooltip 
+                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                        formatter={(value: any) => [`Rp ${Number(value).toLocaleString('id-ID')}`, '']}
+                                    />
+                                    <Legend iconType="circle" wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
+                                    <Bar dataKey="income" name="Pemasukan" fill="#0d9488" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="expense" name="Pengeluaran" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="h-64 flex flex-col items-center justify-center text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 p-6">
+                            <i className="bi bi-shield-lock-fill text-3xl text-slate-400 mb-2"></i>
+                            <p className="text-sm font-semibold text-slate-700">Data Keuangan Terbatas</p>
+                            <p className="text-xs text-slate-500 mt-1">Grafik arus kas hanya ditampilkan bagi pengguna dengan hak akses Keuangan atau Buku Kas.</p>
+                        </div>
+                    )}
                 </div>
 
                 {/* 2. Tahfizh Activity Trends */}

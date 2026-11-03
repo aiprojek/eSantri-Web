@@ -25,10 +25,11 @@ type AudienceType = 'santri' | 'psb';
 export const WhatsAppCenter: React.FC = () => {
     const { santriList } = useSantriContext();
     const { settings, showToast, onSaveSettings, showConfirmation, currentUser } = useAppContext();
+    const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.whatsapp === 'write';
 
     // Reactive DB queries
-    const liveTagihan = useLiveQuery(() => db.tagihan.toArray(), []) || [];
-    const livePendaftar = useLiveQuery(() => db.pendaftar.toArray(), []) || [];
+    const liveTagihan = useLiveQuery(() => db.tagihan.filter((t) => !t.deleted).toArray(), []) || [];
+    const livePendaftar = useLiveQuery(() => db.pendaftar.filter((p) => !p.deleted).toArray(), []) || [];
     const liveAuditLogs = useLiveQuery(
         () => db.auditLogs.where('table_name').equals('whatsapp_logs').toArray(),
         []
@@ -339,6 +340,10 @@ export const WhatsAppCenter: React.FC = () => {
 
     // Single send handler
     const handleSendIndividual = async (recipient: Santri | Pendaftar, isPsb: boolean) => {
+        if (!canWrite) {
+            showToast('Mode baca saja: Anda tidak memiliki izin mengirim pesan WhatsApp.', 'error');
+            return;
+        }
         const rawPhone = isPsb ? getPsbPhone(recipient as Pendaftar) : getSantriPhone(recipient as Santri);
         const cleanPhone = normalizePhoneNumber(rawPhone);
 
@@ -371,6 +376,10 @@ export const WhatsAppCenter: React.FC = () => {
 
     // Prepare Bulk Send Queue
     const handleOpenBulkQueue = () => {
+        if (!canWrite) {
+            showToast('Mode baca saja: Anda tidak memiliki izin mengirim antrean pesan WhatsApp.', 'error');
+            return;
+        }
         if (!isOnline) {
             showToast('Perangkat sedang offline. Pengiriman WhatsApp memerlukan koneksi internet.', 'error');
             return;
@@ -464,6 +473,7 @@ export const WhatsAppCenter: React.FC = () => {
     const persistTemplates = async (
         nextTemplates: Array<{ id: string; name: string; content: string; audience?: 'santri' | 'psb' | 'all'; lastModified?: number }>
     ) => {
+        if (!canWrite) return;
         await onSaveSettings({
             ...settings,
             waTemplates: nextTemplates,
@@ -472,6 +482,7 @@ export const WhatsAppCenter: React.FC = () => {
     };
 
     const openCreateTemplateModal = () => {
+        if (!canWrite) return;
         setEditingTemplateId(null);
         setTemplateNameInput('');
         setTemplateContentInput(customMessage);
@@ -479,6 +490,7 @@ export const WhatsAppCenter: React.FC = () => {
     };
 
     const openEditTemplateModal = () => {
+        if (!canWrite) return;
         const current = customTemplates.find((t) => t.id === selectedTemplate);
         if (!current) {
             showToast('Template bawaan tidak dapat diedit. Simpan sebagai template baru.', 'info');
@@ -491,6 +503,7 @@ export const WhatsAppCenter: React.FC = () => {
     };
 
     const handleSaveTemplate = async () => {
+        if (!canWrite) return;
         const name = templateNameInput.trim();
         const content = templateContentInput.trim();
         if (!name || !content) {
@@ -517,6 +530,7 @@ export const WhatsAppCenter: React.FC = () => {
     };
 
     const handleDeleteTemplate = () => {
+        if (!canWrite) return;
         const current = customTemplates.find((t) => t.id === selectedTemplate);
         if (!current) {
             showToast('Template bawaan sistem tidak dapat dihapus.', 'info');
@@ -582,18 +596,20 @@ export const WhatsAppCenter: React.FC = () => {
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
                         {/* Gateway Settings Button */}
-                        <button
-                            type="button"
-                            onClick={() => setIsGatewayModalOpen(true)}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs"
-                            title="Pengaturan WhatsApp Gateway"
-                        >
-                            <i className="bi bi-gear-wide-connected text-teal-600" />
-                            <span>Saluran:</span>
-                            <span className="font-bold text-teal-700">
-                                {isGatewayActive ? `${activeGatewayConfig.provider.toUpperCase()} (API)` : 'Manual (wa.me)'}
-                            </span>
-                        </button>
+                        {canWrite && (
+                            <button
+                                type="button"
+                                onClick={() => setIsGatewayModalOpen(true)}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs"
+                                title="Pengaturan WhatsApp Gateway"
+                            >
+                                <i className="bi bi-gear-wide-connected text-teal-600" />
+                                <span>Saluran:</span>
+                                <span className="font-bold text-teal-700">
+                                    {isGatewayActive ? `${activeGatewayConfig.provider.toUpperCase()} (API)` : 'Manual (wa.me)'}
+                                </span>
+                            </button>
+                        )}
 
                         {/* Status Online Pill */}
                         <span
@@ -683,29 +699,31 @@ export const WhatsAppCenter: React.FC = () => {
                                 ))}
                             </select>
 
-                            <div className="mt-2.5 grid grid-cols-3 gap-2">
-                                <button
-                                    type="button"
-                                    onClick={openCreateTemplateModal}
-                                    className="app-button-secondary px-2.5 py-1.5 text-xs flex items-center justify-center gap-1 rounded-lg"
-                                >
-                                    <i className="bi bi-plus-circle" /> Tambah
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={openEditTemplateModal}
-                                    className="app-button-secondary px-2.5 py-1.5 text-xs flex items-center justify-center gap-1 rounded-lg"
-                                >
-                                    <i className="bi bi-pencil-square" /> Edit
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleDeleteTemplate}
-                                    className="app-button-secondary px-2.5 py-1.5 text-xs flex items-center justify-center gap-1 text-red-600 rounded-lg hover:bg-red-50"
-                                >
-                                    <i className="bi bi-trash" /> Hapus
-                                </button>
-                            </div>
+                            {canWrite && (
+                                <div className="mt-2.5 grid grid-cols-3 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={openCreateTemplateModal}
+                                        className="app-button-secondary px-2.5 py-1.5 text-xs flex items-center justify-center gap-1 rounded-lg"
+                                    >
+                                        <i className="bi bi-plus-circle" /> Tambah
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={openEditTemplateModal}
+                                        className="app-button-secondary px-2.5 py-1.5 text-xs flex items-center justify-center gap-1 rounded-lg"
+                                    >
+                                        <i className="bi bi-pencil-square" /> Edit
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleDeleteTemplate}
+                                        className="app-button-secondary px-2.5 py-1.5 text-xs flex items-center justify-center gap-1 text-red-600 rounded-lg hover:bg-red-50"
+                                    >
+                                        <i className="bi bi-trash" /> Hapus
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Interactive Variable Insertion Chips */}
@@ -1430,13 +1448,15 @@ export const WhatsAppCenter: React.FC = () => {
             />
 
             {/* WhatsApp Gateway Config Modal */}
-            <WaGatewayModal
-                isOpen={isGatewayModalOpen}
-                onClose={() => setIsGatewayModalOpen(false)}
-                settings={settings}
-                onSaveSettings={onSaveSettings}
-                showToast={showToast}
-            />
+            {canWrite && (
+                <WaGatewayModal
+                    isOpen={isGatewayModalOpen}
+                    onClose={() => setIsGatewayModalOpen(false)}
+                    settings={settings}
+                    onSaveSettings={onSaveSettings}
+                    showToast={showToast}
+                />
+            )}
         </div>
     );
 };

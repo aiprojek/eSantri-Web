@@ -1,6 +1,8 @@
 
 import React, { useMemo, useState } from 'react';
 import { ReportType } from '../../types';
+import { useAppContext } from '../../AppContext';
+import { canAccessReport } from '../../utils/reportPermissions';
 
 interface ReportSelectionHomeProps {
     onSelectReport: (id: ReportType) => void;
@@ -15,6 +17,7 @@ interface ReportItem {
 }
 
 export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSelectReport }) => {
+    const { currentUser } = useAppContext();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     
@@ -93,13 +96,14 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
         }
     ], []);
 
-    // Filter categories based on category selection and search query
+    // Filter categories based on user RBAC, category selection, and search query
     const filteredCategories = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
         return categories
             .filter(cat => selectedCategory === 'all' || cat.key === selectedCategory)
             .map(cat => {
                 const matchedItems = cat.items.filter(item => {
+                    if (!canAccessReport(currentUser, item.id as ReportType)) return false;
                     if (!query) return true;
                     return item.title.toLowerCase().includes(query) || item.description.toLowerCase().includes(query);
                 });
@@ -109,7 +113,7 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
                 };
             })
             .filter(cat => cat.items.length > 0);
-    }, [categories, searchQuery, selectedCategory]);
+    }, [categories, currentUser, searchQuery, selectedCategory]);
 
     const totalMatchedReports = useMemo(() => {
         return filteredCategories.reduce((acc, cat) => acc + cat.items.length, 0);

@@ -283,8 +283,7 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
             });
 
             const matchedMapel = findMapelInMasterPool(
-                tk.label,
-                tk.key,
+                [tk.label, tk.key],
                 settings.mataPelajaran || [],
                 kelasObj?.jenjangId
             );

@@ -35,6 +35,11 @@ const PortalManagement: React.FC = () => {
         0
     );
 
+    const canWrite =
+        currentUser?.role === 'admin' ||
+        currentUser?.permissions?.portalwali === 'write' ||
+        currentUser?.permissions?.pengaturan === 'write';
+
     const latestDataChangeTime = useLiveQuery(
         async () => {
             const tables = [
@@ -49,15 +54,15 @@ const PortalManagement: React.FC = () => {
                 db.sirkulasi,
                 db.raporRecords
             ];
+            const lastItems = await Promise.all(
+                tables.map((tbl) => tbl.orderBy('lastModified').last())
+            );
             let maxTime = 0;
-            for (const tbl of tables) {
-                const arr = await tbl.toArray();
-                for (const item of arr as any[]) {
-                    const t = typeof item.lastModified === 'number'
-                        ? item.lastModified
-                        : (item.lastModified ? new Date(item.lastModified).getTime() : 0);
-                    if (t > maxTime) maxTime = t;
-                }
+            for (const item of lastItems) {
+                if (!item) continue;
+                const raw = (item as any).lastModified;
+                const t = typeof raw === 'number' ? raw : (raw ? new Date(raw).getTime() : 0);
+                if (t > maxTime) maxTime = t;
             }
             return maxTime;
         },
@@ -78,6 +83,10 @@ const PortalManagement: React.FC = () => {
     }, [settings]);
 
     const handleSyncToPortal = async () => {
+        if (!canWrite) {
+            showToast('Mode baca saja: Anda tidak memiliki izin menyinkronkan Portal Wali.', 'error');
+            return;
+        }
         setIsSyncingPortal(true);
         try {
             const res = await syncPortalBridgeToGas(localSettings);
@@ -142,6 +151,10 @@ const PortalManagement: React.FC = () => {
     };
 
     const handleDownloadStandalone = () => {
+        if (!canWrite) {
+            showToast('Mode baca saja: Anda tidak memiliki izin mengunduh paket konfigurasi Portal Wali.', 'error');
+            return;
+        }
         try {
             if (!localSettings.portalConfig?.gasEndpoint?.trim()) {
                 showToast('Isi URL Web App GAS di pengaturan bawah terlebih dahulu.', 'error');
@@ -188,14 +201,16 @@ const PortalManagement: React.FC = () => {
                                 </p>
                             </div>
                         </div>
-                        <button
-                            type="button"
-                            onClick={handleSyncToPortal}
-                            disabled={isSyncingPortal}
-                            className="shrink-0 rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-1.5 text-xs font-bold transition-colors disabled:opacity-60"
-                        >
-                            {isSyncingPortal ? 'Menyinkronkan...' : 'Sinkronkan ke Portal'}
-                        </button>
+                        {canWrite && (
+                            <button
+                                type="button"
+                                onClick={handleSyncToPortal}
+                                disabled={isSyncingPortal}
+                                className="shrink-0 rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-1.5 text-xs font-bold transition-colors disabled:opacity-60"
+                            >
+                                {isSyncingPortal ? 'Menyinkronkan...' : 'Sinkronkan ke Portal'}
+                            </button>
+                        )}
                     </div>
                 )}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
@@ -243,26 +258,33 @@ const PortalManagement: React.FC = () => {
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                        <button
-                            type="button"
-                            onClick={handleSyncToPortal}
-                            disabled={isSyncingPortal}
-                            className="app-button-primary inline-flex items-center gap-2 px-5 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            <i className={`bi ${isSyncingPortal ? 'bi-arrow-repeat animate-spin' : 'bi-cloud-arrow-up-fill'}`}></i>
-                            {isSyncingPortal ? 'Menyinkronkan Data ke GAS...' : 'Sinkronkan Sekarang ke Portal'}
-                        </button>
+                    {canWrite ? (
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            <button
+                                type="button"
+                                onClick={handleSyncToPortal}
+                                disabled={isSyncingPortal}
+                                className="app-button-primary inline-flex items-center gap-2 px-5 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <i className={`bi ${isSyncingPortal ? 'bi-arrow-repeat animate-spin' : 'bi-cloud-arrow-up-fill'}`}></i>
+                                {isSyncingPortal ? 'Menyinkronkan Data ke GAS...' : 'Sinkronkan Sekarang ke Portal'}
+                            </button>
 
-                        <button
-                            type="button"
-                            onClick={handleDownloadStandalone}
-                            className="inline-flex items-center gap-2 rounded-xl border border-teal-600 bg-teal-50/70 px-4 py-2.5 text-xs font-bold text-teal-800 hover:bg-teal-100 transition-colors"
-                        >
-                            <i className="bi bi-file-earmark-code-fill"></i>
-                            Download HTML Mandiri (Cloudflare Pages)
-                        </button>
-                    </div>
+                            <button
+                                type="button"
+                                onClick={handleDownloadStandalone}
+                                className="inline-flex items-center gap-2 rounded-xl border border-teal-600 bg-teal-50/70 px-4 py-2.5 text-xs font-bold text-teal-800 hover:bg-teal-100 transition-colors"
+                            >
+                                <i className="bi bi-file-earmark-code-fill"></i>
+                                Download HTML Mandiri (Cloudflare Pages)
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                            <i className="bi bi-lock-fill"></i>
+                            Mode Lihat Saja: Hubungi Admin atau Operator Portal Wali untuk mengubah konfigurasi & sinkronisasi.
+                        </div>
+                    )}
 
                     <div className="flex items-center gap-2 text-xs text-slate-500">
                         <i className="bi bi-shield-lock-fill text-teal-600"></i>
@@ -275,7 +297,8 @@ const PortalManagement: React.FC = () => {
                 <TabPortal
                     localSettings={localSettings}
                     setLocalSettings={setLocalSettings}
-                    onSaveSettings={onSaveSettings}
+                    onSaveSettings={canWrite ? onSaveSettings : undefined}
+                    canWrite={canWrite}
                 />
             </Suspense>
         </div>

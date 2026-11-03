@@ -1,21 +1,15 @@
 import { TransaksiKoperasi, PondokSettings, KoperasiSettingsConfig } from '../../types';
 import { formatRupiah } from '../../utils/formatters';
 import { printToPdfNative } from '../../utils/pdfGenerator';
+import { generateSyncSafeId } from '../../utils/idGenerator';
 
 export type KoperasiSettings = KoperasiSettingsConfig;
-
-let koperasiIdSeq = Math.floor(Math.random() * 500);
-const deviceSalt = Math.floor(Math.random() * 500);
 
 /**
  * Menghasilkan ID numerik unik yang bebas bentrok (collision-safe) untuk sinkronisasi
  * multi-admin / multi-kasir baik di mode Hub & Spoke maupun Cloud Realtime.
  */
-export const generateKoperasiId = (): number => {
-    koperasiIdSeq = (koperasiIdSeq + 1) % 1000;
-    const subMs = (koperasiIdSeq + deviceSalt) % 1000;
-    return Date.now() * 1000 + subMs;
-};
+export const generateKoperasiId = (): number => generateSyncSafeId();
 
 export const getKoperasiSettings = (pondokSettings?: PondokSettings): KoperasiSettings => {
     const defaults: KoperasiSettings = {

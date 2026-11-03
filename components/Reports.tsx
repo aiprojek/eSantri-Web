@@ -9,6 +9,7 @@ import { useReportConfig } from '../hooks/useReportConfig';
 import { PageHeader } from './common/PageHeader';
 import { formatAcademicYearDisplay, getAcademicYearOptions, getDefaultAcademicYear } from '../utils/academicYear';
 import { isSantriPutra, isSantriPutri } from '../utils/formatters';
+import { canAccessReport, hasModulePermission } from '../utils/reportPermissions';
 const ReportSelectionHome = lazy(() =>
   import('./reports/ReportSelectionHome').then((module) => ({ default: module.ReportSelectionHome }))
 );
@@ -26,7 +27,7 @@ const ReportsPanelFallback = () => (
 );
 
 const Reports: React.FC = () => {
-  const { settings, showToast } = useAppContext();
+  const { settings, showToast, currentUser } = useAppContext();
   const { santriList, pendaftarList, absensiList, jurnalMengajarList, tahfizhList, kesehatanRecords, bkSessions } = useSantriContext();
   const { tagihanList, pembayaranList, transaksiSaldoList, transaksiKasList } = useFinanceContext();
   
@@ -150,15 +151,17 @@ const Reports: React.FC = () => {
 
   // -- Handlers --
   const handleSelectReport = (type: ReportType) => {
+      if (!canAccessReport(currentUser, type)) {
+          showToast('Anda tidak memiliki izin akses untuk membuka laporan ini.', 'error');
+          return;
+      }
       setActiveReportType(type);
       reportConfig.setActiveReport(type);
-      // Reset basic filters but keep some if useful? Better reset for clean slate.
       setFilters(f => ({ ...f, jenjangId: '', kelasId: '', rombelId: '', status: '', gedungId: '' })); 
       setPreviewContent(null);
       setPrintedSantriList(null);
       setPageCount(0);
       setCurrentView('detail');
-      // Also reset internal report options
       reportConfig.resetReportSpecificState();
       reportConfig.options.setTahunAjaran(filters.tahunAjaran || defaultAcademicYear);
   };
@@ -178,20 +181,58 @@ const Reports: React.FC = () => {
           if (key === 'kelasId') { next.rombelId = ''; }
           return next;
       });
-      // Clear preview on filter change to avoid stale data visualization? 
-      // Or keep it? Let's clear to force user to click "Generate" again for performance.
       setPreviewContent(null); 
   };
 
   const handleGenerate = () => {
       if (!activeReportType) return;
+      if (!canAccessReport(currentUser, activeReportType)) {
+          showToast('Anda tidak memiliki izin akses untuk mencetak laporan ini.', 'error');
+          return;
+      }
       setIsGenerating(true);
       resetGuidanceFlag();
 
+      const canReadKeuangan = hasModulePermission(currentUser, 'keuangan', 'read');
+      const canReadBukuKas = hasModulePermission(currentUser, 'bukukas', 'read');
+      const canReadKesehatan = hasModulePermission(currentUser, 'kesehatan', 'read');
+      const canReadPsb = hasModulePermission(currentUser, 'psb', 'read');
+      const canReadAbsensi = hasModulePermission(currentUser, 'absensi', 'read');
+      const canReadAkademik = hasModulePermission(currentUser, 'akademik', 'read');
+      const canReadTahfizh = hasModulePermission(currentUser, 'tahfizh', 'read');
+      const canReadBk = hasModulePermission(currentUser, 'bk', 'read');
+      const canWriteBk = hasModulePermission(currentUser, 'bk', 'write');
+
       // Artificial timeout to allow UI to render spinner
       setTimeout(() => {
+          const safeTagihanList = canReadKeuangan ? tagihanList : [];
+          const safePembayaranList = canReadKeuangan ? pembayaranList : [];
+          const safeSaldoList = canReadKeuangan ? transaksiSaldoList : [];
+          const safeKasList = canReadBukuKas ? transaksiKasList : [];
+          const safeKesehatanRecords = canReadKesehatan ? kesehatanRecords : [];
+          const safePendaftarList = canReadPsb ? pendaftarList : [];
+          const safeAbsensiList = canReadAbsensi ? absensiList : [];
+          const safeJurnalList = (canReadAkademik || canReadAbsensi) ? jurnalMengajarList : [];
+          const safeTahfizhList = canReadTahfizh ? tahfizhList : [];
+          const safeBkSessions = !canReadBk
+              ? []
+              : canWriteBk
+                  ? bkSessions
+                  : bkSessions.map((session) =>
+                        session.privasi === 'Rahasia' || session.privasi === 'Sangat Rahasia'
+                            ? {
+                                  ...session,
+                                  keluhan: '[Dirahasiakan - Khusus Konselor BK]',
+                                  penanganan: '[Dirahasiakan]',
+                                  hasil: session.hasil ? '[Dirahasiakan]' : undefined,
+                                  komitmenSantri: session.komitmenSantri ? '[Dirahasiakan]' : undefined,
+                                  followUpLogs: [],
+                              }
+                            : session
+                    );
+
           // Prepare filtered data for export usage
-          const filteredKasData = activeReportType === ReportType.LaporanArusKas ? transaksiKasList.filter(t => {
+          const filteredKasData = activeReportType === ReportType.LaporanArusKas && canReadBukuKas ? safeKasList.filter(t => {
               const d = new Date(t.tanggal);
               const s = new Date(reportConfig.options.kasStartDate);
               const e = new Date(reportConfig.options.kasEndDate + 'T23:59:59');
@@ -201,7 +242,7 @@ const Reports: React.FC = () => {
           // Save to state for Export button to access
           setExportData({
               transaksiKas: filteredKasData,
-              tagihanList: tagihanList, // For finance summary
+              tagihanList: safeTagihanList,
           });
 
           const options: any = { 
@@ -209,18 +250,18 @@ const Reports: React.FC = () => {
               paperSize: reportConfig.paperSize, 
               margin: reportConfig.margin,
               filteredGedung,
-              // Inject heavy data only when needed
-              tagihanList: [ReportType.FinanceSummary, ReportType.RekeningKoranSantri, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? tagihanList : [],
-              pembayaranList: activeReportType === ReportType.FinanceSummary || activeReportType === ReportType.RekeningKoranSantri ? pembayaranList : [],
-              transaksiSaldoList: activeReportType === ReportType.RekeningKoranSantri ? transaksiSaldoList : [],
+              // Inject heavy data only when needed AND authorized
+              tagihanList: [ReportType.FinanceSummary, ReportType.RekeningKoranSantri, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? safeTagihanList : [],
+              pembayaranList: activeReportType === ReportType.FinanceSummary || activeReportType === ReportType.RekeningKoranSantri ? safePembayaranList : [],
+              transaksiSaldoList: activeReportType === ReportType.RekeningKoranSantri ? safeSaldoList : [],
               filteredKas: filteredKasData,
-              allKas: [ReportType.LaporanArusKas, ReportType.OperasionalHarian].includes(activeReportType) ? transaksiKasList : [],
-              jurnalMengajarList: [ReportType.JurnalMengajar, ReportType.KinerjaPengajar, ReportType.OperasionalHarian].includes(activeReportType) ? jurnalMengajarList : [],
-              absensiList: [ReportType.OperasionalHarian, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? absensiList : [],
-              tahfizhList: activeReportType === ReportType.TahfizhProgress ? tahfizhList : [],
-              pendaftarList: [ReportType.OperasionalHarian, ReportType.EfektivitasPSB].includes(activeReportType) ? pendaftarList : [],
-              kesehatanRecords: [ReportType.RekapKesehatan, ReportType.OperasionalHarian, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? kesehatanRecords : [],
-              bkSessions: [ReportType.RekapKonseling, ReportType.OperasionalHarian, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? bkSessions : []
+              allKas: [ReportType.LaporanArusKas, ReportType.OperasionalHarian].includes(activeReportType) ? safeKasList : [],
+              jurnalMengajarList: [ReportType.JurnalMengajar, ReportType.KinerjaPengajar, ReportType.OperasionalHarian].includes(activeReportType) ? safeJurnalList : [],
+              absensiList: [ReportType.OperasionalHarian, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? safeAbsensiList : [],
+              tahfizhList: activeReportType === ReportType.TahfizhProgress ? safeTahfizhList : [],
+              pendaftarList: [ReportType.OperasionalHarian, ReportType.EfektivitasPSB].includes(activeReportType) ? safePendaftarList : [],
+              kesehatanRecords: [ReportType.RekapKesehatan, ReportType.OperasionalHarian, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? safeKesehatanRecords : [],
+              bkSessions: [ReportType.RekapKonseling, ReportType.OperasionalHarian, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? safeBkSessions : []
           };
 
           // Logic for generating preview content

@@ -9,31 +9,35 @@ export interface AnalyticsData {
     santriStats: { status: string, count: number }[];
 }
 
-export const getDashboardAnalytics = async (): Promise<AnalyticsData> => {
+export const getDashboardAnalytics = async (options?: { includeCashflow?: boolean }): Promise<AnalyticsData> => {
+    const includeCashflow = options?.includeCashflow !== false;
+
     // 1. Cashflow (Last 6 Months)
     const cashflow: { month: string, income: number, expense: number }[] = [];
-    for (let i = 5; i >= 0; i--) {
-        const date = subMonths(new Date(), i);
-        const start = startOfMonth(date).toISOString();
-        const end = endOfMonth(date).toISOString();
-        
-        const transactions = await db.transaksiKas
-            .where('tanggal')
-            .between(start, end, true, true)
-            .filter(t => !t.deleted)
-            .toArray();
-        const income = transactions.filter(t => t.jenis === 'Pemasukan').reduce((acc, curr) => acc + curr.jumlah, 0);
-        const expense = transactions.filter(t => t.jenis === 'Pengeluaran').reduce((acc, curr) => acc + curr.jumlah, 0);
-        
-        cashflow.push({
-            month: format(date, 'MMM'),
-            income,
-            expense
-        });
+    if (includeCashflow) {
+        for (let i = 5; i >= 0; i--) {
+            const date = subMonths(new Date(), i);
+            const start = startOfMonth(date).toISOString();
+            const end = endOfMonth(date).toISOString();
+
+            const transactions = await db.transaksiKas
+                .where('tanggal')
+                .between(start, end, true, true)
+                .filter(t => !t.deleted)
+                .toArray();
+            const income = transactions.filter(t => t.jenis === 'Pemasukan').reduce((acc, curr) => acc + curr.jumlah, 0);
+            const expense = transactions.filter(t => t.jenis === 'Pengeluaran').reduce((acc, curr) => acc + curr.jumlah, 0);
+
+            cashflow.push({
+                month: format(date, 'MMM'),
+                income,
+                expense
+            });
+        }
     }
 
     // 2. Health Trends (Top Diagnoses)
-    const healthRecords = await db.kesehatanRecords.limit(500).toArray();
+    const healthRecords = await db.kesehatanRecords.filter(r => !r.deleted).limit(500).toArray();
     const diagnosisCounts: { [key: string]: number } = {};
     healthRecords.forEach(r => {
         const diag = r.keluhan || 'Lain-lain';
@@ -48,9 +52,13 @@ export const getDashboardAnalytics = async (): Promise<AnalyticsData> => {
     const tahfizhProgress: { month: string, count: number }[] = [];
     for (let i = 5; i >= 0; i--) {
         const date = subMonths(new Date(), i);
-        const start = startOfMonth(date).getTime();
-        const end = endOfMonth(date).getTime();
-        const count = await db.tahfizh.where('tanggal').between(start, end).count();
+        const startStr = format(startOfMonth(date), 'yyyy-MM-dd');
+        const endStr = format(endOfMonth(date), 'yyyy-MM-dd');
+        const count = await db.tahfizh
+            .where('tanggal')
+            .between(startStr, endStr, true, true)
+            .filter(t => !t.deleted)
+            .count();
         tahfizhProgress.push({
             month: format(date, 'MMM'),
             count
@@ -58,7 +66,7 @@ export const getDashboardAnalytics = async (): Promise<AnalyticsData> => {
     }
 
     // 4. Santri Status Stats
-    const santri = await db.santri.toArray();
+    const santri = await db.santri.filter(s => !s.deleted).toArray();
     const stats: { [key: string]: number } = {};
     santri.forEach(s => {
         stats[s.status] = (stats[s.status] || 0) + 1;

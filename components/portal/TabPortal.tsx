@@ -13,6 +13,7 @@ interface TabPortalProps {
     localSettings: PondokSettings;
     setLocalSettings: React.Dispatch<React.SetStateAction<PondokSettings>>;
     onSaveSettings?: (newSettings: PondokSettings) => Promise<void>;
+    canWrite?: boolean;
 }
 
 const DEFAULT_PORTAL_CONFIG: PortalConfig = {
@@ -41,8 +42,14 @@ export const TabPortal: React.FC<TabPortalProps> = ({
     localSettings,
     setLocalSettings,
     onSaveSettings,
+    canWrite: canWriteProp,
 }) => {
-    const { showToast, settings } = useAppContext();
+    const { showToast, settings, currentUser } = useAppContext();
+    const canWrite =
+        canWriteProp ??
+        (currentUser?.role === 'admin' ||
+            currentUser?.permissions?.portalwali === 'write' ||
+            currentUser?.permissions?.pengaturan === 'write');
     const [showGasScriptModal, setShowGasScriptModal] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -61,6 +68,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({
         key: K,
         value: PortalConfig[K]
     ) => {
+        if (!canWrite) return;
         setLocalSettings((prev) => ({
             ...prev,
             portalConfig: {
@@ -94,6 +102,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({
     };
 
     const handleDownloadStandalone = () => {
+        if (!canWrite) return;
         try {
             if (!portalConfig.gasEndpoint?.trim()) {
                 showToast('Isi URL Web App Google Apps Script terlebih dahulu.', 'error');
@@ -107,6 +116,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({
     };
 
     const handleSyncNow = async () => {
+        if (!canWrite) return;
         if (!portalConfig.gasEndpoint?.trim()) {
             showToast('Isi URL Web App GAS terlebih dahulu.', 'error');
             return;
@@ -147,7 +157,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({
     };
 
     const handleSaveConfiguration = async () => {
-        if (!onSaveSettings) return;
+        if (!canWrite || !onSaveSettings) return;
         setIsSaving(true);
         try {
             const dataToSave = { ...localSettings };
@@ -285,14 +295,16 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                         </div>
                     </label>
 
-                    <button
-                        type="button"
-                        onClick={() => setShowGasScriptModal(true)}
-                        className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-xs font-bold text-white hover:bg-teal-800 transition-colors shadow-2xs"
-                    >
-                        <i className="bi bi-file-earmark-code"></i>
-                        Lihat &amp; Salin Kode Script GAS v2.0 (Aman)
-                    </button>
+                    {canWrite && (
+                        <button
+                            type="button"
+                            onClick={() => setShowGasScriptModal(true)}
+                            className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-xs font-bold text-white hover:bg-teal-800 transition-colors shadow-2xs"
+                        >
+                            <i className="bi bi-file-earmark-code"></i>
+                            Lihat &amp; Salin Kode Script GAS v2.0 (Aman)
+                        </button>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -334,19 +346,22 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                         </label>
                         <div className="relative">
                             <input
-                                type={showApiKey ? 'text' : 'password'}
+                                type={canWrite && showApiKey ? 'text' : 'password'}
                                 value={portalConfig.gasApiKey || ''}
+                                readOnly={!canWrite}
                                 onChange={(e) => handlePortalConfigChange('gasApiKey', e.target.value)}
                                 placeholder="Kosongkan jika tidak memakai token"
                                 className="app-input block w-full p-2.5 pr-9 text-sm font-mono"
                             />
-                            <button
-                                type="button"
-                                onClick={() => setShowApiKey((prev) => !prev)}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                            >
-                                <i className={`bi ${showApiKey ? 'bi-eye-slash' : 'bi-eye'}`}></i>
-                            </button>
+                            {canWrite && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowApiKey((prev) => !prev)}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                    <i className={`bi ${showApiKey ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -405,16 +420,18 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                                 Unduh file <code>index.html</code> yang sudah berisi kode aplikasi Portal Wali + kredensial GAS yang dienkripsi (XOR Cipher + Base64). Upload 1 kali ke <strong>Cloudflare Pages</strong> atau <strong>Netlify Drop</strong> gratis untuk mendapatkan domain pendek resmi pondok.
                             </p>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 pt-1">
-                            <button
-                                type="button"
-                                onClick={handleDownloadStandalone}
-                                className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 text-xs font-bold transition-colors shadow-2xs"
-                            >
-                                <i className="bi bi-download"></i>
-                                Download File index.html Mandiri
-                            </button>
-                        </div>
+                        {canWrite && (
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    onClick={handleDownloadStandalone}
+                                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 text-xs font-bold transition-colors shadow-2xs"
+                                >
+                                    <i className="bi bi-download"></i>
+                                    Download File index.html Mandiri
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-col justify-between space-y-3">
@@ -770,28 +787,30 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                 </div>
 
                 {/* Action Bar Simpan & Sinkron */}
-                <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4">
-                    {onSaveSettings && (
+                {canWrite && (
+                    <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4">
+                        {onSaveSettings && (
+                            <button
+                                type="button"
+                                onClick={handleSaveConfiguration}
+                                disabled={isSaving}
+                                className="rounded-xl border border-teal-600 bg-white px-5 py-2.5 text-xs font-bold text-teal-800 hover:bg-teal-50 disabled:opacity-50"
+                            >
+                                <i className="bi bi-save mr-1.5"></i>
+                                {isSaving ? 'Menyimpan...' : 'Simpan Pengaturan Portal'}
+                            </button>
+                        )}
                         <button
                             type="button"
-                            onClick={handleSaveConfiguration}
-                            disabled={isSaving}
-                            className="rounded-xl border border-teal-600 bg-white px-5 py-2.5 text-xs font-bold text-teal-800 hover:bg-teal-50 disabled:opacity-50"
+                            onClick={handleSyncNow}
+                            disabled={isSyncing}
+                            className="app-button-primary px-5 py-2.5 text-xs font-bold disabled:opacity-50"
                         >
-                            <i className="bi bi-save mr-1.5"></i>
-                            {isSaving ? 'Menyimpan...' : 'Simpan Pengaturan Portal'}
+                            <i className={`bi ${isSyncing ? 'bi-arrow-repeat animate-spin' : 'bi-cloud-arrow-up-fill'} mr-1.5`}></i>
+                            {isSyncing ? 'Menyinkronkan...' : 'Simpan & Sinkronkan ke GAS Sekarang'}
                         </button>
-                    )}
-                    <button
-                        type="button"
-                        onClick={handleSyncNow}
-                        disabled={isSyncing}
-                        className="app-button-primary px-5 py-2.5 text-xs font-bold disabled:opacity-50"
-                    >
-                        <i className={`bi ${isSyncing ? 'bi-arrow-repeat animate-spin' : 'bi-cloud-arrow-up-fill'} mr-1.5`}></i>
-                        {isSyncing ? 'Menyinkronkan...' : 'Simpan & Sinkronkan ke GAS Sekarang'}
-                    </button>
-                </div>
+                    </div>
+                )}
             </SectionCard>
 
             {/* Modal Kode Google Apps Script v2.0 */}

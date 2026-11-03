@@ -6,6 +6,8 @@ import { db } from '../../db';
 import { loadJsZip, loadSyncService } from '../../utils/lazyCloudServices';
 import { loadFirebaseRealtimeRuntime } from '../../utils/lazyFirebaseRuntimes';
 import { buildStandardExportFileName } from '../../utils/exportFileName';
+import { generateSyncSafeId } from '../../utils/idGenerator';
+import { logActivity } from '../../services/logService';
 import { LoadingFallback } from '../common/LoadingFallback';
 import { PsbExamCardModal } from './modals/PsbExamCardModal';
 import { PsbAcceptanceModal, PsbBillingOption, PsbPlacementOption } from './modals/PsbAcceptanceModal';
@@ -39,7 +41,7 @@ interface PsbRekapProps {
 }
 
 export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onImportFromWA, onUpdateList, canWrite, onSaveConfig }) => {
-    const { showToast, showConfirmation, showAlert } = useAppContext();
+    const { showToast, showConfirmation, showAlert, currentUser } = useAppContext();
     const { onBulkAddSantri } = useSantriContext();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterJenjang, setFilterJenjang] = useState('');
@@ -71,7 +73,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
     // Auto-heal existing pendaftar records if standard fields (fisik, telepon, ortu) or custom_field IDs were stored in customData
     useEffect(() => {
-        if (!pendaftarList || pendaftarList.length === 0) return;
+        if (!canWrite || !pendaftarList || pendaftarList.length === 0) return;
         const recordsToUpdate: Pendaftar[] = [];
         for (const p of pendaftarList) {
             const { healed, changed } = healPendaftarRecordWithDetails(p, settings);
@@ -84,7 +86,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 onUpdateList();
             }).catch((err) => console.warn('Auto-heal pendaftar warning:', err));
         }
-    }, [pendaftarList, settings, onUpdateList]);
+    }, [canWrite, pendaftarList, settings, onUpdateList]);
 
     const healedPendaftarList = useMemo(() => {
         return pendaftarList.map(p => healPendaftarRecord(p, settings));
@@ -167,14 +169,15 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     const reallyNewItems = newItems.filter((p: any) => !existingKeys.has(p.namaLengkap + (p.nomorHpWali || '')));
 
                     if (reallyNewItems.length > 0) {
-                        // Assign new local IDs
+                        // Assign sync-safe integer IDs
                         const itemsWithId = reallyNewItems.map((item: any) => ({
                             ...item,
-                            id: Date.now() + Math.random(),
+                            id: generateSyncSafeId(),
+                            deleted: false,
                             lastModified: item.lastModified || Date.now()
                         }));
                         
-                        await db.pendaftar.bulkAdd(itemsWithId);
+                        await db.pendaftar.bulkPut(itemsWithId);
                         onUpdateList();
                         showToast(`${itemsWithId.length} data pendaftar baru ditarik dari Dropbox.`, 'success');
                     } else {
@@ -300,7 +303,8 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 const resolvedPenghasilanWali = getVal('penghasilanWali', 'Penghasilan Wali', 'penghasilan_wali', 'penghasilanWaliBulan', 'Penghasilan Wali / Bulan', 'penghasilanWalimurid', 'gajiWali') || genericPenghasilan || resolvedPenghasilanAyah || '';
 
                 const rawPendaftar: Pendaftar = {
-                    id: Date.now() + Math.random(), // Ensure unique ID locally
+                    id: generateSyncSafeId(),
+                    deleted: false,
                     namaLengkap: resolvedNama,
                     namaHijrah: String(getVal('namaHijrah', 'namaPanggilan', 'nama_hijrah') || '').trim(),
                     nisn: String(getVal('nisn', 'NISN') || '').trim(),
@@ -411,7 +415,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     continue;
                 }
 
-                await db.pendaftar.add(newPendaftar);
+                await db.pendaftar.put(newPendaftar);
                 existingByNameMap.set(nameKey, newPendaftar);
                 addedCount++;
             }
@@ -435,7 +439,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     };
 
     const handleProcessWA = () => {
-        if(!waInput.trim()) return;
+        if (!canWrite || !waInput.trim()) return;
         
         try {
             // Check for New Hybrid Format (Base64 Encoded Backup)
@@ -505,8 +509,8 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         }
 
         const rawPendaftar: Pendaftar = {
-            id: Date.now(),
             ...data,
+            id: generateSyncSafeId(),
             alamat: alamatObj,
             jenjangId: parseInt(data.jenjangId) || settings.jenjang[0]?.id || 0,
             tanggalDaftar: data.tanggalDaftar || new Date().toISOString(),
@@ -515,18 +519,24 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             kewarganegaraan: data.kewarganegaraan || 'WNI',
             gelombang: settings.psbConfig.activeGelombang,
             customData: Object.keys(customDataObj).length > 0 ? JSON.stringify(customDataObj) : (data.customData || '{}'),
+            deleted: false,
             lastModified: Date.now(),
         };
         const newPendaftar = healPendaftarRecord(rawPendaftar, settings);
-        db.pendaftar.add(newPendaftar).then(() => {
+        db.pendaftar.put(newPendaftar).then(() => {
+            void logActivity('INSERT', 'pendaftar', newPendaftar.id, null, { namaLengkap: newPendaftar.namaLengkap, source: 'WhatsApp' }, currentUser?.username || 'Admin');
             onUpdateList();
         });
     }
 
     const handleDelete = (id: number) => {
         if (!canWrite) return;
-        showConfirmation('Hapus Pendaftar?', 'Data ini akan dihapus permanen.', async () => {
-            await db.pendaftar.delete(id);
+        showConfirmation('Hapus Pendaftar?', 'Data pendaftar akan dipindahkan ke arsip hapus.', async () => {
+            const existing = await db.pendaftar.get(id);
+            if (existing) {
+                await db.pendaftar.put({ ...existing, deleted: true, lastModified: Date.now() });
+                await logActivity('DELETE', 'pendaftar', id, { namaLengkap: existing.namaLengkap, status: existing.status }, null, currentUser?.username || 'Admin');
+            }
             onUpdateList();
             showToast('Pendaftar dihapus', 'success');
         }, { confirmColor: 'red' });
@@ -537,10 +547,18 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         const count = selectedIds.length;
         showConfirmation(
             `Hapus ${count} Pendaftar?`,
-            `Apakah Anda yakin ingin menghapus ${count} data pendaftar yang dipilih secara permanen? Data yang dihapus tidak dapat dipulihkan.`,
+            `Apakah Anda yakin ingin menghapus ${count} data pendaftar yang dipilih?`,
             async () => {
                 try {
-                    await db.pendaftar.bulkDelete(selectedIds);
+                    const now = Date.now();
+                    const existingItems = await db.pendaftar.bulkGet(selectedIds);
+                    const softDeleted = existingItems
+                        .filter((item): item is Pendaftar => Boolean(item))
+                        .map((item) => ({ ...item, deleted: true, lastModified: now }));
+                    if (softDeleted.length > 0) {
+                        await db.pendaftar.bulkPut(softDeleted);
+                        await logActivity('DELETE', 'pendaftar', 'bulk', { count: softDeleted.length, ids: selectedIds }, null, currentUser?.username || 'Admin');
+                    }
                     setSelectedIds([]);
                     onUpdateList();
                     showToast(`${count} data pendaftar berhasil dihapus`, 'success');
@@ -709,18 +727,18 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         if (list.length === 0) return;
 
         try {
-            const baseTimestamp = Date.now();
+            const now = Date.now();
             const newSantriList: Santri[] = [];
             const newTagihanList: Tagihan[] = [];
 
-            list.forEach((pendaftar, idx) => {
-                const santriId = baseTimestamp + idx * 2;
+            list.forEach((pendaftar) => {
+                const santriId = generateSyncSafeId();
                 const newSantri = buildSantriFromPendaftar(pendaftar, santriId, placementOption);
                 newSantriList.push(newSantri);
 
                 if (billingOption?.createBilling && billingOption.nominal > 0) {
                     newTagihanList.push({
-                        id: santriId + 1,
+                        id: generateSyncSafeId(),
                         santriId,
                         biayaId: billingOption.biayaId || 0,
                         deskripsi: list.length > 1
@@ -730,14 +748,15 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                         tahun: new Date().getFullYear(),
                         nominal: billingOption.nominal,
                         status: 'Belum Lunas',
-                        lastModified: Date.now()
+                        deleted: false,
+                        lastModified: now
                     });
                 }
             });
 
             await db.santri.bulkPut(newSantriList);
             if (newTagihanList.length > 0) {
-                await db.tagihan.bulkAdd(newTagihanList);
+                await db.tagihan.bulkPut(newTagihanList);
             }
 
             await Promise.all(
@@ -821,13 +840,21 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     };
 
     const handleSavePendaftar = async (data: Omit<Pendaftar, 'id'>) => {
-        await db.pendaftar.add({ ...data, lastModified: Date.now() } as Pendaftar);
+        if (!canWrite) return;
+        const newId = generateSyncSafeId();
+        const newRecord: Pendaftar = { ...data, id: newId, deleted: false, lastModified: Date.now() } as Pendaftar;
+        await db.pendaftar.put(newRecord);
+        await logActivity('INSERT', 'pendaftar', newId, null, { namaLengkap: newRecord.namaLengkap, status: newRecord.status }, currentUser?.username || 'Admin');
         onUpdateList();
         showToast('Pendaftar berhasil ditambahkan', 'success');
     }
 
     const handleUpdatePendaftar = async (data: Pendaftar) => {
-        await db.pendaftar.put({ ...data, lastModified: Date.now() });
+        if (!canWrite) return;
+        const existing = await db.pendaftar.get(data.id);
+        const updated = { ...data, lastModified: Date.now() };
+        await db.pendaftar.put(updated);
+        await logActivity('UPDATE', 'pendaftar', data.id, existing ? { namaLengkap: existing.namaLengkap, status: existing.status } : null, { namaLengkap: updated.namaLengkap, status: updated.status }, currentUser?.username || 'Admin');
         onUpdateList();
         showToast('Data pendaftar diperbarui', 'success');
     }

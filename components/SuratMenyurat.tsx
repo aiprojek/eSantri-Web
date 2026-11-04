@@ -29,6 +29,7 @@ import { SuratSantriSelectorModal } from './surat/SuratSantriSelectorModal';
 import { SuratSettingsDrawer } from './surat/SuratSettingsDrawer';
 import { SuratVariablePopover } from './surat/SuratVariablePopover';
 import { SuratSignatoryEditor } from './surat/SuratSignatoryEditor';
+import { SertifikatCanvas } from './sertifikat/SertifikatCanvas';
 import { findStrictTeacherTtdAsset, reconcileDigitalAssetsWithSettings } from '../utils/digitalAssetUtils';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
@@ -548,15 +549,21 @@ const ArsipViewerModal: React.FC<{
     const formattedTanggal = arsip.tanggalCetak || new Date(arsip.tanggalBuat).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
     const tempat = arsip.tempatCetak || settings.alamat.split(',')[1]?.trim() || 'Tempat';
     const isPrePrinted = Boolean(arsip.usePrePrintedKopSnapshot);
+    const isSertifikat = arsip.jenisDokumen === 'sertifikat' || Boolean(arsip.sertifikatSnapshot);
 
     return (
         <div className="app-overlay fixed inset-0 z-[230] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-            <div className="app-modal flex h-[92vh] w-full max-w-5xl flex-col rounded-[28px] bg-white shadow-2xl overflow-hidden border border-slate-200">
+            <div className={`app-modal flex h-[92vh] w-full ${isSertifikat ? 'max-w-6xl' : 'max-w-5xl'} flex-col rounded-[28px] bg-white shadow-2xl overflow-hidden border border-slate-200`}>
                 <div className="flex items-center justify-between border-b border-app-border bg-white/90 px-6 py-4">
                     <div>
                         <div className="flex items-center gap-2">
                             <h3 className="text-lg font-bold text-app-text">Arsip: {arsip.nomorSurat}</h3>
-                            {isPrePrinted && (
+                            {isSertifikat && (
+                                <span className="rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 border border-amber-200">
+                                    Sertifikat / Piagam
+                                </span>
+                            )}
+                            {isPrePrinted && !isSertifikat && (
                                 <span className="rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold px-2 py-0.5">
                                     Kertas Kop Fisik
                                 </span>
@@ -577,7 +584,13 @@ const ArsipViewerModal: React.FC<{
                         )}
                         <button
                             type="button"
-                            onClick={() => printToPdfNative('arsip-preview', `Arsip_${arsip.nomorSurat.replace(/[\/\\:*?"<>|]/g, '-')}`)}
+                            onClick={() =>
+                                printToPdfNative(
+                                    'arsip-preview',
+                                    `Arsip_${arsip.nomorSurat.replace(/[\/\\:*?"<>|]/g, '-')}`,
+                                    isSertifikat ? { paperSize: 'A4', orientation: 'landscape' } : undefined
+                                )
+                            }
                             className="app-button-secondary px-3.5 py-2 text-xs rounded-xl flex items-center gap-1.5"
                         >
                             <i className="bi bi-printer"></i> Cetak Dokumen
@@ -589,59 +602,67 @@ const ArsipViewerModal: React.FC<{
                 </div>
 
                 <div className="flex flex-grow justify-center overflow-auto bg-slate-100 p-8">
-                    <div id="arsip-preview" className="bg-white shadow-lg p-8" style={{ width: '21cm', minHeight: '29.7cm', padding: '2cm' }}>
-                        {isPrePrinted ? (
-                            <div style={{ height: '3.5cm' }} className="flex items-center justify-center border-b border-dashed border-amber-200 text-[11px] text-amber-700 italic no-print mb-4">
-                                [ Area Kop Blanko Fisik - Dicetak di atas kertas berkop pesantren ]
+                    {isSertifikat && arsip.sertifikatSnapshot ? (
+                        <div className="my-auto">
+                            <div id="arsip-preview" className="shadow-xl">
+                                <SertifikatCanvas snapshot={arsip.sertifikatSnapshot} settings={settings} />
                             </div>
-                        ) : (
-                            <PrintHeader settings={settings} title="" />
-                        )}
-                         
-                        {arsip.tempatTanggalConfig?.show && arsip.tempatTanggalConfig.position === 'top-right' && (
-                            <div className={`mb-4 flex w-full ${JUSTIFY_ALIGN_CLASS[arsip.tempatTanggalConfig.align || 'right']}`}>
-                                <p>{tempat}, {formattedTanggal}</p>
-                            </div>
-                        )}
-
-                        {arsip.perihal && (arsip.showJudulSnapshot !== false) && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{arsip.perihal}</h3>}
-
-                        <div className="text-justify leading-relaxed font-sans" dangerouslySetInnerHTML={{ __html: arsip.isiSurat }} />
-
-                        <div className="mt-8">
-                            {arsip.tempatTanggalConfig?.show && arsip.tempatTanggalConfig.position !== 'top-right' && (
-                                <div className={`mb-4 flex w-full ${arsip.tempatTanggalConfig.position === 'bottom-left' ? 'justify-start' : 'justify-end'}`}>
-                                    <div className={TEXT_ALIGN_CLASS[arsip.tempatTanggalConfig.align || 'right']} style={{ minWidth: '200px' }}>
-                                        <p>{tempat}, {formattedTanggal}</p>
-                                    </div>
-                                </div>
-                            )}
-                            
-                            {arsip.mengetahuiSnapshot?.show && (
-                                <div className={`mb-8 flex w-full ${JUSTIFY_ALIGN_CLASS[arsip.mengetahuiSnapshot.align || 'center']}`}>
-                                    <div className="text-center" style={{ minWidth: '200px' }}>
-                                        <p className="font-medium">{arsip.mengetahuiSnapshot.jabatan}</p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {arsip.signatoriesSnapshot && (
-                                <div className={`grid gap-8 ${arsip.signatoriesSnapshot.length === 1 ? 'grid-cols-1 justify-items-end' : arsip.signatoriesSnapshot.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                                    {arsip.signatoriesSnapshot.map((sig, i) => (
-                                        <div key={i} className="text-center flex flex-col items-center relative" style={{ minWidth: '200px' }}>
-                                            <p className="font-medium">{sig.jabatan}</p>
-                                            <div className="h-20 my-2"></div>
-                                            {arsip.stampSnapshot?.show && arsip.stampSnapshot.stampUrl && (arsip.signatoriesSnapshot!.length === 1 || arsip.stampSnapshot.placementSignatoryId === sig.id) && (
-                                                <img src={arsip.stampSnapshot.stampUrl} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-28 h-28 object-contain opacity-75 mix-blend-multiply transform -rotate-12 pointer-events-none" alt="Stempel" />
-                                            )}
-                                            <p className="font-bold underline">{sig.nama}</p>
-                                            {sig.nip && <p>NIP. {sig.nip}</p>}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
                         </div>
-                    </div>
+                    ) : (
+                        <div id="arsip-preview" className="bg-white shadow-lg p-8" style={{ width: '21cm', minHeight: '29.7cm', padding: '2cm' }}>
+                            {isPrePrinted ? (
+                                <div style={{ height: '3.5cm' }} className="flex items-center justify-center border-b border-dashed border-amber-200 text-[11px] text-amber-700 italic no-print mb-4">
+                                    [ Area Kop Blanko Fisik - Dicetak di atas kertas berkop pesantren ]
+                                </div>
+                            ) : (
+                                <PrintHeader settings={settings} title="" />
+                            )}
+                             
+                            {arsip.tempatTanggalConfig?.show && arsip.tempatTanggalConfig.position === 'top-right' && (
+                                <div className={`mb-4 flex w-full ${JUSTIFY_ALIGN_CLASS[arsip.tempatTanggalConfig.align || 'right']}`}>
+                                    <p>{tempat}, {formattedTanggal}</p>
+                                </div>
+                            )}
+
+                            {arsip.perihal && (arsip.showJudulSnapshot !== false) && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{arsip.perihal}</h3>}
+
+                            <div className="text-justify leading-relaxed font-sans" dangerouslySetInnerHTML={{ __html: arsip.isiSurat }} />
+
+                            <div className="mt-8">
+                                {arsip.tempatTanggalConfig?.show && arsip.tempatTanggalConfig.position !== 'top-right' && (
+                                    <div className={`mb-4 flex w-full ${arsip.tempatTanggalConfig.position === 'bottom-left' ? 'justify-start' : 'justify-end'}`}>
+                                        <div className={TEXT_ALIGN_CLASS[arsip.tempatTanggalConfig.align || 'right']} style={{ minWidth: '200px' }}>
+                                            <p>{tempat}, {formattedTanggal}</p>
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {arsip.mengetahuiSnapshot?.show && (
+                                    <div className={`mb-8 flex w-full ${JUSTIFY_ALIGN_CLASS[arsip.mengetahuiSnapshot.align || 'center']}`}>
+                                        <div className="text-center" style={{ minWidth: '200px' }}>
+                                            <p className="font-medium">{arsip.mengetahuiSnapshot.jabatan}</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {arsip.signatoriesSnapshot && (
+                                    <div className={`grid gap-8 ${arsip.signatoriesSnapshot.length === 1 ? 'grid-cols-1 justify-items-end' : arsip.signatoriesSnapshot.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                                        {arsip.signatoriesSnapshot.map((sig, i) => (
+                                            <div key={i} className="text-center flex flex-col items-center relative" style={{ minWidth: '200px' }}>
+                                                <p className="font-medium">{sig.jabatan}</p>
+                                                <div className="h-20 my-2"></div>
+                                                {arsip.stampSnapshot?.show && arsip.stampSnapshot.stampUrl && (arsip.signatoriesSnapshot!.length === 1 || arsip.stampSnapshot.placementSignatoryId === sig.id) && (
+                                                    <img src={arsip.stampSnapshot.stampUrl} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-28 h-28 object-contain opacity-75 mix-blend-multiply transform -rotate-12 pointer-events-none" alt="Stempel" />
+                                                )}
+                                                <p className="font-bold underline">{sig.nama}</p>
+                                                {sig.nip && <p>NIP. {sig.nip}</p>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -2232,6 +2253,7 @@ const SuratMenyurat: React.FC = () => {
     const [searchArsip, setSearchArsip] = useState('');
     const [filterDateStart, setFilterDateStart] = useState('');
     const [filterDateEnd, setFilterDateEnd] = useState('');
+    const [filterJenisDokumen, setFilterJenisDokumen] = useState<'all' | 'surat' | 'sertifikat'>('all');
 
     // Load default templates handler
     const handleLoadDefaultTemplates = async () => {
@@ -2302,6 +2324,10 @@ const SuratMenyurat: React.FC = () => {
     // Filtered Arsip List
     const filteredArsipList = useMemo(() => {
         return [...arsipSuratList].filter(arsip => {
+            const isSertifikat = arsip.jenisDokumen === 'sertifikat' || Boolean(arsip.sertifikatSnapshot);
+            if (filterJenisDokumen === 'sertifikat' && !isSertifikat) return false;
+            if (filterJenisDokumen === 'surat' && isSertifikat) return false;
+
             if (searchArsip.trim()) {
                 const query = searchArsip.toLowerCase();
                 const matchNomor = arsip.nomorSurat?.toLowerCase().includes(query);
@@ -2313,7 +2339,7 @@ const SuratMenyurat: React.FC = () => {
             if (filterDateEnd && arsip.tanggalBuat > filterDateEnd) return false;
             return true;
         }).sort((a, b) => new Date(b.tanggalBuat).getTime() - new Date(a.tanggalBuat).getTime());
-    }, [arsipSuratList, searchArsip, filterDateStart, filterDateEnd]);
+    }, [arsipSuratList, searchArsip, filterDateStart, filterDateEnd, filterJenisDokumen]);
 
     // Export Arsip to Excel directly
     const handleExportExcelArsip = async () => {
@@ -2321,6 +2347,7 @@ const SuratMenyurat: React.FC = () => {
             const XLSX = await loadXLSX();
             const rows = filteredArsipList.map((item, idx) => ({
                 'No': idx + 1,
+                'Jenis Dokumen': (item.jenisDokumen === 'sertifikat' || item.sertifikatSnapshot) ? 'Sertifikat / Piagam' : 'Surat Resmi',
                 'Nomor Surat': item.nomorSurat,
                 'Tanggal': item.tanggalBuat,
                 'Ditujukan Kepada': item.tujuan,
@@ -2468,7 +2495,7 @@ const SuratMenyurat: React.FC = () => {
                         }
                     >
                         {/* Search & Filter Controls */}
-                        <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                             <div className="relative">
                                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                                     <i className="bi bi-search"></i>
@@ -2477,9 +2504,21 @@ const SuratMenyurat: React.FC = () => {
                                     type="text"
                                     value={searchArsip}
                                     onChange={e => setSearchArsip(e.target.value)}
-                                    placeholder="Cari nomor surat, perihal, santri..."
+                                    placeholder="Cari nomor, perihal, penerima..."
                                     className="app-input w-full pl-9 pr-3 py-2 text-xs rounded-xl"
                                 />
+                            </div>
+
+                            <div>
+                                <select
+                                    value={filterJenisDokumen}
+                                    onChange={e => setFilterJenisDokumen(e.target.value as 'all' | 'surat' | 'sertifikat')}
+                                    className="app-input w-full py-2 px-3 text-xs rounded-xl"
+                                >
+                                    <option value="all">Semua Dokumen (Surat & Sertifikat)</option>
+                                    <option value="surat">Hanya Surat Resmi</option>
+                                    <option value="sertifikat">Hanya Sertifikat & Piagam</option>
+                                </select>
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -2500,10 +2539,10 @@ const SuratMenyurat: React.FC = () => {
                                     onChange={e => setFilterDateEnd(e.target.value)}
                                     className="app-input w-full py-1.5 px-2.5 text-xs rounded-xl"
                                 />
-                                {(searchArsip || filterDateStart || filterDateEnd) && (
+                                {(searchArsip || filterDateStart || filterDateEnd || filterJenisDokumen !== 'all') && (
                                     <button
                                         type="button"
-                                        onClick={() => { setSearchArsip(''); setFilterDateStart(''); setFilterDateEnd(''); }}
+                                        onClick={() => { setSearchArsip(''); setFilterDateStart(''); setFilterDateEnd(''); setFilterJenisDokumen('all'); }}
                                         className="app-button-ghost text-xs text-slate-500 hover:text-slate-800 px-2 py-1"
                                         title="Reset Filter"
                                     >
@@ -2515,7 +2554,9 @@ const SuratMenyurat: React.FC = () => {
 
                         {/* Mobile Cards */}
                         <div className="space-y-3 md:hidden">
-                            {filteredArsipList.map((arsip) => (
+                            {filteredArsipList.map((arsip) => {
+                                const isCert = arsip.jenisDokumen === 'sertifikat' || Boolean(arsip.sertifikatSnapshot);
+                                return (
                                 <div key={arsip.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
                                     <div className="flex items-center justify-between mb-1 text-xs">
                                         <span className="font-mono text-[11px] text-teal-800 font-semibold bg-teal-50 px-2 py-0.5 rounded">
@@ -2525,7 +2566,14 @@ const SuratMenyurat: React.FC = () => {
                                             {new Date(arsip.tanggalBuat).toLocaleDateString('id-ID')}
                                         </span>
                                     </div>
-                                    <div className="mt-2 text-sm font-semibold text-slate-800">{arsip.perihal}</div>
+                                    <div className="mt-2 text-sm font-semibold text-slate-800 flex flex-wrap items-center gap-1.5">
+                                        <span>{arsip.perihal}</span>
+                                        {isCert && (
+                                            <span className="rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 border border-amber-200">
+                                                Sertifikat
+                                            </span>
+                                        )}
+                                    </div>
                                     <div className="mt-1 text-xs text-slate-500 flex items-center gap-1">
                                         <i className="bi bi-person text-slate-400"></i> Tujuan: <b className="text-slate-700">{arsip.tujuan}</b>
                                     </div>
@@ -2555,7 +2603,8 @@ const SuratMenyurat: React.FC = () => {
                                         )}
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                             {filteredArsipList.length === 0 && (
                                 <EmptyState icon="bi-archive" title="Tidak ada arsip surat" description="Tidak ditemukan arsip surat keluar sesuai kriteria pencarian." />
                             )}
@@ -2574,7 +2623,9 @@ const SuratMenyurat: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-app-border">
-                                    {filteredArsipList.map(arsip => (
+                                    {filteredArsipList.map(arsip => {
+                                        const isCert = arsip.jenisDokumen === 'sertifikat' || Boolean(arsip.sertifikatSnapshot);
+                                        return (
                                         <tr key={arsip.id} className="hover:bg-teal-50/40 transition-colors">
                                             <td className="p-3 whitespace-nowrap text-slate-500">
                                                 {new Date(arsip.tanggalBuat).toLocaleDateString('id-ID')}
@@ -2584,7 +2635,12 @@ const SuratMenyurat: React.FC = () => {
                                             </td>
                                             <td className="p-3 font-medium text-slate-800">
                                                 {arsip.perihal}
-                                                {arsip.usePrePrintedKopSnapshot && (
+                                                {isCert && (
+                                                    <span className="ml-2 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 border border-amber-200">
+                                                        Sertifikat
+                                                    </span>
+                                                )}
+                                                {arsip.usePrePrintedKopSnapshot && !isCert && (
                                                     <span className="ml-2 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold px-2 py-0.2">
                                                         Kop Fisik
                                                     </span>
@@ -2621,7 +2677,8 @@ const SuratMenyurat: React.FC = () => {
                                                 </div>
                                             </td>
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                     {filteredArsipList.length === 0 && (
                                         <tr>
                                             <td colSpan={5} className="p-6">

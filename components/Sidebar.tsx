@@ -81,6 +81,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
           items: [
               { page: Page.Kurikulum, icon: 'bi-mortarboard-fill', show: canAccess('akademik'), label: 'Kurikulum' },
               { page: Page.Rapor, icon: 'bi-journal-check', show: canAccess('akademik'), label: 'Rapor' },
+              { page: Page.Sertifikat, icon: 'bi-patch-check-fill', show: canAccess('sertifikat'), label: 'Sertifikat & Piagam' },
               { page: Page.Perpustakaan, icon: 'bi-book-half', show: canAccess('perpustakaan') },
               { page: Page.Kalender, icon: 'bi-calendar-event-fill', show: canAccess('kalender') },
               { page: Page.DataMaster, icon: 'bi-database-fill', show: canAccess('datamaster') },

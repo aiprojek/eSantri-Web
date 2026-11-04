@@ -5,6 +5,8 @@ interface EmptyStateProps {
     title: string;
     description: string;
     compact?: boolean;
+    actionLabel?: string;
+    onAction?: () => void;
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
@@ -12,6 +14,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     title,
     description,
     compact = false,
+    actionLabel,
+    onAction,
 }) => {
     return (
         <div className={`flex flex-col items-center justify-center text-center ${compact ? 'px-6 py-10' : 'px-6 py-16'}`}>
@@ -20,6 +24,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             </div>
             <h3 className="text-base font-semibold text-app-text">{title}</h3>
             <p className="mt-2 max-w-md text-sm leading-relaxed app-text-muted">{description}</p>
+            {actionLabel && onAction && (
+                <button
+                    type="button"
+                    onClick={onAction}
+                    className="app-button-primary mt-5 px-4 py-2 text-xs rounded-xl flex items-center gap-1.5"
+                >
+                    <span>{actionLabel}</span>
+                </button>
+            )}
         </div>
     );
 };

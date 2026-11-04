@@ -126,6 +126,7 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
         { key: 'whatsapp', label: 'WhatsApp Center' },
         { key: 'bukutamu', label: 'Buku Tamu' },
         { key: 'akademik', label: 'Akademik & Rapor' },
+        { key: 'sertifikat', label: 'Sertifikat & Piagam' },
         { key: 'absensi', label: 'Absensi' },
         { key: 'tahfizh', label: 'Tahfizh' },
         { key: 'kesehatan', label: 'Kesehatan' },

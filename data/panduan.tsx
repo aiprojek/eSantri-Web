@@ -2,6 +2,7 @@
 import React from 'react';
 import { kurikulumPanduan } from './panduan/kurikulum';
 import { raporPanduan } from './panduan/rapor';
+import { sertifikatPanduan } from './panduan/sertifikat';
 import { akademikPanduan } from './panduan/akademik';
 import { perpustakaanPanduan } from './panduan/perpustakaan';
 import { kalenderPanduan } from './panduan/kalender';
@@ -3067,6 +3068,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     kurikulumPanduan,
     raporPanduan,
+    sertifikatPanduan,
     akademikPanduan,
     financePanduan,
     bukukasPanduan,

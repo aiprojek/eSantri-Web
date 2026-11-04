@@ -4,7 +4,7 @@ import { PondokSettings, User } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 import { db } from '../../../db';
 import { hashString, ADMIN_PERMISSIONS, generateRecoveryKey } from '../../../services/authService';
-import { CURRENT_PERMISSION_VERSION, normalizeUserPermissions } from '../../../services/permissionMigrationService';
+import { CURRENT_PERMISSION_VERSION, migrateUserPermissions, normalizeUserPermissions } from '../../../services/permissionMigrationService';
 import { UserModal } from '../modals/UserModal';
 import { BulkUserFromTeacherModal } from '../modals/BulkUserFromTeacherModal';
 import { SectionCard } from '../../common/SectionCard';
@@ -217,12 +217,28 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
             {localSettings.multiUserMode && (
                 <>
                     {legacyUsers.length > 0 && (
-                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                            <div className="font-semibold">Audit Permission Legacy</div>
-                            <div className="mt-1">
-                                Ditemukan {legacyUsers.length} user dengan permission versi lama (target: v{CURRENT_PERMISSION_VERSION}).
-                                Jalankan restore terbaru atau simpan ulang user agar otomatis termigrasi.
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-sm text-amber-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div>
+                                <div className="font-semibold">Pembaruan Skema Hak Akses Tersedia</div>
+                                <div className="mt-0.5 text-xs text-amber-800">
+                                    Ditemukan {legacyUsers.length} akun staf pada versi hak akses lama (target: v{CURRENT_PERMISSION_VERSION}, termasuk modul baru seperti Sertifikat &amp; Piagam).
+                                </div>
                             </div>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    const updatedUsers = users.map((u) => {
+                                        const res = migrateUserPermissions(u);
+                                        return res.changed ? res.user : u;
+                                    });
+                                    await db.users.bulkPut(updatedUsers);
+                                    setUsers(updatedUsers);
+                                    showToast(`${legacyUsers.length} akun berhasil diperbarui ke hak akses v${CURRENT_PERMISSION_VERSION}.`, 'success');
+                                }}
+                                className="shrink-0 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-amber-700"
+                            >
+                                Perbarui Hak Akses Otomatis
+                            </button>
                         </div>
                     )}
 

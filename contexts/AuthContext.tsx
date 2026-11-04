@@ -4,7 +4,7 @@ import { User } from '../types';
 import { db } from '../db';
 import { useLiveQuery } from "dexie-react-hooks";
 import { ADMIN_PERMISSIONS } from '../services/authService';
-import { CURRENT_PERMISSION_VERSION } from '../services/permissionMigrationService';
+import { CURRENT_PERMISSION_VERSION, normalizeUserPermissions } from '../services/permissionMigrationService';
 
 interface AuthContextType {
     currentUser: User | null;
@@ -108,11 +108,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const isValidSession = !!user && user.username === storedSession.username;
 
         if (isValidSession && user) {
+            const hydratedUser: User =
+                (user.permissionVersion ?? 0) < CURRENT_PERMISSION_VERSION
+                    ? { ...user, permissions: normalizeUserPermissions(user) }
+                    : user;
             setCurrentUser(prev => {
-                if (prev && JSON.stringify(prev) === JSON.stringify(user)) {
+                if (prev && JSON.stringify(prev) === JSON.stringify(hydratedUser)) {
                     return prev;
                 }
-                return user;
+                return hydratedUser;
             });
         } else {
             localStorage.removeItem(AUTH_STORAGE_KEY);

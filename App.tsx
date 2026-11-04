@@ -36,6 +36,7 @@ const Tentang = lazyWithRetry(() => import('./components/Tentang'));
 const Akademik = lazyWithRetry(() => import('./components/Akademik'));
 const Kurikulum = lazyWithRetry(() => import('./components/Kurikulum'));
 const Rapor = lazyWithRetry(() => import('./components/Rapor'));
+const SertifikatPiagam = lazyWithRetry(() => import('./components/SertifikatPiagam'));
 const Absensi = lazyWithRetry(() => import('./components/Absensi'));
 const Tahfizh = lazyWithRetry(() => import('./components/Tahfizh'));
 const Sarpras = lazyWithRetry(() => import('./components/Sarpras'));
@@ -652,6 +653,9 @@ const AppContent: React.FC = () => {
                             return checkAccess('akademik') ? <Kurikulum /> : <AccessDenied />;
                         case Page.Rapor:
                             return checkAccess('akademik') ? <Rapor /> : <AccessDenied />;
+                        case 'Sertifikat':
+                        case Page.Sertifikat:
+                            return checkAccess('sertifikat') ? <SertifikatPiagam /> : <AccessDenied />;
                         case Page.Sarpras: 
                             return checkAccess('sarpras') ? <Sarpras /> : <AccessDenied />;
                         case Page.Kalender: 

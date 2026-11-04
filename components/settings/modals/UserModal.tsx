@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, UserPermissions, AccessLevel } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS, DEFAULT_WALI_KELAS_PERMISSIONS, ROLE_TEMPLATES } from '../../../services/authService';
-import { CURRENT_PERMISSION_VERSION } from '../../../services/permissionMigrationService';
+import { CURRENT_PERMISSION_VERSION, normalizeUserPermissions } from '../../../services/permissionMigrationService';
 import { generateSyncSafeId } from '../../../utils/idGenerator';
 
 interface UserModalProps {
@@ -31,7 +31,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                 setUsername(userData.username);
                 setFullName(userData.fullName);
                 setRole(userData.role);
-                setPermissions(userData.permissions);
+                setPermissions(normalizeUserPermissions(userData));
                 setPassword(''); // Reset password field for security
                 setSecurityQuestion(userData.securityQuestion || '');
                 setSecurityAnswer(''); // Reset answer field
@@ -111,6 +111,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         { key: 'whatsapp', label: 'WhatsApp Center' },
         { key: 'bukutamu', label: 'Buku Tamu (Security)' },
         { key: 'akademik', label: 'Akademik & Rapor' },
+        { key: 'sertifikat', label: 'Sertifikat & Piagam' },
         { key: 'absensi', label: 'Absensi' },
         { key: 'tahfizh', label: 'Tahfizh Al-Qur\'an' },
         { key: 'kesehatan', label: 'Kesehatan (Poskestren)' },

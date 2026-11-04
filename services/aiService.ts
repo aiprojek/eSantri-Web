@@ -248,6 +248,130 @@ export const generateLetterDraft = async (instruction: string): Promise<string> 
   }
 };
 
+export interface CertificateAiDraftInput {
+  jenisKegiatan: string;
+  kategori: string;
+  gayaBahasa: 'islami' | 'akademik' | 'apresiasi';
+  namaPondok: string;
+  instruksiTambahan?: string;
+}
+
+export interface CertificateAiDraftResult {
+  judulDokumen: string;
+  kalimatPengantar: string;
+  deskripsiCapaian: string;
+  capaianUtama: string;
+  predikatLabel: string;
+  predikatContoh: string;
+  catatanDoa: string;
+}
+
+export const generateCertificateDraft = async (
+  input: CertificateAiDraftInput
+): Promise<CertificateAiDraftResult> => {
+  const toneGuide =
+    input.gayaBahasa === 'islami'
+      ? 'Khidmat kepesantrenan, berwibawa, santun, dan bernuansa doa keberkahan ilmu.'
+      : input.gayaBahasa === 'akademik'
+        ? 'Formal akademik, lugas, resmi, dan terukur layaknya ijazah/sertifikat lembaga pendidikan.'
+        : 'Apresiatif, membanggakan, memotivasi semangat berprestasi dan berkarya.';
+
+  const prompt = `
+Anda adalah penyusun redaksi Syahadah, Sertifikat, dan Piagam resmi untuk Pondok Pesantren "${input.namaPondok}".
+Susun teks sertifikat 1 halaman A4 Landscape yang proporsional, padat, dan TIDAK kepanjangan untuk kegiatan berikut:
+
+- Kegiatan / Peruntukan: ${input.jenisKegiatan}
+- Kategori Dokumen: ${input.kategori}
+- Gaya Bahasa: ${toneGuide}
+${input.instruksiTambahan ? `- Instruksi Tambahan: ${input.instruksiTambahan}` : ''}
+
+ATURAN KETAT:
+1. Keluarkan HANYA objek JSON valid tanpa markdown \`\`\`json, tanpa komentar, dan tanpa teks pengantar.
+2. Patuhi batas panjang karakter agar tata letak sertifikat 1 halaman tetap elegan:
+   - "judulDokumen": HURUF KAPITAL semua, maks 42 karakter (contoh: "SYAHADAH HAFALAN MUTUN ILMIYAH").
+   - "kalimatPengantar": 1 kalimat pengantar sebelum nama penerima, diakhiri titik dua ":", maks 110 karakter.
+   - "deskripsiCapaian": 1 kalimat penghubung sesudah nama penerima sebelum kotak capaian utama, diakhiri titik dua ":", maks 135 karakter.
+   - "capaianUtama": Nama capaian/kitab/prestasi singkat & jelas di dalam kotak utama, maks 65 karakter.
+   - "predikatLabel": Label singkat (contoh: "Predikat Kelulusan", "Kualifikasi", atau "Peringkat Prestasi"), maks 25 karakter.
+   - "predikatContoh": Contoh nilai/predikat (contoh: "Mumtaz (Istimewa)" atau "Juara I (Pertama)"), maks 35 karakter.
+   - "catatanDoa": 1 kalimat doa/motivasi penutup yang menyentuh tanpa tanda kutip pembuka/penutup, maks 145 karakter.
+
+Format JSON wajib:
+{
+  "judulDokumen": "...",
+  "kalimatPengantar": "...",
+  "deskripsiCapaian": "...",
+  "capaianUtama": "...",
+  "predikatLabel": "...",
+  "predikatContoh": "...",
+  "catatanDoa": "..."
+}
+  `.trim();
+
+  const rawText = await generateTextWithConfiguredProvider(
+    prompt,
+    'Layanan AI penyusun redaksi sertifikat sedang tidak dapat diakses. Silakan coba beberapa saat lagi.'
+  );
+
+  const cleaned = normalizeAiText(rawText)
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  const jsonCandidate =
+    firstBrace !== -1 && lastBrace > firstBrace
+      ? cleaned.slice(firstBrace, lastBrace + 1)
+      : cleaned;
+
+  try {
+    const parsed = JSON.parse(jsonCandidate);
+    const clip = (val: unknown, fallback: string, maxLen: number) => {
+      const s = typeof val === 'string' && val.trim() ? val.trim() : fallback;
+      return s.length > maxLen ? s.slice(0, maxLen).trim() : s;
+    };
+
+    return {
+      judulDokumen: clip(parsed.judulDokumen, 'PIAGAM PENGHARGAAN', 48).toUpperCase(),
+      kalimatPengantar: clip(
+        parsed.kalimatPengantar,
+        'Dewan Pengasuh & Majelis Asatidz menerangkan dengan sebenarnya bahwa:',
+        125
+      ),
+      deskripsiCapaian: clip(
+        parsed.deskripsiCapaian,
+        'Telah mengikuti dan menuntaskan kegiatan dengan baik pada capaian:',
+        155
+      ),
+      capaianUtama: clip(parsed.capaianUtama, input.jenisKegiatan, 75),
+      predikatLabel: clip(parsed.predikatLabel, 'Predikat', 30),
+      predikatContoh: clip(parsed.predikatContoh, 'Mumtaz (Istimewa)', 40),
+      catatanDoa: clip(
+        parsed.catatanDoa,
+        'Semoga ilmu dan capaian yang diraih menjadi amal jariyah yang penuh keberkahan di dunia dan akhirat.',
+        165
+      ).replace(/^["“”]+|["“”]+$/g, ''),
+    };
+  } catch (err) {
+    console.warn('Gagal parse JSON AI sertifikat, menggunakan ekstraksi teks:', err);
+    return {
+      judulDokumen: input.kategori.toLowerCase().includes('mutun')
+        ? 'SYAHADAH HAFALAN MUTUN ILMIYAH'
+        : input.kategori.toLowerCase().includes('lomba')
+          ? 'PIAGAM PENGHARGAAN PRESTASI'
+          : 'SERTIFIKAT PENGHARGAAN',
+      kalimatPengantar: 'Dengan memohon ridha Allah SWT, Pimpinan Pondok Pesantren menerangkan bahwa:',
+      deskripsiCapaian: 'Telah menyelesaikan dan memenuhi kriteria penilaian pada kegiatan:',
+      capaianUtama: input.jenisKegiatan.slice(0, 70),
+      predikatLabel: 'Predikat',
+      predikatContoh: 'Mumtaz (Istimewa)',
+      catatanDoa: cleaned.slice(0, 155).replace(/^["“”]+|["“”]+$/g, '') ||
+        'Semoga Allah SWT memberkahi ilmu yang diperoleh dan menjadikannya bermanfaat bagi umat.',
+    };
+  }
+};
+
 export const generatePosterPrompt = async (
     style: string, 
     ratio: string, 

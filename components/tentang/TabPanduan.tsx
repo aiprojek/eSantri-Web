@@ -20,7 +20,7 @@ const PANDUAN_CATEGORIES: PanduanCategoryGroup[] = [
         id: 'cat_akademik',
         title: 'II. Akademik & Kepesantrenan',
         icon: 'bi-mortarboard',
-        sectionIds: ['kurikulum', 'akademik', 'rapor', 'jurnal_mengajar', 'absensi', 'tahfizh', 'kalender'],
+        sectionIds: ['kurikulum', 'akademik', 'rapor', 'sertifikat', 'jurnal_mengajar', 'absensi', 'tahfizh', 'kalender'],
     },
     {
         id: 'cat_layanan',

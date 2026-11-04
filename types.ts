@@ -1,6 +1,6 @@
 
 export type Page = 
-  | 'Dashboard' | 'Santri' | 'Absensi' | 'Tahfizh' | 'Akademik' | 'Kurikulum' | 'Rapor' | 'Sarpras' 
+  | 'Dashboard' | 'Santri' | 'Absensi' | 'Tahfizh' | 'Akademik' | 'Kurikulum' | 'Rapor' | 'Sertifikat' | 'Sarpras' 
   | 'Kalender' | 'Perpustakaan' | 'Kesehatan' | 'BK' | 'BukuTamu' | 'DataMaster' 
   | 'Keuangan' | 'Keasramaan' | 'BukuKas' | 'Koperasi' | 'Surat' | 'PSB' 
   | 'PortalWali' | 'Pengaturan' | 'Laporan' | 'AuditLog' | 'WhatsApp' | 'SyncAdmin' | 'Tentang';
@@ -13,6 +13,7 @@ export const Page = {
   Akademik: 'Akademik',
   Kurikulum: 'Kurikulum',
   Rapor: 'Rapor',
+  Sertifikat: 'Sertifikat',
   Sarpras: 'Sarpras',
   Kalender: 'Kalender',
   Perpustakaan: 'Perpustakaan',
@@ -42,6 +43,7 @@ export interface UserPermissions {
     psb?: AccessLevel;
     whatsapp?: AccessLevel;
     akademik?: AccessLevel;
+    sertifikat?: AccessLevel;
     absensi?: AccessLevel;
     tahfizh?: AccessLevel;
     sarpras?: AccessLevel;
@@ -839,6 +841,7 @@ export interface PondokSettings {
     
     raporTemplates?: RaporTemplate[];
     raporCloudConfig?: RaporCloudConfig;
+    sertifikatTemplates?: SertifikatTemplate[];
     
     // Surat Menyurat Redaksi
     suratTagihanPembuka: string;
@@ -1020,6 +1023,84 @@ export interface SuratTemplate {
     lastModified?: number;
 }
 
+export type SertifikatTheme = 'classic' | 'modern' | 'vertical' | 'dark' | 'ceria';
+export type SertifikatStampMode = 'auto' | 'seal' | 'image' | 'none';
+export type SertifikatKategori = 'Mutun' | 'Tahfizh' | 'Daurah & Kitab' | 'Perlombaan' | 'Apresiasi';
+
+export interface SertifikatIdentityItem {
+    label?: string;
+    value: string;
+}
+
+export interface SertifikatSignatoryConfig {
+    id: string;
+    sourceType: 'mudir' | 'halaqah' | 'wali_kelas' | 'guru' | 'manual';
+    teacherId?: number;
+    labelTop: string;
+    nama: string;
+    roleBottom: string;
+    nip?: string;
+    showNip?: boolean;
+    useDigitalTtd?: boolean;
+    signatureUrl?: string;
+}
+
+export interface SertifikatTemplate {
+    id: string;
+    nama: string;
+    kategori: SertifikatKategori;
+    kodeNomor: string;
+    tema: SertifikatTheme;
+    showBismillah: boolean;
+    showWatermarkLogo: boolean;
+    judulDokumen: string;
+    kalimatPengantar: string;
+    deskripsiCapaian: string;
+    capaianUtamaDefault: string;
+    showPredikat: boolean;
+    predikatLabel: string;
+    predikatDefault: string;
+    catatanDoaDefault: string;
+    signatoryCount: 1 | 2;
+    leftSignatory: SertifikatSignatoryConfig;
+    rightSignatory: SertifikatSignatoryConfig;
+    stampMode: SertifikatStampMode;
+    stampBottomText: string;
+    customStampAssetId?: string;
+    footerText?: string;
+    defaultRecipientMode?: 'single' | 'bulk' | 'manual';
+    lastModified?: number;
+}
+
+export interface SertifikatArchiveSnapshot {
+    tema: SertifikatTheme;
+    showBismillah: boolean;
+    showWatermarkLogo: boolean;
+    judulDokumen: string;
+    nomorSertifikat: string;
+    kalimatPengantar: string;
+    namaPenerima: string;
+    identitasItems: SertifikatIdentityItem[];
+    deskripsiCapaian: string;
+    capaianUtama: string;
+    showPredikat: boolean;
+    predikatLabel: string;
+    predikatValue: string;
+    catatanDoa?: string;
+    tempatPenetapan: string;
+    tanggalRaw: string;
+    tanggalFormatted: string;
+    signatoryCount: 1 | 2;
+    leftSignatory?: SertifikatSignatoryConfig;
+    rightSignatory: SertifikatSignatoryConfig;
+    stampMode: SertifikatStampMode;
+    stampUrl?: string;
+    stampBottomText: string;
+    footerText?: string;
+    kategori?: SertifikatKategori;
+    kodeNomor?: string;
+}
+
 export interface ArsipSurat {
     id: number;
     nomorSurat: string;
@@ -1028,6 +1109,7 @@ export interface ArsipSurat {
     isiSurat: string; // Processed HTML content
     tanggalBuat: string;
     templateId: number;
+    jenisDokumen?: 'surat' | 'sertifikat';
     
     // Snapshot of config at time of creation
     tempatCetak?: string;
@@ -1041,6 +1123,7 @@ export interface ArsipSurat {
     usePrePrintedKopSnapshot?: boolean;
     nomorHpTujuan?: string;
     santriId?: number;
+    sertifikatSnapshot?: SertifikatArchiveSnapshot;
 
     deleted?: boolean;
     lastModified?: number;

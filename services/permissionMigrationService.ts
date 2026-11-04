@@ -1,7 +1,7 @@
 import type { AccessLevel, User, UserPermissions } from '../types';
 import { ADMIN_PERMISSIONS, DEFAULT_STAFF_PERMISSIONS, DEFAULT_WALI_KELAS_PERMISSIONS } from './authService';
 
-export const CURRENT_PERMISSION_VERSION = 3;
+export const CURRENT_PERMISSION_VERSION = 4;
 
 const ACCESS_LEVELS: AccessLevel[] = ['none', 'read', 'write'];
 
@@ -10,6 +10,7 @@ const PERMISSION_KEYS: Array<keyof UserPermissions> = [
     'psb',
     'whatsapp',
     'akademik',
+    'sertifikat',
     'absensi',
     'tahfizh',
     'sarpras',
@@ -80,6 +81,19 @@ export const normalizeUserPermissions = (user: User): UserPermissions => {
         if (!isAdminUser && key === 'koperasi_manajer' && source.koperasi_manajer === undefined) {
             if (source.keuangan === 'write' || source.bukukas === 'write') {
                 fallback = 'write';
+            }
+        }
+
+        if (!isAdminUser && key === 'sertifikat' && source.sertifikat === undefined) {
+            if (source.akademik === 'write' || source.surat === 'write') {
+                fallback = 'write';
+            } else if (
+                source.akademik === 'read' ||
+                source.surat === 'read' ||
+                source.tahfizh === 'write' ||
+                source.tahfizh === 'read'
+            ) {
+                fallback = 'read';
             }
         }
 

@@ -3,6 +3,7 @@ import { Santri, BkSession } from '../../types';
 import { db } from '../../db';
 import { useAppContext } from '../../AppContext';
 import { logActivity } from '../../services/logService';
+import { generateSyncSafeId } from '../../utils/idGenerator';
 
 interface AbsensiBkModalProps {
     isOpen: boolean;
@@ -50,7 +51,7 @@ export const AbsensiBkModal: React.FC<AbsensiBkModalProps> = ({
         setIsSaving(true);
         try {
             const newSession: BkSession = {
-                id: Date.now(),
+                id: generateSyncSafeId(),
                 santriId: santri.id,
                 tanggal,
                 kategori,
@@ -59,11 +60,12 @@ export const AbsensiBkModal: React.FC<AbsensiBkModalProps> = ({
                 status: 'Baru',
                 privasi,
                 konselor,
+                deleted: false,
                 lastModified: Date.now()
             };
 
             await db.bkSessions.put(newSession);
-            await logActivity('INSERT', 'bkSessions', newSession.id, null, newSession);
+            await logActivity('INSERT', 'bkSessions', newSession.id, null, newSession, currentUser?.username || 'Staff');
             showToast(`Berhasil merujuk ${santri.namaLengkap} ke Bimbingan Konseling (BK).`, 'success');
             onClose();
         } catch (error) {

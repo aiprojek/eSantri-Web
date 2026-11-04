@@ -6,6 +6,7 @@ import { PengaturanPerpus } from './perpustakaan/PengaturanPerpus';
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from '../db';
 import { useAppContext } from '../AppContext';
+import { useFinanceContext } from '../contexts/FinanceContext';
 import { Buku, Sirkulasi as SirkulasiType } from '../types';
 import { PageHeader } from './common/PageHeader';
 import { HeaderTabs } from './common/HeaderTabs';
@@ -13,8 +14,11 @@ import { formatRupiah } from '../utils/formatters';
 import { logActivity } from '../services/logService';
 import { generateSyncSafeId } from '../utils/idGenerator';
 
+export type MetodeBayarDendaPerpus = 'tunai_kas' | 'potong_saldo' | 'catatan_saja';
+
 const Perpustakaan: React.FC = () => {
-    const { currentUser, showToast } = useAppContext();
+    const { settings, currentUser, showToast } = useAppContext();
+    const { onAddTransaksiKas, onAddTransaksiSaldo } = useFinanceContext();
     const staffName = currentUser?.fullName || currentUser?.username || 'Petugas Perpus';
     const [activeTab, setActiveTab] = useState<'katalog' | 'sirkulasi' | 'cetak' | 'pengaturan'>('katalog');
     const [sirkulasiInitialFilter, setSirkulasiInitialFilter] = useState<'semua' | 'terlambat' | 'aktif'>('semua');
@@ -82,12 +86,20 @@ const Perpustakaan: React.FC = () => {
 
     const handleAdjustStok = async (bukuId: number, delta: number) => {
         if (!canWrite) return;
-        const target = bukuList.find(b => b.id === bukuId);
-        if (!target) return;
-        const newStok = Math.max(0, (Number(target.stok) || 0) + delta);
-        await db.buku.update(bukuId, { stok: newStok, lastModified: Date.now() });
-        void logActivity('UPDATE', 'buku', String(bukuId), { stok: target.stok }, { stok: newStok }, staffName);
-        showToast(`Stok "${target.judul}" disesuaikan jadi ${newStok}`, 'info');
+        let updatedTitle = '';
+        let finalStok = 0;
+        await (db as any).transaction('rw', db.buku, async () => {
+            const freshBuku = await db.buku.get(bukuId);
+            if (!freshBuku || freshBuku.deleted) return;
+            const oldStok = Number(freshBuku.stok) || 0;
+            finalStok = Math.max(0, oldStok + delta);
+            updatedTitle = freshBuku.judul;
+            await db.buku.put({ ...freshBuku, stok: finalStok, lastModified: Date.now() });
+            void logActivity('UPDATE', 'buku', String(bukuId), { stok: oldStok }, { stok: finalStok }, staffName);
+        });
+        if (updatedTitle) {
+            showToast(`Stok "${updatedTitle}" disesuaikan jadi ${finalStok}`, 'info');
+        }
     };
 
     const handleDeleteBuku = async (id: number) => {
@@ -102,95 +114,178 @@ const Perpustakaan: React.FC = () => {
 
     const handlePinjam = async (santriId: number, bukuId: number, durationDays: number) => {
          if (!canWrite) return;
-         const buku = bukuList.find(b => b.id === bukuId);
-         if (!buku || buku.stok < 1) {
-             showToast('Stok buku habis atau tidak ditemukan.', 'error');
-             return;
-         }
-         const masihDipinjam = sirkulasiList.some(
-            (item) => item.status === 'Dipinjam' && item.bukuId === bukuId && item.santriId === santriId
-         );
-         if (masihDipinjam) {
-            showToast('Buku ini masih tercatat sedang dipinjam oleh santri yang sama.', 'error');
-            return;
-         }
+         const maksPinjam = settings.perpusConfig?.maksPinjamBuku ?? 3;
 
-         const today = new Date();
-         const dueDate = new Date(today);
-         dueDate.setDate(today.getDate() + durationDays);
+         try {
+             const today = new Date();
+             const dueDate = new Date(today);
+             dueDate.setDate(today.getDate() + durationDays);
+             const todayStr = today.toISOString().split('T')[0];
+             const dueStr = dueDate.toISOString().split('T')[0];
 
-         await (db as any).transaction('rw', db.sirkulasi, db.buku, async () => {
-             const now = Date.now();
-             const sirkId = generateSyncSafeId();
-             // Kurangi stok buku
-             await db.buku.update(bukuId, { stok: buku.stok - 1, lastModified: now });
-             // Catat sirkulasi
-             await db.sirkulasi.put({
-                 id: sirkId,
-                 santriId,
-                 bukuId,
-                 tanggalPinjam: today.toISOString().split('T')[0],
-                 tanggalKembaliSeharusnya: dueDate.toISOString().split('T')[0],
-                 status: 'Dipinjam',
-                 denda: 0,
-                 deleted: false,
-                 lastModified: now
-             } as SirkulasiType);
-             void logActivity('INSERT', 'sirkulasi', String(sirkId), null, { santriId, bukuId, dueDate: dueDate.toISOString().split('T')[0] }, staffName);
-         });
-         showToast('Peminjaman buku berhasil dicatat.', 'success');
+             await (db as any).transaction('rw', db.sirkulasi, db.buku, async () => {
+                 const freshBuku = await db.buku.get(bukuId);
+                 if (!freshBuku || freshBuku.deleted || (Number(freshBuku.stok) || 0) < 1) {
+                     throw new Error('Stok buku habis atau tidak ditemukan.');
+                 }
+
+                 const activeSantriLoans = await db.sirkulasi
+                     .where('santriId')
+                     .equals(santriId)
+                     .filter((item: SirkulasiType) => !item.deleted && item.status === 'Dipinjam')
+                     .toArray();
+
+                 if (activeSantriLoans.some((item: SirkulasiType) => item.bukuId === bukuId)) {
+                     throw new Error('Buku ini masih tercatat sedang dipinjam oleh santri yang sama.');
+                 }
+                 if (maksPinjam > 0 && activeSantriLoans.length >= maksPinjam) {
+                     throw new Error(`Santri telah mencapai batas maksimal peminjaman (${maksPinjam} buku aktif).`);
+                 }
+
+                 const now = Date.now();
+                 const sirkId = generateSyncSafeId();
+                 await db.buku.put({
+                     ...freshBuku,
+                     stok: (Number(freshBuku.stok) || 0) - 1,
+                     lastModified: now
+                 });
+                 await db.sirkulasi.put({
+                     id: sirkId,
+                     santriId,
+                     bukuId,
+                     tanggalPinjam: todayStr,
+                     tanggalKembaliSeharusnya: dueStr,
+                     status: 'Dipinjam',
+                     denda: 0,
+                     deleted: false,
+                     lastModified: now
+                 } as SirkulasiType);
+                 void logActivity('INSERT', 'sirkulasi', String(sirkId), null, { santriId, bukuId, dueDate: dueStr }, staffName);
+             });
+             showToast('Peminjaman buku berhasil dicatat.', 'success');
+         } catch (err: any) {
+             showToast(err?.message || 'Gagal mencatat peminjaman buku.', 'error');
+         }
     };
 
     const handleKembali = async (
         sirkulasiId: number, 
         denda: number, 
         statusKembali: 'Kembali' | 'Rusak' | 'Hilang' = 'Kembali', 
-        catatan: string = ''
+        catatan: string = '',
+        metodeBayarDenda: MetodeBayarDendaPerpus = 'catatan_saja'
     ) => {
         if (!canWrite) return;
-        const sirkulasi = sirkulasiList.find(s => s.id === sirkulasiId);
-        if (!sirkulasi) return;
-        if (sirkulasi.status !== 'Dipinjam') {
-            showToast('Transaksi ini sudah diproses sebelumnya.', 'info');
-            return;
+        const cleanDenda = Math.max(0, Number(denda) || 0);
+
+        try {
+            const freshSirkulasi = await db.sirkulasi.get(sirkulasiId);
+            if (!freshSirkulasi || freshSirkulasi.deleted) return;
+            if (freshSirkulasi.status !== 'Dipinjam') {
+                showToast('Transaksi ini sudah diproses sebelumnya.', 'info');
+                return;
+            }
+            const freshBuku = await db.buku.get(freshSirkulasi.bukuId);
+            const santriDoc = await db.santri.get(freshSirkulasi.santriId);
+            const judulBuku = freshBuku?.judul || `Buku #${freshSirkulasi.bukuId}`;
+            const namaSantri = santriDoc?.namaLengkap || `Santri #${freshSirkulasi.santriId}`;
+
+            // If paying fine via Uang Saku, deduct first (validates balance atomically inside FinanceContext)
+            if (cleanDenda > 0 && metodeBayarDenda === 'potong_saldo') {
+                await onAddTransaksiSaldo(
+                    {
+                        santriId: freshSirkulasi.santriId,
+                        jenis: 'Penarikan',
+                        jumlah: cleanDenda,
+                        keterangan: `Denda Perpustakaan (${statusKembali}): ${judulBuku}`
+                    },
+                    { catatKeKas: false, penanggungJawab: staffName }
+                );
+            }
+
+            const paymentTag =
+                cleanDenda > 0
+                    ? metodeBayarDenda === 'tunai_kas'
+                        ? '[Denda Tunai -> Buku Kas]'
+                        : metodeBayarDenda === 'potong_saldo'
+                            ? '[Denda Potong Uang Saku]'
+                            : '[Denda Arsip Perpus]'
+                    : '';
+            const mergedCatatan = [catatan.trim(), paymentTag].filter(Boolean).join(' ');
+
+            await (db as any).transaction('rw', db.sirkulasi, db.buku, async () => {
+                const latestSirkulasi = await db.sirkulasi.get(sirkulasiId);
+                if (!latestSirkulasi || latestSirkulasi.status !== 'Dipinjam') {
+                    throw new Error('Transaksi sirkulasi sudah diproses.');
+                }
+                const now = Date.now();
+                if (statusKembali !== 'Hilang') {
+                    const latestBuku = await db.buku.get(latestSirkulasi.bukuId);
+                    if (latestBuku && !latestBuku.deleted) {
+                        await db.buku.put({
+                            ...latestBuku,
+                            stok: (Number(latestBuku.stok) || 0) + 1,
+                            lastModified: now
+                        });
+                    }
+                }
+                const updatedSirkulasi: SirkulasiType = {
+                    ...latestSirkulasi,
+                    status: statusKembali,
+                    tanggalDikembalikan: new Date().toISOString().split('T')[0],
+                    denda: cleanDenda,
+                    catatan: mergedCatatan,
+                    deleted: false,
+                    lastModified: now
+                };
+                await db.sirkulasi.put(updatedSirkulasi);
+                void logActivity('UPDATE', 'sirkulasi', String(sirkulasiId), latestSirkulasi, updatedSirkulasi, staffName);
+            });
+
+            // If paying fine in Cash -> record into central Buku Kas Umum
+            if (cleanDenda > 0 && metodeBayarDenda === 'tunai_kas') {
+                await onAddTransaksiKas({
+                    jenis: 'Pemasukan',
+                    kategori: 'Denda & Administrasi Perpustakaan',
+                    deskripsi: `Denda Perpustakaan (${statusKembali}) — ${namaSantri} (${judulBuku})`,
+                    jumlah: cleanDenda,
+                    penanggungJawab: staffName,
+                    rekening: 'Kas Tunai Bendahara'
+                });
+            }
+
+            const statusLabel = statusKembali === 'Hilang' ? 'Tercatat Hilang' : statusKembali === 'Rusak' ? 'Kembali (Rusak)' : 'Berhasil Dikembalikan';
+            const financeLabel =
+                cleanDenda > 0
+                    ? metodeBayarDenda === 'tunai_kas'
+                        ? ' & Denda masuk Buku Kas'
+                        : metodeBayarDenda === 'potong_saldo'
+                            ? ' & Denda dipotong dari Uang Saku'
+                            : ''
+                    : '';
+            showToast(`Buku ${statusLabel}${financeLabel}.`, 'success');
+        } catch (err: any) {
+            showToast(err?.message || 'Gagal memproses pengembalian buku.', 'error');
         }
-        const buku = bukuList.find(b => b.id === sirkulasi.bukuId);
-
-        await (db as any).transaction('rw', db.sirkulasi, db.buku, async () => {
-             // Jika status bukan 'Hilang', kembalikan stok buku ke rak
-             if (buku && statusKembali !== 'Hilang') {
-                 await db.buku.update(buku.id, { stok: (Number(buku.stok) || 0) + 1, lastModified: Date.now() });
-             }
-             // Update sirkulasi
-             await db.sirkulasi.update(sirkulasiId, {
-                 status: statusKembali,
-                 tanggalDikembalikan: new Date().toISOString().split('T')[0],
-                 denda: Math.max(0, denda || 0),
-                 catatan: catatan.trim(),
-                 lastModified: Date.now()
-             });
-             void logActivity('UPDATE', 'sirkulasi', String(sirkulasiId), sirkulasi, { status: statusKembali, denda, catatan }, staffName);
-        });
-
-        const statusLabel = statusKembali === 'Hilang' ? 'Tercatat Hilang' : statusKembali === 'Rusak' ? 'Kembali (Rusak)' : 'Berhasil Dikembalikan';
-        showToast(`Buku ${statusLabel}.`, 'success');
     };
 
     const handlePerpanjang = async (sirkulasiId: number, additionalDays: number) => {
         if (!canWrite) return;
-        const loan = sirkulasiList.find(s => s.id === sirkulasiId);
-        if (!loan) return;
+        const freshLoan = await db.sirkulasi.get(sirkulasiId);
+        if (!freshLoan || freshLoan.deleted || freshLoan.status !== 'Dipinjam') return;
         
-        const currentDue = new Date(loan.tanggalKembaliSeharusnya);
+        const currentDue = new Date(freshLoan.tanggalKembaliSeharusnya);
         currentDue.setDate(currentDue.getDate() + additionalDays);
         const newDueDate = currentDue.toISOString().split('T')[0];
 
-        await db.sirkulasi.update(sirkulasiId, {
+        const updatedLoan: SirkulasiType = {
+            ...freshLoan,
             tanggalKembaliSeharusnya: newDueDate,
-            catatan: loan.catatan ? `${loan.catatan} (Diperpanjang +${additionalDays} hari)` : `Diperpanjang +${additionalDays} hari`,
+            catatan: freshLoan.catatan ? `${freshLoan.catatan} (Diperpanjang +${additionalDays} hari)` : `Diperpanjang +${additionalDays} hari`,
             lastModified: Date.now()
-        });
-        void logActivity('UPDATE', 'sirkulasi', String(sirkulasiId), loan, { newDueDate, additionalDays }, staffName);
+        };
+        await db.sirkulasi.put(updatedLoan);
+        void logActivity('UPDATE', 'sirkulasi', String(sirkulasiId), freshLoan, { newDueDate, additionalDays }, staffName);
         showToast(`Batas pinjam diperpanjang +${additionalDays} hari (sampai ${newDueDate})`, 'success');
     };
 

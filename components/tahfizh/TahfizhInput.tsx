@@ -7,6 +7,8 @@ import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { TahfizhBatchHalaqahInput } from './TahfizhBatchHalaqahInput';
 import { QuranMushafViewer } from './QuranMushafViewer';
 import { calculateTahfizhSmartScore } from '../../utils/tahfizhScoring';
+import { generateSyncSafeId } from '../../utils/idGenerator';
+import { openExternalLinkSafe } from '../../services/waService';
 
 export const TahfizhInput: React.FC = () => {
     const { settings, showToast, currentUser } = useAppContext();
@@ -238,7 +240,7 @@ export const TahfizhInput: React.FC = () => {
         setIsSaving(true);
         try {
             const newRecord: TahfizhRecord = {
-                id: Date.now(),
+                id: generateSyncSafeId(),
                 santriId,
                 tanggal: new Date().toISOString().split('T')[0],
                 tipe,
@@ -344,22 +346,45 @@ export const TahfizhInput: React.FC = () => {
             `Semoga Allah senantiasa memberkahi hafalan ananda dan menjadikannya ahlul Qur'an.\n\n` +
             `_${settings.namaPonpes}_`;
 
-        window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(pesan)}`, '_blank');
+        openExternalLinkSafe(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(pesan)}`);
     };
 
-    const PredikatButton: React.FC<{ value: TahfizhRecord['predikat'], label: string, color: string }> = ({ value, label, color }) => (
-        <button
-            type="button"
-            onClick={() => setPredikat(value)}
-            className={`flex-1 py-3 px-2 rounded-xl text-xs sm:text-sm font-bold border-2 transition-all ${
-                predikat === value 
-                ? `bg-${color}-600 text-white border-${color}-600 shadow-md transform scale-105` 
-                : `bg-white text-gray-600 border-gray-200 hover:border-${color}-300 hover:bg-${color}-50`
-            }`}
-        >
-            {label}
-        </button>
-    );
+    const PREDIKAT_COLOR_STYLES: Record<'green' | 'blue' | 'yellow' | 'red', { active: string; inactive: string }> = {
+        green: {
+            active: 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-[1.02]',
+            inactive: 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300 hover:bg-emerald-50'
+        },
+        blue: {
+            active: 'bg-blue-600 text-white border-blue-600 shadow-md scale-[1.02]',
+            inactive: 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+        },
+        yellow: {
+            active: 'bg-amber-500 text-white border-amber-500 shadow-md scale-[1.02]',
+            inactive: 'bg-white text-gray-600 border-gray-200 hover:border-amber-300 hover:bg-amber-50'
+        },
+        red: {
+            active: 'bg-rose-600 text-white border-rose-600 shadow-md scale-[1.02]',
+            inactive: 'bg-white text-gray-600 border-gray-200 hover:border-rose-300 hover:bg-rose-50'
+        }
+    };
+
+    const PredikatButton: React.FC<{ value: TahfizhRecord['predikat']; label: string; color: 'green' | 'blue' | 'yellow' | 'red' }> = ({ value, label, color }) => {
+        const style = PREDIKAT_COLOR_STYLES[color];
+        return (
+            <button
+                type="button"
+                onClick={() => {
+                    setAutoPredikatEnabled(false);
+                    setPredikat(value);
+                }}
+                className={`flex-1 py-3 px-2 rounded-xl text-xs sm:text-sm font-bold border-2 transition-all ${
+                    predikat === value ? style.active : style.inactive
+                }`}
+            >
+                {label}
+            </button>
+        );
+    };
 
     const handleResetSantriFilter = () => {
         setSearchSantri('');

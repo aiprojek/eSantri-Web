@@ -6,6 +6,8 @@ import { db } from './db';
 import { logActivity as logActivityHelper, setupGlobalAuditHooks } from './services/logService';
 import { initialSantri, initialSettings } from './data/mock';
 import { loadSyncService } from './utils/lazyCloudServices';
+import { generateSyncSafeId } from './utils/idGenerator';
+import { openExternalLinkSafe } from './services/waService';
 
 // Import New Contexts
 import { useUIContext } from './contexts/UIContext';
@@ -56,7 +58,7 @@ interface AppContextType {
   
   onSaveSuratTemplate: (template: SuratTemplate) => Promise<void>;
   onDeleteSuratTemplate: (id: number) => Promise<void>;
-  onSaveArsipSurat: (surat: Omit<ArsipSurat, 'id'>) => Promise<void>;
+  onSaveArsipSurat: (surat: Omit<ArsipSurat, 'id'> & { id?: number }) => Promise<ArsipSurat>;
   onDeleteArsipSurat: (id: number) => Promise<void>;
   onDeleteSampleData: () => Promise<void>;
   onResetToSampleData: () => Promise<void>;
@@ -95,11 +97,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return () => clearInterval(interval);
     }, [sets.settings.cloudSyncConfig, syncStatus]);
 
-    const generateUniqueId = (): number => {
-        const timestamp = Date.now();
-        const random = Math.floor(Math.random() * 1000);
-        return parseInt(`${timestamp}${random}`.slice(0, 16)); 
-    };
+    const generateUniqueId = (): number => generateSyncSafeId();
 
     // Helper Log
     const logActivity = useCallback(async (tableName: string, operation: 'INSERT' | 'UPDATE' | 'DELETE', recordId: string, oldData?: any, newData?: any) => {
@@ -158,7 +156,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     const waUrl = waTarget.startsWith('http')
                         ? waTarget
                         : `https://wa.me/${waTarget}?text=${encodeURIComponent(message)}`;
-                    window.open(waUrl, '_blank', 'noopener,noreferrer');
+                    openExternalLinkSafe(waUrl);
                     if (tgTarget) {
                         ui.showToast('Pesan disalin. Jika perlu, kirim juga ke Telegram admin.', 'info');
                     }
@@ -168,7 +166,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     const tgUrl = tgTarget.includes('?')
                         ? tgTarget
                         : `${tgTarget}${tgTarget.includes('t.me/share/url') ? '&' : '?'}text=${encodeURIComponent(message)}`;
-                    window.open(tgUrl, '_blank', 'noopener,noreferrer');
+                    openExternalLinkSafe(tgUrl);
                 }
             }
         );
@@ -414,13 +412,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Surat Actions
     const onSaveSuratTemplate = async (template: SuratTemplate) => {
-        const withTs = addTimestamp(template);
-        if (template.id) {
+        const withTs = addTimestamp({ ...template, deleted: false });
+        if (template.id && suratTemplates.some(t => t.id === template.id)) {
             const existing = suratTemplates.find(t => t.id === template.id) || null;
             await db.suratTemplates.put(withTs);
             await logActivity('suratTemplates', 'UPDATE', template.id.toString(), existing, withTs);
         } else {
-            const newId = generateUniqueId();
+            const newId = template.id || generateUniqueId();
             const newItem = { ...withTs, id: newId };
             await db.suratTemplates.put(newItem);
             await logActivity('suratTemplates', 'INSERT', newId.toString(), null, newItem);
@@ -435,12 +433,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await logActivity('suratTemplates', 'DELETE', id.toString(), item, null);
         triggerAutoSync();
     };
-    const onSaveArsipSurat = async (surat: Omit<ArsipSurat, 'id'>) => {
-        const id = generateUniqueId();
-        const withTs = addTimestamp({ ...surat, id });
-        await db.arsipSurat.put(withTs as ArsipSurat);
+    const onSaveArsipSurat = async (surat: Omit<ArsipSurat, 'id'> & { id?: number }): Promise<ArsipSurat> => {
+        const id = surat.id || generateUniqueId();
+        const withTs = addTimestamp({ ...surat, id, deleted: false }) as ArsipSurat;
+        await db.arsipSurat.put(withTs);
         await logActivity('arsipSurat', 'INSERT', id.toString(), null, withTs);
         triggerAutoSync();
+        return withTs;
     };
     const onDeleteArsipSurat = async (id: number) => {
         const item = arsipSuratList.find(a => a.id === id);

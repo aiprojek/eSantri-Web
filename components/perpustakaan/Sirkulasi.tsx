@@ -1,14 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Buku, Sirkulasi as SirkulasiType } from '../../types';
 import { useSantriContext } from '../../contexts/SantriContext';
+import { useFinanceContext } from '../../contexts/FinanceContext';
 import { useAppContext } from '../../AppContext';
 import { formatRupiah, formatDate } from '../../utils/formatters';
+import type { MetodeBayarDendaPerpus } from '../Perpustakaan';
 
 interface SirkulasiProps {
     sirkulasiList: SirkulasiType[];
     bukuList: Buku[];
     onPinjam: (santriId: number, bukuId: number, duration: number) => void;
-    onKembali: (id: number, denda: number, status: 'Kembali' | 'Rusak' | 'Hilang', catatan: string) => void;
+    onKembali: (id: number, denda: number, status: 'Kembali' | 'Rusak' | 'Hilang', catatan: string, metodeBayarDenda?: MetodeBayarDendaPerpus) => void;
     onPerpanjang?: (id: number, additionalDays: number) => void;
     initialFilter?: 'semua' | 'terlambat' | 'aktif';
     onOpenPengaturan?: () => void;
@@ -37,6 +39,7 @@ export const Sirkulasi: React.FC<SirkulasiProps> = ({
     canWrite 
 }) => {
     const { santriList } = useSantriContext();
+    const { saldoSantriList } = useFinanceContext();
     const { settings, showToast } = useAppContext();
     const [mode, setMode] = useState<'pinjam' | 'kembali' | 'riwayat'>('kembali');
 
@@ -66,11 +69,13 @@ export const Sirkulasi: React.FC<SirkulasiProps> = ({
         condition: 'Kembali' | 'Rusak' | 'Hilang';
         denda: number;
         catatan: string;
+        metodeBayarDenda: MetodeBayarDendaPerpus;
     }>({
         isOpen: false,
         condition: 'Kembali',
         denda: 0,
-        catatan: ''
+        catatan: '',
+        metodeBayarDenda: 'tunai_kas'
     });
 
     // Extension Modal
@@ -228,7 +233,8 @@ export const Sirkulasi: React.FC<SirkulasiProps> = ({
             loan,
             condition: 'Kembali',
             denda: loan.estimatedFine,
-            catatan: loan.daysOverdue > 0 ? `Terlambat ${loan.daysOverdue} hari.` : ''
+            catatan: loan.daysOverdue > 0 ? `Terlambat ${loan.daysOverdue} hari.` : '',
+            metodeBayarDenda: 'tunai_kas'
         });
     };
 
@@ -239,9 +245,10 @@ export const Sirkulasi: React.FC<SirkulasiProps> = ({
             returnModal.loan.id, 
             returnModal.denda, 
             returnModal.condition, 
-            returnModal.catatan
+            returnModal.catatan,
+            returnModal.metodeBayarDenda
         );
-        setReturnModal({ isOpen: false, condition: 'Kembali', denda: 0, catatan: '' });
+        setReturnModal({ isOpen: false, condition: 'Kembali', denda: 0, catatan: '', metodeBayarDenda: 'tunai_kas' });
     };
 
     // Open Extension Modal
@@ -1097,13 +1104,61 @@ export const Sirkulasi: React.FC<SirkulasiProps> = ({
                                     step={500}
                                     value={returnModal.denda} 
                                     onChange={e => setReturnModal(prev => ({ ...prev, denda: Math.max(0, parseInt(e.target.value) || 0) }))} 
-                                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-800 focus:border-blue-500 focus:outline-none" 
+                                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold tabular-nums text-slate-800 focus:border-blue-500 focus:outline-none" 
                                 />
-                                {returnModal.denda > 0 && (
-                                    <p className="mt-1 text-[11px] text-rose-600 font-semibold">
-                                        Denda yang harus dibayar: {formatRupiah(returnModal.denda)}
-                                    </p>
-                                )}
+                                {returnModal.denda > 0 && (() => {
+                                    const santriSaldo = saldoSantriList.find(s => s.santriId === returnModal.loan?.santriId)?.saldo || 0;
+                                    const saldoCukup = santriSaldo >= returnModal.denda;
+                                    return (
+                                        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3 space-y-2">
+                                            <div className="flex items-center justify-between text-[11px]">
+                                                <span className="font-bold text-amber-900">Metode Pelunasan Denda ({formatRupiah(returnModal.denda)}):</span>
+                                                <span className="text-slate-600 tabular-nums">Uang Saku: <strong>{formatRupiah(santriSaldo)}</strong></span>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setReturnModal(prev => ({ ...prev, metodeBayarDenda: 'tunai_kas' }))}
+                                                    className={`rounded-lg border p-2 text-left text-[11px] transition-all ${
+                                                        returnModal.metodeBayarDenda === 'tunai_kas'
+                                                            ? 'border-emerald-600 bg-emerald-50 text-emerald-900 font-bold ring-1 ring-emerald-500/30'
+                                                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <div><i className="bi bi-cash-coin mr-1 text-emerald-600"></i>Tunai ke Kas</div>
+                                                    <div className="text-[10px] font-normal text-slate-500 mt-0.5">Masuk Buku Kas Umum</div>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={!saldoCukup}
+                                                    onClick={() => setReturnModal(prev => ({ ...prev, metodeBayarDenda: 'potong_saldo' }))}
+                                                    className={`rounded-lg border p-2 text-left text-[11px] transition-all disabled:opacity-45 disabled:cursor-not-allowed ${
+                                                        returnModal.metodeBayarDenda === 'potong_saldo'
+                                                            ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold ring-1 ring-blue-500/30'
+                                                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <div><i className="bi bi-wallet2 mr-1 text-blue-600"></i>Potong Uang Saku</div>
+                                                    <div className="text-[10px] font-normal text-slate-500 mt-0.5">
+                                                        {saldoCukup ? 'Potong saldo tabungan' : 'Saldo tidak cukup'}
+                                                    </div>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setReturnModal(prev => ({ ...prev, metodeBayarDenda: 'catatan_saja' }))}
+                                                    className={`rounded-lg border p-2 text-left text-[11px] transition-all ${
+                                                        returnModal.metodeBayarDenda === 'catatan_saja'
+                                                            ? 'border-slate-600 bg-slate-100 text-slate-900 font-bold ring-1 ring-slate-500/30'
+                                                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <div><i className="bi bi-journal-bookmark mr-1 text-slate-600"></i>Arsip Perpus Saja</div>
+                                                    <div className="text-[10px] font-normal text-slate-500 mt-0.5">Kas internal perpus</div>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
 
                             {/* Catatan */}

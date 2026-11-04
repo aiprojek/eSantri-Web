@@ -47,10 +47,6 @@ const DEFAULT_STATUS_OPTIONS: SantriFilterOption[] = [
     { value: 'Lulus', label: 'Lulus' },
     { value: 'Keluar/Pindah', label: 'Keluar/Pindah' },
     { value: 'Masuk', label: 'Masuk' },
-    { value: 'Baru', label: 'Baru' },
-    { value: 'Diterima', label: 'Diterima' },
-    { value: 'Cadangan', label: 'Cadangan' },
-    { value: 'Ditolak', label: 'Ditolak' },
 ];
 
 const DEFAULT_GENDER_OPTIONS: SantriFilterOption[] = [

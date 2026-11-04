@@ -8,6 +8,7 @@ import { BulkMasterEditor } from './modals/BulkMasterEditor';
 import { SignatureDropzone } from '../common/SignatureDropzone';
 import { loadXLSX } from '../../utils/lazyClientLibs';
 import { optimizeSignatureImage } from '../../utils/imageOptimizer';
+import { generateSyncSafeId } from '../../utils/idGenerator';
 import {
     findStrictTeacherTtdAsset,
     upsertTeacherTtdAsset,
@@ -98,7 +99,7 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
         let updatedTeachers: TenagaPengajar[];
 
         if (mode === 'add') {
-            const finalId = teacherList.length > 0 ? Math.max(...teacherList.map((t) => t.id)) + 1 : 1;
+            const finalId = teacherList.length > 0 ? Math.floor(Math.max(...teacherList.map((t) => t.id))) + 1 : 1;
             savedTeacher = { ...teacher, id: finalId };
             updatedTeachers = [...teacherList, savedTeacher];
         } else {
@@ -202,7 +203,7 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
     const handleBulkSave = async (data: any[]) => {
         const teacherList = [...localSettings.tenagaPengajar];
         const rombelList = [...localSettings.rombel];
-        let nextId = teacherList.length > 0 ? Math.max(...teacherList.map((t) => t.id)) + 1 : 1;
+        let nextId = teacherList.length > 0 ? Math.floor(Math.max(...teacherList.map((t) => t.id))) + 1 : 1;
 
         let rombelsChanged = false;
         const editedPairs: Array<{ saved: TenagaPengajar; prevName?: string }> = [];
@@ -217,7 +218,7 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
 
             if (item.jabatan) {
                 riwayat.push({
-                    id: Date.now() + Math.random(),
+                    id: generateSyncSafeId(),
                     jabatan: item.jabatan,
                     rombelId: item.rombelId,
                     tanggalMulai: item.tanggalMulai || new Date().toISOString().split('T')[0],

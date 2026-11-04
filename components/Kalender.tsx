@@ -19,6 +19,8 @@ import { HeaderTabs } from './common/HeaderTabs';
 import { MobileFilterDrawer } from './common/MobileFilterDrawer';
 import { downloadIcsFile } from '../utils/icsExport';
 import { exportPiketSchedulePdf } from '../utils/piketPdfExport';
+import { generateSyncSafeId } from '../utils/idGenerator';
+import { logActivity } from '../services/logService';
 
 // --- EVENT MODAL ---
 interface EventModalProps {
@@ -1119,10 +1121,10 @@ const JadwalPiketView: React.FC = () => {
     const fetchPiketData = useCallback(async () => {
         if (activeDates.length === 1) {
             const data = await db.piketSchedules.where('tanggal').equals(activeDates[0]).toArray();
-            setPiketList(data);
+            setPiketList(data.filter(p => !p.deleted));
         } else {
             const data = await db.piketSchedules.where('tanggal').anyOf(activeDates).toArray();
-            setPiketList(data);
+            setPiketList(data.filter(p => !p.deleted));
         }
     }, [activeDates]);
 
@@ -1132,7 +1134,7 @@ const JadwalPiketView: React.FC = () => {
 
     const handleOpenSelector = (tanggal: string, sholat: string, field: 'muadzinSantriId' | 'imamSantriId') => {
         if (!canWrite) return;
-        const existing = piketList.find(p => p.tanggal === tanggal && p.sholat === sholat);
+        const existing = piketList.find(p => !p.deleted && p.tanggal === tanggal && p.sholat === sholat);
         setEditingSlot({ id: existing ? existing.id : null, tanggal, sholat, field });
         setSelectorOpen(true);
     };
@@ -1144,17 +1146,18 @@ const JadwalPiketView: React.FC = () => {
         const { id, tanggal, sholat, field } = editingSlot;
         
         if (id) {
-            await db.piketSchedules.update(id, { [field]: santriId || undefined, lastModified: Date.now() });
-            setPiketList(prev => prev.map(p => p.id === id ? { ...p, [field]: santriId || undefined } : p));
+            await db.piketSchedules.update(id, { [field]: santriId || undefined, deleted: false, lastModified: Date.now() });
+            setPiketList(prev => prev.map(p => p.id === id ? { ...p, [field]: santriId || undefined, deleted: false } : p));
         } else {
             const newItem: PiketSchedule = {
-                id: Date.now(),
+                id: generateSyncSafeId(),
                 tanggal,
                 sholat: sholat as any,
                 [field]: santriId || undefined,
+                deleted: false,
                 lastModified: Date.now()
             };
-            await db.piketSchedules.add(newItem);
+            await db.piketSchedules.put(newItem);
             setPiketList(prev => [...prev, newItem]);
         }
     };
@@ -1177,16 +1180,17 @@ const JadwalPiketView: React.FC = () => {
                 const randomImam = shuffled[(idx + 2) % shuffled.length];
                 
                 if (!existing) {
-                    updates.push(db.piketSchedules.add({
-                        id: Date.now() + Math.random(),
+                    updates.push(db.piketSchedules.put({
+                        id: generateSyncSafeId(),
                         tanggal: selectedDate,
                         sholat,
                         muadzinSantriId: randomMuadzin.id,
                         imamSantriId: randomImam.id,
+                        deleted: false,
                         lastModified: Date.now()
                     } as PiketSchedule));
                 } else {
-                    const patch: Partial<PiketSchedule> = { lastModified: Date.now() };
+                    const patch: Partial<PiketSchedule> = { deleted: false, lastModified: Date.now() };
                     if (!existing.muadzinSantriId) patch.muadzinSantriId = randomMuadzin.id;
                     if (!existing.imamSantriId) patch.imamSantriId = randomImam.id;
                     updates.push(db.piketSchedules.update(existing.id, patch));
@@ -1220,16 +1224,17 @@ const JadwalPiketView: React.FC = () => {
                     santriIdx++;
 
                     if (!existing) {
-                        updates.push(db.piketSchedules.add({
-                            id: Date.now() + Math.random() + santriIdx,
+                        updates.push(db.piketSchedules.put({
+                            id: generateSyncSafeId(),
                             tanggal: dateStr,
                             sholat,
                             muadzinSantriId: muadzin.id,
                             imamSantriId: imam.id,
+                            deleted: false,
                             lastModified: Date.now()
                         } as PiketSchedule));
                     } else {
-                        const patch: Partial<PiketSchedule> = { lastModified: Date.now() };
+                        const patch: Partial<PiketSchedule> = { deleted: false, lastModified: Date.now() };
                         if (!existing.muadzinSantriId) patch.muadzinSantriId = muadzin.id;
                         if (!existing.imamSantriId) patch.imamSantriId = imam.id;
                         updates.push(db.piketSchedules.update(existing.id, patch));
@@ -1246,9 +1251,12 @@ const JadwalPiketView: React.FC = () => {
     const handleClearWeekly = () => {
         if (!canWrite) return;
         showConfirmation('Kosongkan Jadwal Minggu Ini?', 'Semua petugas sholat pada minggu yang dipilih akan dihapus.', async () => {
-            const idsToDelete = piketList.filter(p => weekDates.includes(p.tanggal)).map(p => p.id);
-            if (idsToDelete.length > 0) {
-                await db.piketSchedules.bulkDelete(idsToDelete);
+            const itemsToClear = piketList.filter(p => !p.deleted && weekDates.includes(p.tanggal));
+            if (itemsToClear.length > 0) {
+                const now = Date.now();
+                await db.piketSchedules.bulkPut(
+                    itemsToClear.map(p => ({ ...p, deleted: true, lastModified: now }))
+                );
             }
             await fetchPiketData();
             showToast('Jadwal minggu ini telah dikosongkan.', 'success');
@@ -1992,28 +2000,46 @@ const Kalender: React.FC = () => {
 
     const handleSaveEvent = async (data: Omit<CalendarEvent, 'id'>) => {
         if (!canWrite) return;
-        await db.calendarEvents.add({ ...data, lastModified: Date.now() } as CalendarEvent);
+        const newEvt: CalendarEvent = {
+            ...data,
+            id: generateSyncSafeId(),
+            deleted: false,
+            lastModified: Date.now(),
+        };
+        await db.calendarEvents.put(newEvt);
+        await logActivity('INSERT', 'calendarEvents', newEvt.id, null, newEvt, currentUser?.username || 'Admin');
         showToast('Agenda ditambahkan', 'success');
     };
 
     const handleBulkSaveEvents = async (data: Omit<CalendarEvent, 'id'>[]) => {
         if (!canWrite) return;
-        const eventsWithTimestamp = data.map(e => ({ ...e, lastModified: Date.now() }));
-        await db.calendarEvents.bulkAdd(eventsWithTimestamp as CalendarEvent[]);
+        const now = Date.now();
+        const eventsWithIds: CalendarEvent[] = data.map(e => ({
+            ...e,
+            id: generateSyncSafeId(),
+            deleted: false,
+            lastModified: now,
+        }));
+        await db.calendarEvents.bulkPut(eventsWithIds);
+        await logActivity('INSERT', 'calendarEvents', 'BULK', null, { count: eventsWithIds.length }, currentUser?.username || 'Admin');
         showToast(`${data.length} agenda berhasil ditambahkan.`, 'success');
     };
 
     const handleUpdateEvent = async (data: CalendarEvent) => {
         if (!canWrite) return;
-        await db.calendarEvents.put({ ...data, lastModified: Date.now() });
+        const prev = await db.calendarEvents.get(data.id);
+        const updated = { ...data, deleted: false, lastModified: Date.now() };
+        await db.calendarEvents.put(updated);
+        await logActivity('UPDATE', 'calendarEvents', data.id, prev || null, updated, currentUser?.username || 'Admin');
         showToast('Agenda diperbarui', 'success');
     };
 
     const handleDeleteEvent = async (id: number) => {
         if (!canWrite) return;
         const evt = await db.calendarEvents.get(id);
-        if(evt) {
+        if (evt) {
             await db.calendarEvents.put({ ...evt, deleted: true, lastModified: Date.now() });
+            await logActivity('DELETE', 'calendarEvents', id, evt, null, currentUser?.username || 'Admin');
             showToast('Agenda dihapus', 'success');
         }
     };

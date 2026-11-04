@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { BukuTamu as BukuTamuType, PondokSettings, Santri } from '../../types';
 import { useAppContext } from '../../AppContext';
 import { printToPdfNative } from '../../utils/pdfGenerator';
+import { normalizePhoneNumber, openExternalLinkSafe } from '../../services/waService';
 
 export const generateVisitorBadgeWaMessage = (
     guest: BukuTamuType,
@@ -105,15 +106,14 @@ export const TiketPassTamuModal: React.FC<TiketPassTamuModalProps> = ({
     };
 
     const handleSendWhatsApp = (customNumber?: string) => {
-        const phone = (customNumber ?? targetPhone)?.replace(/\D/g, '');
-        if (!phone) {
+        const cleanPhone = normalizePhoneNumber(customNumber ?? targetPhone);
+        if (!cleanPhone) {
             setShowPhoneEditor(true);
             showAlert('Nomor WhatsApp Diperlukan', 'Silakan masukkan nomor WhatsApp tujuan pengiriman kartu badge digital.');
             return;
         }
-        const cleanPhone = phone.startsWith('0') ? '62' + phone.substring(1) : phone;
         const msg = generateVisitorBadgeWaMessage(guest, settings, santri);
-        window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+        openExternalLinkSafe(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`);
         showToast('Membuka WhatsApp untuk mengirim kartu badge...', 'info');
     };
 

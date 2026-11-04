@@ -15,7 +15,7 @@ import { loadXLSX } from '../../utils/lazyClientLibs';
 import { buildStandardExportFileName } from '../../utils/exportFileName';
 
 export const UangSakuView: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
-    const { settings, showToast, showAlert } = useAppContext();
+    const { settings, showToast, showAlert, currentUser } = useAppContext();
     const { santriList } = useSantriContext();
     const { saldoSantriList, transaksiSaldoList, onAddTransaksiSaldo, onUpdateLimitHarian } = useFinanceContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -105,11 +105,18 @@ export const UangSakuView: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
         setHistorySantri(santri);
     };
 
-    const handleSave = async (data: { santriId: number, jumlah: number, keterangan: string }) => {
+    const handleSave = async (
+        data: { santriId: number, jumlah: number, keterangan: string },
+        options?: { catatKeKas?: boolean; rekeningKas?: string }
+    ) => {
         if (!modalData || !canWrite) return;
         try {
-            await onAddTransaksiSaldo({ ...data, jenis: modalData.jenis });
-            showToast('Transaksi berhasil disimpan.', 'success');
+            const operator = currentUser?.fullName || currentUser?.username || 'Bendahara';
+            await onAddTransaksiSaldo(
+                { ...data, jenis: modalData.jenis, operator },
+                { ...options, penanggungJawab: operator }
+            );
+            showToast(options?.catatKeKas ? 'Transaksi uang saku & Buku Kas berhasil disimpan.' : 'Transaksi berhasil disimpan.', 'success');
             setIsModalOpen(false);
         } catch (e) {
             showAlert('Gagal Menyimpan', (e as Error).message);

@@ -7,7 +7,9 @@ import { loadJsZip, loadSyncService } from '../../utils/lazyCloudServices';
 import { loadFirebaseRealtimeRuntime } from '../../utils/lazyFirebaseRuntimes';
 import { buildStandardExportFileName } from '../../utils/exportFileName';
 import { generateSyncSafeId } from '../../utils/idGenerator';
+import { generateNis } from '../../utils/nisGenerator';
 import { logActivity } from '../../services/logService';
+import { openExternalLinkSafe } from '../../services/waService';
 import { LoadingFallback } from '../common/LoadingFallback';
 import { PsbExamCardModal } from './modals/PsbExamCardModal';
 import { PsbAcceptanceModal, PsbBillingOption, PsbPlacementOption } from './modals/PsbAcceptanceModal';
@@ -42,7 +44,7 @@ interface PsbRekapProps {
 
 export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onImportFromWA, onUpdateList, canWrite, onSaveConfig }) => {
     const { showToast, showConfirmation, showAlert, currentUser } = useAppContext();
-    const { onBulkAddSantri } = useSantriContext();
+    const { santriList, onBulkAddSantri } = useSantriContext();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterJenjang, setFilterJenjang] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
@@ -713,6 +715,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             customData: pendaftar.customData || (Object.keys(customData).length > 0 ? JSON.stringify(customData) : undefined),
 
             riwayatStatus: [firstRiwayat],
+            deleted: false,
             lastModified: Date.now()
         };
     };
@@ -723,17 +726,66 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         placementOption?: PsbPlacementOption
     ) => {
         if (!canWrite) return;
-        const list = Array.isArray(pendaftarOrList) ? pendaftarOrList : [pendaftarOrList];
-        if (list.length === 0) return;
+        const rawList = Array.isArray(pendaftarOrList) ? pendaftarOrList : [pendaftarOrList];
+        if (rawList.length === 0) return;
+
+        // Guard against duplicate migration into Data Santri
+        const alreadyMigratedNames: string[] = [];
+        const list = rawList.filter((p) => {
+            const cleanNik = (p.nik || '').trim();
+            const cleanNisn = (p.nisn || '').trim();
+            const cleanNama = (p.namaLengkap || '').trim().toLowerCase();
+            const isDuplicateInSantri = santriList.some(s => {
+                if (s.deleted) return false;
+                if (cleanNik && cleanNik.length >= 8 && (s.nik || '').trim() === cleanNik) return true;
+                if (cleanNisn && cleanNisn.length >= 6 && (s.nisn || '').trim() === cleanNisn) return true;
+                if (
+                    p.status === 'Diterima' &&
+                    (s.namaLengkap || '').trim().toLowerCase() === cleanNama &&
+                    (s.tanggalLahir || '') === (p.tanggalLahir || '')
+                ) {
+                    return true;
+                }
+                return false;
+            });
+            if (isDuplicateInSantri) {
+                alreadyMigratedNames.push(p.namaLengkap);
+                return false;
+            }
+            return true;
+        });
+
+        if (list.length === 0) {
+            showToast(
+                `Calon santri (${alreadyMigratedNames.join(', ')}) sudah terdaftar di Data Santri Aktif. Duplikasi dicegah otomatis.`,
+                'info'
+            );
+            return;
+        }
 
         try {
             const now = Date.now();
+            const operatorName = currentUser?.fullName || currentUser?.username || 'Panitia PSB';
             const newSantriList: Santri[] = [];
             const newTagihanList: Tagihan[] = [];
+            const updatedPendaftarList: Pendaftar[] = [];
+            const workingSantriPool: Santri[] = [...santriList];
 
             list.forEach((pendaftar) => {
                 const santriId = generateSyncSafeId();
                 const newSantri = buildSantriFromPendaftar(pendaftar, santriId, placementOption);
+
+                // Auto-generate sequential NIS according to Pondok NIS Settings if possible
+                try {
+                    const generatedNis = generateNis(settings, workingSantriPool, newSantri);
+                    if (generatedNis) {
+                        newSantri.nis = generatedNis;
+                    }
+                } catch {
+                    // Fallback to empty NIS if jenjang kode / format is not yet configured
+                }
+
+                workingSantriPool.push(newSantri);
                 newSantriList.push(newSantri);
 
                 if (billingOption?.createBilling && billingOption.nominal > 0) {
@@ -752,38 +804,56 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                         lastModified: now
                     });
                 }
+
+                updatedPendaftarList.push({
+                    ...pendaftar,
+                    status: 'Diterima',
+                    jenjangId: placementOption?.perPendaftar?.[pendaftar.id]?.jenjangId ?? placementOption?.jenjangId ?? pendaftar.jenjangId,
+                    deleted: false,
+                    lastModified: now
+                });
             });
 
-            await db.santri.bulkPut(newSantriList);
-            if (newTagihanList.length > 0) {
-                await db.tagihan.bulkPut(newTagihanList);
-            }
+            await (db as any).transaction('rw', db.santri, db.tagihan, db.pendaftar, async () => {
+                await db.santri.bulkPut(newSantriList);
+                if (newTagihanList.length > 0) {
+                    await db.tagihan.bulkPut(newTagihanList);
+                }
+                await db.pendaftar.bulkPut(updatedPendaftarList);
+            });
 
-            await Promise.all(
-                list.map(p =>
-                    db.pendaftar.update(p.id, {
-                        status: 'Diterima',
-                        jenjangId: placementOption?.perPendaftar?.[p.id]?.jenjangId ?? placementOption?.jenjangId ?? p.jenjangId,
-                        lastModified: Date.now()
-                    })
-                )
+            await logActivity(
+                'INSERT',
+                'santri',
+                list.length === 1 ? newSantriList[0].id : `psb-accept-${now}`,
+                null,
+                {
+                    source: 'PSB',
+                    acceptedCount: newSantriList.length,
+                    skippedDuplicates: alreadyMigratedNames.length,
+                    generatedBillingCount: newTagihanList.length,
+                    sampleSantri: newSantriList.slice(0, 5).map(s => ({ id: s.id, nama: s.namaLengkap, nis: s.nis }))
+                },
+                operatorName
             );
 
             const kelasNama = settings.kelas.find(k => k.id === placementOption?.kelasId)?.nama;
             const rombelNama = settings.rombel.find(r => r.id === placementOption?.rombelId)?.nama;
             const infoPenempatan = kelasNama ? ` ke ${kelasNama}${rombelNama ? ` (${rombelNama})` : ''}` : '';
+            const skippedInfo = alreadyMigratedNames.length > 0 ? ` (${alreadyMigratedNames.length} duplikat dilewati)` : '';
 
-            setSelectedIds(prev => prev.filter(id => !list.some(p => p.id === id)));
+            setSelectedIds(prev => prev.filter(id => !rawList.some(p => p.id === id)));
             onUpdateList();
 
             if (list.length === 1) {
+                const nisLabel = newSantriList[0].nis ? ` [NIS: ${newSantriList[0].nis}]` : '';
                 showToast(
-                    `${list[0].namaLengkap} resmi diterima & dimigrasikan${infoPenempatan}!${billingOption?.createBilling ? ' Tagihan daftar ulang telah dibuat.' : ''}`,
+                    `${list[0].namaLengkap}${nisLabel} resmi diterima & dimigrasikan${infoPenempatan}!${billingOption?.createBilling ? ' Tagihan daftar ulang telah dibuat.' : ''}${skippedInfo}`,
                     'success'
                 );
             } else {
                 showToast(
-                    `${list.length} santri resmi diterima & dimigrasikan${infoPenempatan}!${billingOption?.createBilling ? ' Tagihan daftar ulang telah dibuat.' : ''}`,
+                    `${list.length} santri resmi diterima & dimigrasikan${infoPenempatan}!${billingOption?.createBilling ? ' Tagihan daftar ulang telah dibuat.' : ''}${skippedInfo}`,
                     'success'
                 );
             }
@@ -801,10 +871,14 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         }
 
         try {
-            await db.pendaftar.update(pendaftar.id, {
+            const existing = await db.pendaftar.get(pendaftar.id);
+            const updated: Pendaftar = {
+                ...(existing || pendaftar),
                 status: newStatus,
+                deleted: false,
                 lastModified: Date.now()
-            });
+            };
+            await db.pendaftar.put(updated);
             onUpdateList();
             showToast(`Status ${pendaftar.namaLengkap} diubah menjadi "${newStatus}".`, 'success');
         } catch (e: any) {
@@ -823,14 +897,13 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
         try {
             const now = Date.now();
-            await Promise.all(
-                selectedPendaftarObjects.map(p =>
-                    db.pendaftar.update(p.id, {
-                        status: targetStatus,
-                        lastModified: now
-                    })
-                )
-            );
+            const updatedItems: Pendaftar[] = selectedPendaftarObjects.map(p => ({
+                ...p,
+                status: targetStatus,
+                deleted: false,
+                lastModified: now
+            }));
+            await db.pendaftar.bulkPut(updatedItems);
             onUpdateList();
             showToast(`Status ${selectedPendaftarObjects.length} pendaftar berhasil diubah menjadi "${targetStatus}".`, 'success');
             setBulkStatusTarget('');
@@ -921,33 +994,39 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     };
 
     const handleBulkSave = async (data: Partial<Pendaftar>[]) => {
+        const now = Date.now();
         const newItems = data.map(d => ({
             ...d,
+            id: d.id || generateSyncSafeId(),
             status: d.status || 'Baru',
             tanggalDaftar: d.tanggalDaftar || new Date().toISOString(),
-            // Fix: Add missing tanggalMasuk required by Pendaftar type (from Santri)
             tanggalMasuk: d.tanggalDaftar || new Date().toISOString(),
             jalurPendaftaran: d.jalurPendaftaran || 'Reguler',
-            lastModified: Date.now()
+            deleted: false,
+            lastModified: now
         } as Pendaftar));
         
-        await db.pendaftar.bulkAdd(newItems as Pendaftar[]);
+        await db.pendaftar.bulkPut(newItems);
         onUpdateList();
         showToast(`${newItems.length} pendaftar ditambahkan.`, 'success');
     }
 
-    const handleOpenDocument = (urlOrBase64: string) => {
+    const handleOpenDocument = async (urlOrBase64: string) => {
         if (!urlOrBase64) return;
         
-        // If it's a URL (Google Drive), open in new tab
         if (urlOrBase64.startsWith('http')) {
-            window.open(urlOrBase64, '_blank');
-        } else {
-            // It's likely a base64 string (from local/Dropbox), render in iframe wrapper
-            const win = window.open();
-            if (win) {
-                win.document.write('<iframe src="' + urlOrBase64 + '" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>');
-            }
+            openExternalLinkSafe(urlOrBase64);
+            return;
+        }
+
+        try {
+            const res = await fetch(urlOrBase64);
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            openExternalLinkSafe(blobUrl);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        } catch {
+            showToast('Gagal membuka pratinjau berkas.', 'error');
         }
     }
 

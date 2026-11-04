@@ -10,8 +10,10 @@ import { formatDate } from '../reports/modules/Common';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { loadJsPdf, loadJsPdfAutoTable, loadXLSX } from '../../utils/lazyClientLibs';
 import { formatAcademicYearDisplay, getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
-import { printExportFacade } from '../../utils/printExportFacade';
+import { printExportFacade, printHtmlViaIframe } from '../../utils/printExportFacade';
 import { groupRombelsForTable, RombelSplitMode, RombelTableGroup } from '../../utils/rombelGrouping';
+import { generateSyncSafeId } from '../../utils/idGenerator';
+import { logActivity } from '../../services/logService';
 
 const PENDING_RESTORE_ROMBEL_KEY = 'esantri_jadwal_pending_restore_rombel_id';
 
@@ -221,7 +223,7 @@ export const TabJadwalPelajaran: React.FC = () => {
     // Sync localJamConfig when jenjang changes or settings update
     useEffect(() => {
         const defaults: JamPelajaran[] = Array.from({ length: 8 }, (_, i) => ({
-            id: Date.now() + i, urutan: i + 1, jamMulai: '07:00', jamSelesai: '07:45', jenis: 'KBM', jenjangId: filterJenjangId
+            id: generateSyncSafeId(), urutan: i + 1, jamMulai: '07:00', jamSelesai: '07:45', jenis: 'KBM', jenjangId: filterJenjangId
         }));
         
         let config = defaults;
@@ -245,9 +247,9 @@ export const TabJadwalPelajaran: React.FC = () => {
     const [selectedSlot, setSelectedSlot] = useState<{ hari: number, jamKe: number } | null>(null);
     const [editingJadwal, setEditingJadwal] = useState<JadwalPelajaran | null>(null);
 
-    // Live Data
-    const jadwalList = useLiveQuery(() => db.jadwalPelajaran.toArray(), []) || [];
-    const arsipList = useLiveQuery(() => db.arsipJadwal.toArray(), []) || [];
+    // Live Data (filter out soft-deleted records for multi-admin sync integrity)
+    const jadwalList = useLiveQuery(() => db.jadwalPelajaran.filter(j => !j.deleted).toArray(), []) || [];
+    const arsipList = useLiveQuery(() => db.arsipJadwal.filter(a => !a.deleted).toArray(), []) || [];
 
     // Helper Data & Filtering Logic
     const availableKelas = useMemo(() => settings.kelas.filter(k => k.jenjangId === filterJenjangId), [filterJenjangId, settings.kelas]);
@@ -295,7 +297,7 @@ export const TabJadwalPelajaran: React.FC = () => {
     // Opsi Pemisahan Tabel Rombel Rekap Global TU (agar tidak sesak)
     const [splitMode, setSplitMode] = useState<RombelSplitMode>('gender');
     const [activeGroupFilter, setActiveGroupFilter] = useState<string>('all');
-    const allSantri = useLiveQuery(() => db.santri.toArray(), []) || [];
+    const allSantri = useLiveQuery(() => db.santri.filter(s => !s.deleted).toArray(), []) || [];
 
     const rombelGroups = useMemo<RombelTableGroup[]>(() => {
         return groupRombelsForTable(targetRombels, splitMode, settings.kelas, allSantri);
@@ -342,23 +344,32 @@ export const TabJadwalPelajaran: React.FC = () => {
     // --- Actions Active View ---
 
     const persistJadwalSlot = async (data: Partial<JadwalPelajaran>) => {
+        const now = Date.now();
         const payload = {
             ...data,
             rombelId: filterRombelId,
-            lastModified: Date.now()
+            deleted: false,
+            lastModified: now
         } as JadwalPelajaran;
 
         let savedId = editingJadwal?.id;
         if (editingJadwal) {
-            await db.jadwalPelajaran.put({ ...payload, id: editingJadwal.id });
+            const updatedSlot = { ...payload, id: editingJadwal.id };
+            await db.jadwalPelajaran.put(updatedSlot);
+            void logActivity('UPDATE', 'jadwalPelajaran', editingJadwal.id, editingJadwal, updatedSlot);
             showToast('Jadwal diperbarui', 'success');
         } else {
             const existing = jadwalList.find(j => j.rombelId === filterRombelId && j.hari === data.hari && j.jamKe === data.jamKe);
             if (existing) {
-                await db.jadwalPelajaran.put({ ...payload, id: existing.id });
+                const updatedSlot = { ...payload, id: existing.id };
+                await db.jadwalPelajaran.put(updatedSlot);
                 savedId = existing.id;
+                void logActivity('UPDATE', 'jadwalPelajaran', existing.id, existing, updatedSlot);
             } else {
-                savedId = Number(await db.jadwalPelajaran.add(payload));
+                savedId = generateSyncSafeId();
+                const createdSlot = { ...payload, id: savedId };
+                await db.jadwalPelajaran.put(createdSlot);
+                void logActivity('INSERT', 'jadwalPelajaran', savedId, null, createdSlot);
             }
             showToast('Jadwal ditambahkan', 'success');
         }
@@ -426,35 +437,54 @@ export const TabJadwalPelajaran: React.FC = () => {
     };
 
     const handleDeleteJadwal = async (id: number) => {
-        await db.jadwalPelajaran.delete(id);
+        const existing = await db.jadwalPelajaran.get(id);
+        if (existing) {
+            const deletedSlot = { ...existing, deleted: true, lastModified: Date.now() };
+            await db.jadwalPelajaran.put(deletedSlot);
+            void logActivity('DELETE', 'jadwalPelajaran', id, existing, null);
+        }
         setEditingJadwal(null);
         showToast('Jadwal dihapus', 'success');
     };
     
-    // NEW: Copy Schedule Action
+    // Copy Schedule Action (Sync-safe soft-delete + integer IDs)
     const handleCopySchedule = async (fromId: number, toId: number) => {
         if (!canWrite) return;
         try {
-            // 1. Get Source Schedule
-            const sourceSchedule = jadwalList.filter(j => j.rombelId === fromId);
+            const sourceSchedule = jadwalList.filter(j => j.rombelId === fromId && !j.deleted);
             if (sourceSchedule.length === 0) {
                 showToast('Kelas sumber tidak memiliki jadwal.', 'error');
                 return;
             }
 
-            // 2. Delete existing Target Schedule
-            const targetScheduleIds = jadwalList.filter(j => j.rombelId === toId).map(j => j.id);
-            await db.jadwalPelajaran.bulkDelete(targetScheduleIds);
-
-            // 3. Create New Schedule
-            const newSchedule = sourceSchedule.map(s => ({
-                ...s,
-                id: Date.now() + Math.random(), // New ID
-                rombelId: toId, // New Rombel
-                lastModified: Date.now()
+            const now = Date.now();
+            const targetExisting = jadwalList.filter(j => j.rombelId === toId && !j.deleted);
+            const softDeletedTargets = targetExisting.map(j => ({
+                ...j,
+                deleted: true,
+                lastModified: now
             }));
 
-            await db.jadwalPelajaran.bulkAdd(newSchedule as JadwalPelajaran[]);
+            const newSchedule: JadwalPelajaran[] = sourceSchedule.map(s => ({
+                ...s,
+                id: generateSyncSafeId(),
+                rombelId: toId,
+                deleted: false,
+                lastModified: now + 1
+            }));
+
+            await (db as any).transaction('rw', db.jadwalPelajaran, async () => {
+                if (softDeletedTargets.length > 0) {
+                    await db.jadwalPelajaran.bulkPut(softDeletedTargets);
+                }
+                await db.jadwalPelajaran.bulkPut(newSchedule);
+            });
+
+            void logActivity('INSERT', 'jadwalPelajaran', `copy-${fromId}-to-${toId}`, null, {
+                fromRombelId: fromId,
+                toRombelId: toId,
+                copiedSlots: newSchedule.length
+            });
             
             setIsCopyModalOpen(false);
             showToast('Jadwal berhasil disalin!', 'success');
@@ -484,9 +514,14 @@ export const TabJadwalPelajaran: React.FC = () => {
                         settings.kelas.find(k => k.id === r.kelasId)?.jenjangId === filterJenjangId
                     ).map(r => r.id);
 
-                    // 2. Clear existing schedules for these rombels
-                    const existingIds = jadwalList.filter(j => rombelIdsInJenjang.includes(j.rombelId)).map(j => j.id);
-                    await db.jadwalPelajaran.bulkDelete(existingIds);
+                    // 2. Soft-delete existing schedules for these rombels
+                    const now = Date.now();
+                    const existingItems = jadwalList.filter(j => rombelIdsInJenjang.includes(j.rombelId) && !j.deleted);
+                    const softDeletedExisting = existingItems.map(j => ({
+                        ...j,
+                        deleted: true,
+                        lastModified: now
+                    }));
 
                     const newJadwal: JadwalPelajaran[] = [];
                     // Only include teachers (tenaga pendidik), exclude non-teaching staff (kependidikan)
@@ -576,13 +611,14 @@ export const TabJadwalPelajaran: React.FC = () => {
                                 const selected = candidatePool[0];
                                 if (selected) {
                                     newJadwal.push({
-                                        id: Date.now() + Math.random(),
+                                        id: generateSyncSafeId(),
                                         rombelId,
                                         hari: dayIdx,
                                         jamKe: jam.urutan,
                                         mapelId: selected.mapel.id,
                                         guruId: selected.teacher.id,
-                                        lastModified: Date.now()
+                                        deleted: false,
+                                        lastModified: Date.now() + 1
                                     });
 
                                     // Update tracking counters
@@ -594,8 +630,20 @@ export const TabJadwalPelajaran: React.FC = () => {
                         }
                     }
 
+                    await (db as any).transaction('rw', db.jadwalPelajaran, async () => {
+                        if (softDeletedExisting.length > 0) {
+                            await db.jadwalPelajaran.bulkPut(softDeletedExisting);
+                        }
+                        if (newJadwal.length > 0) {
+                            await db.jadwalPelajaran.bulkPut(newJadwal);
+                        }
+                    });
+
                     if (newJadwal.length > 0) {
-                        await db.jadwalPelajaran.bulkAdd(newJadwal);
+                        void logActivity('INSERT', 'jadwalPelajaran', `autogen-jenjang-${filterJenjangId}`, null, {
+                            jenjangId: filterJenjangId,
+                            generatedSlots: newJadwal.length
+                        });
                         showToast(`Berhasil generate ${newJadwal.length} slot jadwal otomatis!`, 'success');
                     } else {
                         showToast('Tidak dapat menemukan kecocokan guru untuk jadwal.', 'info');
@@ -615,7 +663,7 @@ export const TabJadwalPelajaran: React.FC = () => {
         }
         const nextUrutan = jamConfig.length + 1;
         const newJam: JamPelajaran = {
-            id: Date.now(),
+            id: generateSyncSafeId(),
             urutan: nextUrutan,
             jamMulai: '00:00',
             jamSelesai: '00:00',
@@ -781,23 +829,16 @@ export const TabJadwalPelajaran: React.FC = () => {
             return;
         }
 
-        const printWindow = window.open('', '_blank', 'width=1400,height=900');
-        if (!printWindow) {
-            showToast('Popup diblokir browser. Izinkan popup untuk fitur cetak.', 'error');
-            return;
-        }
-
         const sheetsHtml = Array.from(source.querySelectorAll('.jadwal-sheet'))
             .map((sheet) => (sheet as HTMLElement).outerHTML)
             .join('\n');
 
         if (!sheetsHtml.trim()) {
             showToast('Konten cetak jadwal kosong.', 'error');
-            printWindow.close();
             return;
         }
 
-        printWindow.document.write(`
+        printHtmlViaIframe(`
             <html>
                 <head>
                     <title>Preview Cetak Jadwal</title>
@@ -895,19 +936,9 @@ export const TabJadwalPelajaran: React.FC = () => {
                 </body>
             </html>
         `);
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => {
-            printWindow.print();
-        }, 350);
     };
 
     const handlePrintGlobalTU = () => {
-        const printWindow = window.open('', '_blank', 'width=1200,height=850');
-        if (!printWindow) {
-            showToast('Izinkan pop-up untuk mencetak rekap jadwal TU.', 'error');
-            return;
-        }
 
         const groupsToPrint = visibleRombelGroups.length > 0 ? visibleRombelGroups : [{
             id: 'all',
@@ -993,7 +1024,7 @@ export const TabJadwalPelajaran: React.FC = () => {
             `;
         });
 
-        printWindow.document.write(`
+        printHtmlViaIframe(`
             <!DOCTYPE html>
             <html>
                 <head>
@@ -1030,11 +1061,6 @@ export const TabJadwalPelajaran: React.FC = () => {
                 </body>
             </html>
         `);
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => {
-            printWindow.print();
-        }, 350);
     };
 
     const handleExportExcelGlobalTU = async () => {
@@ -1203,22 +1229,25 @@ export const TabJadwalPelajaran: React.FC = () => {
     const handleArchive = async (judul: string, tahun: string, semester: 'Ganjil' | 'Genap') => {
         if (!filterJenjangId) return;
         const rombelIdsInJenjang = settings.rombel.filter(r => settings.kelas.find(k => k.id === r.kelasId)?.jenjangId === filterJenjangId).map(r => r.id);
-        const schedulesToArchive = jadwalList.filter(j => rombelIdsInJenjang.includes(j.rombelId));
+        const schedulesToArchive = jadwalList.filter(j => rombelIdsInJenjang.includes(j.rombelId) && !j.deleted);
         if (schedulesToArchive.length === 0) {
             showToast('Tidak ada jadwal aktif di jenjang ini untuk diarsipkan.', 'error');
             return;
         }
+        const archiveId = generateSyncSafeId();
         const newArchive: ArsipJadwal = {
-            id: Date.now(),
+            id: archiveId,
             judul,
             tahunAjaran: tahun,
             semester,
             jenjangId: filterJenjangId,
             tanggalArsip: new Date().toISOString(),
             dataJSON: JSON.stringify(schedulesToArchive),
+            deleted: false,
             lastModified: Date.now()
         };
-        await db.arsipJadwal.add(newArchive);
+        await db.arsipJadwal.put(newArchive);
+        void logActivity('INSERT', 'arsipJadwal', archiveId, null, { judul, tahunAjaran: tahun, semester, count: schedulesToArchive.length });
         setIsArchiveModalOpen(false);
         showToast(`Berhasil mengarsipkan ${schedulesToArchive.length} item jadwal.`, 'success');
     };
@@ -1232,10 +1261,25 @@ export const TabJadwalPelajaran: React.FC = () => {
                 try {
                     const restoredData: JadwalPelajaran[] = JSON.parse(archive.dataJSON);
                     const rombelIdsInJenjang = settings.rombel.filter(r => settings.kelas.find(k => k.id === r.kelasId)?.jenjangId === archive.jenjangId).map(r => r.id);
-                    const itemsToDelete = jadwalList.filter(j => rombelIdsInJenjang.includes(j.rombelId)).map(j => j.id);
-                    await db.jadwalPelajaran.bulkDelete(itemsToDelete);
-                    const itemsToInsert = restoredData.map(item => ({ ...item, id: Date.now() + Math.random(), lastModified: Date.now() }));
-                    await db.jadwalPelajaran.bulkAdd(itemsToInsert as JadwalPelajaran[]);
+                    const now = Date.now();
+                    const existingItems = jadwalList.filter(j => rombelIdsInJenjang.includes(j.rombelId) && !j.deleted);
+                    const softDeletedItems = existingItems.map(j => ({ ...j, deleted: true, lastModified: now }));
+                    const itemsToInsert: JadwalPelajaran[] = restoredData.map(item => ({
+                        ...item,
+                        id: generateSyncSafeId(),
+                        deleted: false,
+                        lastModified: now + 1
+                    }));
+
+                    await (db as any).transaction('rw', db.jadwalPelajaran, async () => {
+                        if (softDeletedItems.length > 0) {
+                            await db.jadwalPelajaran.bulkPut(softDeletedItems);
+                        }
+                        if (itemsToInsert.length > 0) {
+                            await db.jadwalPelajaran.bulkPut(itemsToInsert);
+                        }
+                    });
+                    void logActivity('INSERT', 'jadwalPelajaran', `restore-${archive.id}`, null, { archiveJudul: archive.judul, restoredCount: itemsToInsert.length });
                     showToast('Jadwal berhasil dipulihkan ke editor aktif.', 'success');
                     setActiveTab('active');
                     setFilterJenjangId(archive.jenjangId);
@@ -1249,8 +1293,12 @@ export const TabJadwalPelajaran: React.FC = () => {
 
     const handleDeleteArchive = (id: number) => {
         if (!canWrite) return;
-        showConfirmation('Hapus Arsip?', 'Arsip ini akan dihapus permanen.', async () => {
-            await db.arsipJadwal.delete(id);
+        showConfirmation('Hapus Arsip?', 'Arsip ini akan dihapus dari daftar arsip jadwal.', async () => {
+            const existing = await db.arsipJadwal.get(id);
+            if (existing) {
+                await db.arsipJadwal.put({ ...existing, deleted: true, lastModified: Date.now() });
+                void logActivity('DELETE', 'arsipJadwal', id, existing, null);
+            }
             showToast('Arsip dihapus.', 'success');
         }, { confirmColor: 'red' });
     }

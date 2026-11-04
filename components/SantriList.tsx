@@ -120,18 +120,44 @@ const SantriList: React.FC = () => {
         showToast('Status berhasil diubah massal', 'success');
     };
 
-    const handleBulkMoveSave = async (jenjangId: number, kelasId: number, rombelId: number) => {
+    const handleBulkMoveSave = async (
+        jenjangId: number,
+        kelasId: number,
+        rombelId: number,
+        meta?: { jenis: 'Kenaikan Kelas' | 'Pindah Rombel'; tanggal: string; catatan: string }
+    ) => {
         if (!canWrite) return;
-        const updates = santriList.filter(s => selectedIds.includes(s.id)).map(s => ({
-            ...s,
-            jenjangId,
-            kelasId,
-            rombelId
-        }));
+        const targetKelasName = settings.kelas.find(k => k.id === kelasId)?.nama || '-';
+        const targetRombelName = settings.rombel.find(r => r.id === rombelId)?.nama || '-';
+        const jenisLabel = meta?.jenis || 'Pindah Rombel';
+        const effectiveDate = meta?.tanggal || new Date().toISOString().split('T')[0];
+
+        const updates = santriList.filter(s => selectedIds.includes(s.id)).map(s => {
+            const oldKelasName = settings.kelas.find(k => k.id === s.kelasId)?.nama || '-';
+            const oldRombelName = settings.rombel.find(r => r.id === s.rombelId)?.nama || '-';
+            const ketParts = [`${jenisLabel}: ${oldKelasName} (${oldRombelName}) → ${targetKelasName} (${targetRombelName})`];
+            if (meta?.catatan) ketParts.push(meta.catatan);
+
+            return {
+                ...s,
+                jenjangId,
+                kelasId,
+                rombelId,
+                riwayatStatus: [
+                    ...(s.riwayatStatus || []),
+                    {
+                        id: generateSyncSafeId(),
+                        status: s.status || 'Aktif',
+                        tanggal: effectiveDate,
+                        keterangan: ketParts.join(' — ')
+                    }
+                ]
+            };
+        });
         await onBulkUpdateSantri(updates);
         setIsBulkMoveOpen(false);
         setSelectedIds([]);
-        showToast('Rombel berhasil dipindah massal', 'success');
+        showToast(`${updates.length} santri berhasil diproses (${jenisLabel})`, 'success');
     };
 
     const handleBulkEditSelected = () => {

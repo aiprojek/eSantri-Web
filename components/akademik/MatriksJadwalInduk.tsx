@@ -5,6 +5,7 @@ import { db } from '../../db';
 import { JadwalPelajaran, Rombel, MataPelajaran, TenagaPengajar, JamPelajaran } from '../../types';
 import { loadXLSX } from '../../utils/lazyClientLibs';
 import { buildStandardExportFileName } from '../../utils/exportFileName';
+import { printHtmlViaIframe } from '../../utils/printExportFacade';
 
 const HARI_LIST = [
     { id: -1, nama: 'Semua Hari (Rekap Global TU)' },
@@ -35,8 +36,8 @@ export const MatriksJadwalInduk: React.FC = () => {
     const pekanTidakEfektif = pekanLiburAwal + pekanUjian + pekanLiburAkhir + pekanKegiatanLain;
     const pekanEfektif = Math.max(0, totalPekan - pekanTidakEfektif);
 
-    // Live query for schedule
-    const jadwalList = useLiveQuery(() => db.jadwalPelajaran.toArray(), []) || [];
+    // Live query for schedule (exclude soft-deleted items)
+    const jadwalList = useLiveQuery(() => db.jadwalPelajaran.filter(j => !j.deleted).toArray(), []) || [];
 
     // Map helpers
     const mapelMap = useMemo(() => new Map<number, MataPelajaran>(settings.mataPelajaran.map(m => [m.id, m])), [settings.mataPelajaran]);
@@ -93,12 +94,6 @@ export const MatriksJadwalInduk: React.FC = () => {
 
     // Print Matriks Jadwal Induk
     const handlePrintMatriks = () => {
-        const popup = window.open('', '_blank', 'width=1200,height=800');
-        if (!popup) {
-            showToast('Izinkan pop-up untuk mencetak matriks jadwal.', 'error');
-            return;
-        }
-
         const jenjangName = settings.jenjang.find(j => j.id === selectedJenjangId)?.nama || '';
         const hariName = HARI_LIST.find(h => h.id === selectedHari)?.nama || '';
         const isAllDays = selectedHari === -1;
@@ -153,7 +148,7 @@ export const MatriksJadwalInduk: React.FC = () => {
             tbodyRows += dayRows;
         });
 
-        popup.document.write(`
+        printHtmlViaIframe(`
             <!DOCTYPE html>
             <html>
                 <head>
@@ -206,11 +201,6 @@ export const MatriksJadwalInduk: React.FC = () => {
                 </body>
             </html>
         `);
-        popup.document.close();
-        popup.focus();
-        setTimeout(() => {
-            popup.print();
-        }, 300);
     };
 
     // Export Master Board to Excel

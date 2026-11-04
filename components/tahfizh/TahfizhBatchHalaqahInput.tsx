@@ -2,8 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { TahfizhRecord, Santri } from '../../types';
-import { QURAN_DATA, getJuzForSurah, getSurahByName } from '../../data/quran';
+import { QURAN_DATA, getJuzForSurah } from '../../data/quran';
 import { calculateTahfizhSmartScore } from '../../utils/tahfizhScoring';
+import { generateSyncSafeId } from '../../utils/idGenerator';
+import { openExternalLinkSafe } from '../../services/waService';
 
 interface BatchRowItem {
     santriId: number;
@@ -135,8 +137,7 @@ export const TahfizhBatchHalaqahInput: React.FC = () => {
 
         setIsSaving(true);
         try {
-            let savedCount = 0;
-            for (const r of rowsToSave) {
+            const batchRecords: TahfizhRecord[] = rowsToSave.map(r => {
                 const surahData = QURAN_DATA[r.surahIndex];
                 const smart = calculateTahfizhSmartScore({
                     surahNumber: surahData.number,
@@ -148,8 +149,8 @@ export const TahfizhBatchHalaqahInput: React.FC = () => {
                     jumlahKesalahan: r.jumlahKesalahan
                 });
 
-                const newRecord: TahfizhRecord = {
-                    id: Date.now() + Math.floor(Math.random() * 10000),
+                return {
+                    id: generateSyncSafeId(),
                     santriId: r.santriId,
                     tanggal,
                     tipe: r.tipe,
@@ -166,10 +167,10 @@ export const TahfizhBatchHalaqahInput: React.FC = () => {
                     muhaffizhId: currentUser?.id,
                     halaqahId: selectedHalaqahId || undefined,
                 };
-                await onSaveTahfizh(newRecord);
-                savedCount++;
-            }
-            showToast(`Berhasil menyimpan ${savedCount} setoran halaqah!`, 'success');
+            });
+
+            await onSaveTahfizh(batchRecords);
+            showToast(`Berhasil menyimpan ${batchRecords.length} setoran halaqah!`, 'success');
         } catch (error) {
             console.error(error);
             showToast('Gagal menyimpan setoran massal.', 'error');
@@ -208,7 +209,7 @@ export const TahfizhBatchHalaqahInput: React.FC = () => {
             `Semoga ananda istiqomah dalam menghafal dan mengamalkan Al-Qur'an.\n\n` +
             `_${settings.namaPonpes}_`;
 
-        window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(pesan)}`, '_blank');
+        openExternalLinkSafe(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(pesan)}`);
     };
 
     return (

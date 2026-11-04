@@ -672,7 +672,9 @@ ${content}
  */
 export const exportToAutoTable = async (elementId: string, fileName: string) => {
     const element = document.getElementById(elementId);
-    if (!element) return;
+    if (!element) {
+        throw new Error('Elemen pratinjau laporan tidak ditemukan.');
+    }
 
     const detectAutoOrientation = (): 'p' | 'l' => {
         // Cek eksplisit class .print-landscape atau .print-portrait
@@ -726,8 +728,7 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
     const pages = element.querySelectorAll('.print-portrait, .print-landscape, .page-break-after');
     
     if (pages.length === 0) {
-        alert("Tidak ditemukan halaman laporan yang bisa diproses.");
-        return;
+        throw new Error('Tidak ditemukan halaman laporan yang bisa diproses.');
     }
 
     let isFirstPage = true;
@@ -881,8 +882,7 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
     });
 
     if (isFirstPage) {
-        alert("Tidak ditemukan tabel data yang bisa diproses untuk AutoTable. Gunakan PDF (Asli) untuk hasil visual.");
-        return;
+        throw new Error('Tidak ditemukan tabel data untuk AutoTable. Gunakan PDF (Asli) untuk laporan visual.');
     }
 
     doc.save(`${fileName}.pdf`);
@@ -894,14 +894,15 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
  */
 export const exportPreviewToExcelWorksheets = async (elementId: string, fileName: string) => {
     const element = document.getElementById(elementId);
-    if (!element) return;
+    if (!element) {
+        throw new Error('Elemen pratinjau laporan tidak ditemukan.');
+    }
     const XLSX = await loadXLSX();
 
     const pages = element.querySelectorAll('.print-portrait, .print-landscape, .page-break-after');
     
     if (pages.length === 0) {
-        alert("Tidak ditemukan halaman laporan yang bisa diproses.");
-        return;
+        throw new Error('Tidak ditemukan halaman laporan yang bisa diproses.');
     }
 
     const workbook = XLSX.utils.book_new();
@@ -999,8 +1000,7 @@ export const exportPreviewToExcelWorksheets = async (elementId: string, fileName
     });
 
     if (workbook.SheetNames.length === 0) {
-        alert("Tidak ada tabel data untuk diekspor ke Excel.");
-        return;
+        throw new Error('Tidak ada tabel data untuk diekspor ke Excel.');
     }
 
     XLSX.writeFile(workbook, `${fileName}.xlsx`);

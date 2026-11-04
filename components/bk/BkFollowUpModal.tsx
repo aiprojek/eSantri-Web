@@ -3,6 +3,7 @@ import { BkSession, Santri, BkFollowUpLog } from '../../types';
 import { useAppContext } from '../../AppContext';
 import { db } from '../../db';
 import { logActivity } from '../../services/logService';
+import { generateSyncSafeId } from '../../utils/idGenerator';
 
 interface BkFollowUpModalProps {
     isOpen: boolean;
@@ -19,7 +20,7 @@ export const BkFollowUpModal: React.FC<BkFollowUpModalProps> = ({
     santri,
     onSaved,
 }) => {
-    const { currentUser, showToast } = useAppContext();
+    const { currentUser, showToast, showConfirmation } = useAppContext();
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.bk === 'write';
 
     const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
@@ -46,7 +47,7 @@ export const BkFollowUpModal: React.FC<BkFollowUpModalProps> = ({
         setIsSaving(true);
         try {
             const newLog: BkFollowUpLog = {
-                id: `log-${Date.now()}`,
+                id: `log-${generateSyncSafeId()}`,
                 tanggal,
                 catatan: catatan.trim(),
                 konselor: currentUser?.fullName || session.konselor || 'Petugas BK',
@@ -78,24 +79,29 @@ export const BkFollowUpModal: React.FC<BkFollowUpModalProps> = ({
         }
     };
 
-    const handleDeleteLog = async (logId: string) => {
+    const handleDeleteLog = (logId: string) => {
         if (!canWrite) return;
-        if (!confirm('Hapus catatan sesi lanjutan ini?')) return;
-
-        try {
-            const updatedLogs = (session.followUpLogs || []).filter(l => l.id !== logId);
-            const updatedSession: BkSession = {
-                ...session,
-                followUpLogs: updatedLogs,
-                lastModified: Date.now(),
-            };
-            await db.bkSessions.put(updatedSession);
-            await logActivity('UPDATE', 'bkSessions', session.id, session, updatedSession, currentUser?.username || 'Konselor');
-            showToast('Catatan lanjutan dihapus.', 'success');
-            onSaved();
-        } catch (err) {
-            showToast('Gagal menghapus catatan.', 'error');
-        }
+        showConfirmation(
+            'Hapus Catatan Sesi Lanjutan?',
+            'Catatan perkembangan ini akan dihapus dari riwayat sesi konseling.',
+            async () => {
+                try {
+                    const updatedLogs = (session.followUpLogs || []).filter(l => l.id !== logId);
+                    const updatedSession: BkSession = {
+                        ...session,
+                        followUpLogs: updatedLogs,
+                        lastModified: Date.now(),
+                    };
+                    await db.bkSessions.put(updatedSession);
+                    await logActivity('UPDATE', 'bkSessions', session.id, session, updatedSession, currentUser?.username || 'Konselor');
+                    showToast('Catatan lanjutan dihapus.', 'success');
+                    onSaved();
+                } catch (err) {
+                    showToast('Gagal menghapus catatan.', 'error');
+                }
+            },
+            { confirmText: 'Ya, Hapus', confirmColor: 'red' }
+        );
     };
 
     return (

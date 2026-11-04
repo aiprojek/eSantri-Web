@@ -7,9 +7,10 @@ import { SuratPeringatanPrintTemplate, SuratPeringatanData } from './SuratPering
 import { printExportFacade } from '../../utils/printExportFacade';
 import { AbsensiBkModal } from './AbsensiBkModal';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
+import { normalizePhoneNumber, openExternalLinkSafe } from '../../services/waService';
 
 export const AbsensiSuratPeringatan: React.FC = () => {
-    const { settings, showToast, currentUser } = useAppContext();
+    const { settings, showToast, currentUser, onSaveArsipSurat } = useAppContext();
     const { santriList, absensiList } = useSantriContext();
 
     // Filters
@@ -260,8 +261,7 @@ export const AbsensiSuratPeringatan: React.FC = () => {
             const perihal = activeLetterData.tipe === 'PANGGILAN_WALI'
                 ? 'Surat Panggilan Orang Tua / Wali Santri'
                 : `Surat Peringatan ${activeLetterData.tipe.replace('SP', '')} (SP ${activeLetterData.tipe.replace('SP', '')})`;
-            const newArsip: ArsipSurat = {
-                id: Date.now(),
+            await onSaveArsipSurat({
                 nomorSurat: activeLetterData.nomorSurat,
                 perihal,
                 tujuan: `Wali Santri ${selectedStudentForLetter.namaLengkap} (NIS: ${selectedStudentForLetter.nis || '-'})`,
@@ -270,9 +270,10 @@ export const AbsensiSuratPeringatan: React.FC = () => {
                 templateId: 0,
                 tempatCetak: activeLetterData.tempatSurat,
                 tanggalCetak: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+                santriId: selectedStudentForLetter.id,
+                nomorHpTujuan: selectedStudentForLetter.teleponWali || selectedStudentForLetter.teleponAyah || selectedStudentForLetter.teleponIbu || selectedStudentForLetter.telepon,
                 lastModified: Date.now()
-            };
-            await db.arsipSurat.put(newArsip);
+            });
             showToast('Alhamdulillah, surat berhasil disimpan ke Arsip Surat Resmi & siap disinkronkan ke Cloud!', 'success');
         } catch (err: any) {
             showToast('Gagal menyimpan ke arsip: ' + (err.message || 'Error'), 'error');
@@ -283,14 +284,14 @@ export const AbsensiSuratPeringatan: React.FC = () => {
 
     const handleShareWaLetter = (studentItem: typeof atRiskData[0]) => {
         const { santri, alphaCount, sakitCount, izinCount, attendanceRate } = studentItem;
-        const phone = santri.teleponWali || santri.telepon;
-        if (!phone) {
-            showToast('Nomor HP wali santri belum terdaftar di data profil.', 'info');
+        const phone = santri.teleponWali || santri.teleponAyah || santri.teleponIbu || santri.telepon;
+        const cleanPhone = normalizePhoneNumber(phone);
+        if (!cleanPhone) {
+            showToast('Nomor HP wali santri belum terdaftar atau tidak valid di data profil.', 'info');
             return;
         }
 
         const rombel = settings.rombel.find(r => r.id === santri.rombelId);
-        const cleanPhone = phone.replace(/[^0-9]/g, '').replace(/^0/, '62');
 
         const message = `*PEMBERITAHUAN KEDISIPLINAN & PRESENSI SANTRI*
 *${settings.namaPonpes || settings.namaYayasan || 'PONDOK PESANTREN'}*
@@ -314,7 +315,7 @@ _Wassalamu'alaikum Warahmatullahi Wabarakatuh_
 *Bagian Kedisiplinan & Kesantrian*`;
 
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-        window.open(waUrl, '_blank');
+        openExternalLinkSafe(waUrl);
     };
 
     // Prepare letter data for template preview

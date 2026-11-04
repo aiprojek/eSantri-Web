@@ -33,6 +33,19 @@ import { findStrictTeacherTtdAsset, reconcileDigitalAssetsWithSettings } from '.
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { loadXLSX } from '../utils/lazyClientLibs';
+import { generateSyncSafeId } from '../utils/idGenerator';
+
+const TEXT_ALIGN_CLASS: Record<'left' | 'center' | 'right', string> = {
+    left: 'text-left',
+    center: 'text-center',
+    right: 'text-right',
+};
+
+const JUSTIFY_ALIGN_CLASS: Record<'left' | 'center' | 'right', string> = {
+    left: 'justify-start',
+    center: 'justify-center',
+    right: 'justify-end',
+};
 
 // --- Template Modal with Variable Chips & Format Presets ---
 
@@ -117,7 +130,7 @@ const TemplateModal: React.FC<{
             return;
         }
         onSave({
-            id: initialData?.id || Date.now(),
+            id: initialData?.id || generateSyncSafeId(),
             nama: nama.trim(),
             kategori,
             kodeSurat: kodeSurat.trim().toUpperCase() || 'SRT',
@@ -586,7 +599,7 @@ const ArsipViewerModal: React.FC<{
                         )}
                          
                         {arsip.tempatTanggalConfig?.show && arsip.tempatTanggalConfig.position === 'top-right' && (
-                            <div className={`mb-4 flex w-full justify-${arsip.tempatTanggalConfig.align === 'center' ? 'center' : arsip.tempatTanggalConfig.align === 'right' ? 'end' : 'start'}`}>
+                            <div className={`mb-4 flex w-full ${JUSTIFY_ALIGN_CLASS[arsip.tempatTanggalConfig.align || 'right']}`}>
                                 <p>{tempat}, {formattedTanggal}</p>
                             </div>
                         )}
@@ -597,15 +610,15 @@ const ArsipViewerModal: React.FC<{
 
                         <div className="mt-8">
                             {arsip.tempatTanggalConfig?.show && arsip.tempatTanggalConfig.position !== 'top-right' && (
-                                <div className={`mb-4 flex w-full justify-${arsip.tempatTanggalConfig.position === 'bottom-left' ? 'start' : 'end'}`}>
-                                    <div className={`text-${arsip.tempatTanggalConfig.align}`} style={{ minWidth: '200px' }}>
+                                <div className={`mb-4 flex w-full ${arsip.tempatTanggalConfig.position === 'bottom-left' ? 'justify-start' : 'justify-end'}`}>
+                                    <div className={TEXT_ALIGN_CLASS[arsip.tempatTanggalConfig.align || 'right']} style={{ minWidth: '200px' }}>
                                         <p>{tempat}, {formattedTanggal}</p>
                                     </div>
                                 </div>
                             )}
                             
                             {arsip.mengetahuiSnapshot?.show && (
-                                <div className={`mb-8 flex w-full justify-${arsip.mengetahuiSnapshot.align === 'center' ? 'center' : arsip.mengetahuiSnapshot.align === 'right' ? 'end' : 'start'}`}>
+                                <div className={`mb-8 flex w-full ${JUSTIFY_ALIGN_CLASS[arsip.mengetahuiSnapshot.align || 'center']}`}>
                                     <div className="text-center" style={{ minWidth: '200px' }}>
                                         <p className="font-medium">{arsip.mengetahuiSnapshot.jabatan}</p>
                                     </div>
@@ -1332,10 +1345,10 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                     santriId: santri?.id
                 };
 
-                await onSaveArsipSurat(arsipData);
+                const savedArsip = await onSaveArsipSurat(arsipData);
                 savedCount++;
                 if (!lastSaved) {
-                    lastSaved = { ...arsipData, id: Date.now() };
+                    lastSaved = savedArsip;
                 }
             }
            
@@ -1913,7 +1926,7 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                                                      <div className={`mb-4 flex w-full ${
                                                          tempatTanggalConfig.position === 'bottom-left' ? 'justify-start' : 'justify-end'
                                                      }`}>
-                                                        <div className={`text-${tempatTanggalConfig.align}`} style={{ minWidth: '220px' }}>
+                                                        <div className={TEXT_ALIGN_CLASS[tempatTanggalConfig.align || 'right']} style={{ minWidth: '220px' }}>
                                                             <p>{tempatSurat}, {formattedTanggalSurat}</p>
                                                         </div>
                                                     </div>
@@ -2072,6 +2085,7 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                     }}
                     santriList={santriList}
                     settings={settings}
+                    initialIncludeNonActive={/mutasi|pindah|lulus|alumni|keluar|berhenti/i.test(`${template?.nama || ''} ${template?.judul || ''} ${judulSurat}`)}
                 />
             )}
 

@@ -3,12 +3,14 @@ import React, { useRef, useState } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { Santri } from '../../../types';
 import { compressImage } from '../../../utils/imageOptimizer';
+import { useAppContext } from '../../../AppContext';
 
 interface PhotoUploaderProps {
     formMethods: UseFormReturn<Santri>;
 }
 
 export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ formMethods }) => {
+    const { showToast } = useAppContext();
     const { watch, setValue } = formMethods;
     const watchFotoUrl = watch('fotoUrl');
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,7 +28,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ formMethods }) => 
                 setValue('fotoUrl', compressedBase64, { shouldDirty: true });
             } catch (error) {
                 console.error("Gagal mengompresi gambar:", error);
-                alert("Gagal memproses gambar. Silakan coba file lain.");
+                showToast('Gagal memproses gambar. Silakan coba file lain.', 'error');
             } finally {
                 setIsProcessing(false);
                 // Reset input agar bisa upload file yang sama jika perlu

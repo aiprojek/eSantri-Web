@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Santri } from '../../../types';
 import { formatRupiah } from '../../../utils/formatters';
@@ -6,13 +6,24 @@ import { formatRupiah } from '../../../utils/formatters';
 interface TransaksiSaldoModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (data: { santriId: number, jumlah: number, keterangan: string }) => Promise<void>;
+    onSave: (
+        data: { santriId: number, jumlah: number, keterangan: string },
+        options?: { catatKeKas?: boolean; rekeningKas?: string }
+    ) => Promise<void>;
     santri: Santri;
     jenis: 'Deposit' | 'Penarikan';
     currentSaldo: number;
     limitHarian?: number;
     penarikanHariIni?: number;
 }
+
+const REKENING_LIST = [
+    'Kas Tunai Bendahara',
+    'Bank Syariah Indonesia (BSI)',
+    'Bank Muamalat',
+    'Bank BRI / Mandiri',
+    'Kas Kecil Operasional',
+];
 
 export const TransaksiSaldoModal: React.FC<TransaksiSaldoModalProps> = ({
     isOpen,
@@ -27,6 +38,8 @@ export const TransaksiSaldoModal: React.FC<TransaksiSaldoModalProps> = ({
     const { register, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } = useForm<{ jumlah: number, keterangan: string }>({
         defaultValues: { jumlah: 0, keterangan: '' }
     });
+    const [catatKeKas, setCatatKeKas] = useState(false);
+    const [rekeningKas, setRekeningKas] = useState('Kas Tunai Bendahara');
 
     const watchedJumlah = Number(watch('jumlah')) || 0;
 
@@ -40,7 +53,7 @@ export const TransaksiSaldoModal: React.FC<TransaksiSaldoModalProps> = ({
         if (jenis === 'Penarikan' && data.jumlah > currentSaldo) {
             return;
         }
-        await onSave({ ...data, santriId: santri.id });
+        await onSave({ ...data, santriId: santri.id }, { catatKeKas, rekeningKas });
     };
 
     const presets = jenis === 'Deposit'
@@ -59,15 +72,15 @@ export const TransaksiSaldoModal: React.FC<TransaksiSaldoModalProps> = ({
                         <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-3">
                             <div>
                                 <span className="text-xs text-slate-500 block">Saldo Saat Ini</span>
-                                <strong className="text-base font-bold text-slate-800">{formatRupiah(currentSaldo)}</strong>
+                                <strong className="text-base font-bold text-slate-800 tabular-nums">{formatRupiah(currentSaldo)}</strong>
                             </div>
                             {jenis === 'Penarikan' && limitHarian > 0 && (
                                 <div className="text-right">
                                     <span className="text-xs text-slate-500 block">Sisa Limit Hari Ini</span>
-                                    <strong className={`text-sm font-bold ${(sisaKuotaHarian || 0) === 0 ? 'text-red-600' : 'text-teal-700'}`}>
+                                    <strong className={`text-sm font-bold tabular-nums ${(sisaKuotaHarian || 0) === 0 ? 'text-red-600' : 'text-teal-700'}`}>
                                         {formatRupiah(sisaKuotaHarian || 0)}
                                     </strong>
-                                    <span className="block text-[10px] text-slate-400">dari {formatRupiah(limitHarian)}/hari</span>
+                                    <span className="block text-[10px] text-slate-400 tabular-nums">dari {formatRupiah(limitHarian)}/hari</span>
                                 </div>
                             )}
                         </div>
@@ -81,7 +94,7 @@ export const TransaksiSaldoModal: React.FC<TransaksiSaldoModalProps> = ({
                                     valueAsNumber: true,
                                     min: { value: 1, message: 'Jumlah harus lebih dari 0' }
                                 })}
-                                className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 font-semibold ${errors.jumlah || isSaldoKurang ? 'border-red-500' : 'border-gray-300'}`}
+                                className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 font-semibold tabular-nums ${errors.jumlah || isSaldoKurang ? 'border-red-500' : 'border-gray-300'}`}
                             />
                             {errors.jumlah && <p className="text-xs text-red-600 mt-1">{errors.jumlah.message}</p>}
                             {isSaldoKurang && <p className="text-xs text-red-600 font-medium mt-1">Saldo tidak mencukupi (Maksimal: {formatRupiah(currentSaldo)}).</p>}
@@ -97,7 +110,7 @@ export const TransaksiSaldoModal: React.FC<TransaksiSaldoModalProps> = ({
                                         key={nom}
                                         type="button"
                                         onClick={() => setValue('jumlah', nom, { shouldValidate: true })}
-                                        className="px-2.5 py-1 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors"
+                                        className="px-2.5 py-1 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors tabular-nums"
                                     >
                                         {formatRupiah(nom)}
                                     </button>
@@ -113,6 +126,30 @@ export const TransaksiSaldoModal: React.FC<TransaksiSaldoModalProps> = ({
                                 className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
                                 placeholder={jenis === 'Deposit' ? 'cth: Titipan transfer orang tua' : 'cth: Jajan koperasi / Kebutuhan harian'}
                             />
+                        </div>
+
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={catatKeKas}
+                                    onChange={e => setCatatKeKas(e.target.checked)}
+                                    className="h-4 w-4 text-teal-600 rounded"
+                                />
+                                <span>Catat juga mutasi fisik ke Buku Kas Umum</span>
+                            </label>
+                            {catatKeKas && (
+                                <div className="pl-6">
+                                    <label className="block mb-1 text-[11px] text-slate-500">Pilih Pos Kas / Rekening:</label>
+                                    <select
+                                        value={rekeningKas}
+                                        onChange={e => setRekeningKas(e.target.value)}
+                                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-semibold"
+                                    >
+                                        {REKENING_LIST.map(r => <option key={r} value={r}>{r}</option>)}
+                                    </select>
+                                </div>
+                            )}
                         </div>
                     </div>
                     <div className="p-4 border-t bg-slate-50 flex justify-end space-x-2">

@@ -7,6 +7,9 @@ import { loadXLSX } from '../../utils/lazyClientLibs';
 import { buildStandardExportFileName } from '../../utils/exportFileName';
 import { getDefaultAcademicYear } from '../../utils/academicYear';
 import { groupRombelsForTable, RombelSplitMode, RombelTableGroup } from '../../utils/rombelGrouping';
+import { generateSyncSafeId } from '../../utils/idGenerator';
+import { printHtmlViaIframe } from '../../utils/printExportFacade';
+import { logActivity } from '../../services/logService';
 
 const HARI_NAMES = ['Ahad', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
@@ -75,8 +78,8 @@ export const TabJadwalUjian: React.FC = () => {
     const [editingSlot, setEditingSlot] = useState<Partial<JadwalUjian> | null>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-    // Live query data from Dexie
-    const allJadwalUjian = useLiveQuery(() => db.jadwalUjian.toArray(), []) || [];
+    // Live query data from Dexie (exclude soft-deleted items for sync integrity)
+    const allJadwalUjian = useLiveQuery(() => db.jadwalUjian.filter(j => !j.deleted).toArray(), []) || [];
 
     // Filtered data for active workspace
     const filteredJadwal = useMemo(() => {
@@ -277,10 +280,12 @@ export const TabJadwalUjian: React.FC = () => {
             `Sistem akan menyusun jadwal untuk ${rombelList.length} kelas di jenjang ini dengan ${resolvedExamSubjects.length} materi/mapel terpilih selama ${genJumlahHari} hari (${genSesiCount} sesi/hari). Pengawas akan diatur berdasarkan jam kesanggupan${genCrossSupervisor ? ' dengan metode pengawas silang' : ''}. Jadwal ujian sebelumnya pada filter ini akan ditimpa. Lanjutkan?`,
             async () => {
                 try {
-                    // 1. Delete existing schedules for this jenjang & exam type
-                    const existingIds = filteredJadwal.map(j => j.id);
-                    if (existingIds.length > 0) {
-                        await db.jadwalUjian.bulkDelete(existingIds);
+                    // 1. Soft-delete existing schedules for this jenjang & exam type so Cloud Sync propagates replacement
+                    if (filteredJadwal.length > 0) {
+                        const now = Date.now();
+                        await db.jadwalUjian.bulkPut(
+                            filteredJadwal.map(j => ({ ...j, deleted: true, lastModified: now }))
+                        );
                     }
 
                     const newItems: JadwalUjian[] = [];
@@ -363,7 +368,7 @@ export const TabJadwalUjian: React.FC = () => {
                                 }
 
                                 newItems.push({
-                                    id: Date.now() + Math.random() * 100000 + newItems.length,
+                                    id: generateSyncSafeId(),
                                     jenjangId: selectedJenjangId,
                                     rombelId: rombel.id,
                                     jenisUjian: selectedJenisUjian,
@@ -379,13 +384,15 @@ export const TabJadwalUjian: React.FC = () => {
                                     keterangan: keterangan,
                                     pengawasId: chosenSupervisor?.id,
                                     ruangan: rombel.nama,
+                                    deleted: false,
                                     lastModified: Date.now(),
                                 });
                             }
                         }
                     }
 
-                    await db.jadwalUjian.bulkAdd(newItems);
+                    await db.jadwalUjian.bulkPut(newItems);
+                    await logActivity('INSERT', 'jadwalUjian', 'GENERATOR', null, { count: newItems.length, jenisUjian: selectedJenisUjian }, currentUser?.username || 'Admin');
                     setIsGeneratorOpen(false);
                     showToast(`Berhasil men-generate ${newItems.length} slot jadwal ujian (${resolvedExamSubjects.length} materi) dengan pengawas tertata!`, 'success');
                 } catch (err) {
@@ -499,12 +506,6 @@ export const TabJadwalUjian: React.FC = () => {
             return;
         }
 
-        const popup = window.open('', '_blank', 'width=1200,height=800');
-        if (!popup) {
-            showToast('Izinkan pop-up untuk mencetak rekap jadwal ujian.', 'error');
-            return;
-        }
-
         const jenjangName = settings.jenjang.find(j => j.id === selectedJenjangId)?.nama || '';
 
         const groupsToPrint = visibleRombelGroups.length > 0 ? visibleRombelGroups : [{
@@ -595,7 +596,7 @@ export const TabJadwalUjian: React.FC = () => {
             `;
         });
 
-        popup.document.write(`
+        printHtmlViaIframe(`
             <!DOCTYPE html>
             <html>
                 <head>
@@ -649,14 +650,9 @@ export const TabJadwalUjian: React.FC = () => {
                             <strong>( .................................................. )</strong>
                         </div>
                     </div>
-
-                    <script>
-                        window.onload = function() { window.print(); }
-                    </script>
                 </body>
             </html>
         `);
-        popup.document.close();
     };
 
     // ==========================================
@@ -679,12 +675,6 @@ export const TabJadwalUjian: React.FC = () => {
 
         if (relevantSlots.length === 0) {
             showToast('Belum ada data jadwal pada rombel yang dipilih.', 'error');
-            return;
-        }
-
-        const popup = window.open('', '_blank', 'width=1100,height=800');
-        if (!popup) {
-            showToast('Izinkan pop-up untuk mencetak jadwal rombel.', 'error');
             return;
         }
 
@@ -777,7 +767,7 @@ export const TabJadwalUjian: React.FC = () => {
             `;
         });
 
-        popup.document.write(`
+        printHtmlViaIframe(`
             <!DOCTYPE html>
             <html>
                 <head>
@@ -800,13 +790,9 @@ export const TabJadwalUjian: React.FC = () => {
                 </head>
                 <body>
                     ${contentHtml}
-                    <script>
-                        window.onload = function() { window.print(); }
-                    </script>
                 </body>
             </html>
         `);
-        popup.document.close();
     };
 
     // ==========================================
@@ -817,13 +803,18 @@ export const TabJadwalUjian: React.FC = () => {
 
         try {
             if (editingSlot.id && editingSlot.id > 0) {
-                await db.jadwalUjian.update(editingSlot.id, {
+                const prev = await db.jadwalUjian.get(editingSlot.id);
+                const updated = {
+                    ...prev,
                     ...editingSlot,
+                    deleted: false,
                     lastModified: Date.now(),
-                });
+                } as JadwalUjian;
+                await db.jadwalUjian.put(updated);
+                await logActivity('UPDATE', 'jadwalUjian', editingSlot.id, prev || null, updated, currentUser?.username || 'Admin');
             } else {
-                await db.jadwalUjian.add({
-                    id: Date.now(),
+                const newSlot: JadwalUjian = {
+                    id: generateSyncSafeId(),
                     jenjangId: selectedJenjangId,
                     rombelId: editingSlot.rombelId,
                     jenisUjian: selectedJenisUjian,
@@ -839,8 +830,11 @@ export const TabJadwalUjian: React.FC = () => {
                     pengawasId: editingSlot.pengawasId,
                     pengawas2Id: editingSlot.pengawas2Id,
                     ruangan: editingSlot.ruangan,
+                    deleted: false,
                     lastModified: Date.now(),
-                } as JadwalUjian);
+                };
+                await db.jadwalUjian.put(newSlot);
+                await logActivity('INSERT', 'jadwalUjian', newSlot.id, null, newSlot, currentUser?.username || 'Admin');
             }
             setIsEditModalOpen(false);
             setEditingSlot(null);
@@ -854,7 +848,11 @@ export const TabJadwalUjian: React.FC = () => {
     const handleDeleteSlot = async (id: number) => {
         if (!canWrite) return;
         try {
-            await db.jadwalUjian.delete(id);
+            const existing = await db.jadwalUjian.get(id);
+            if (existing) {
+                await db.jadwalUjian.put({ ...existing, deleted: true, lastModified: Date.now() });
+                await logActivity('DELETE', 'jadwalUjian', id, existing, null, currentUser?.username || 'Admin');
+            }
             setIsEditModalOpen(false);
             setEditingSlot(null);
             showToast('Slot jadwal ujian dihapus.', 'info');
@@ -869,8 +867,11 @@ export const TabJadwalUjian: React.FC = () => {
             'Hapus Seluruh Jadwal Ujian?',
             `Apakah Anda yakin ingin mengosongkan seluruh jadwal ${selectedJenisUjian} untuk jenjang ini? Data tidak dapat dikembalikan.`,
             async () => {
-                const ids = filteredJadwal.map(j => j.id);
-                await db.jadwalUjian.bulkDelete(ids);
+                const now = Date.now();
+                await db.jadwalUjian.bulkPut(
+                    filteredJadwal.map(j => ({ ...j, deleted: true, lastModified: now }))
+                );
+                await logActivity('DELETE', 'jadwalUjian', 'CLEAR_ALL', { count: filteredJadwal.length, jenisUjian: selectedJenisUjian }, null, currentUser?.username || 'Admin');
                 showToast('Jadwal ujian berhasil dibersihkan.', 'success');
             },
             { confirmText: 'Ya, Kosongkan', confirmColor: 'red' }

@@ -252,7 +252,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
             await printExportFacade.downloadPdfAutoTable({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
             triggerSuccessDownload('PDF AutoTable berhasil diunduh.');
         } catch (e) {
-            onToast('Gagal ekspor AutoTable.', 'error');
+            onToast((e as Error)?.message || 'Gagal ekspor AutoTable.', 'error');
         } finally {
             setIsGeneratingFile(false);
             setIsDownloadMenuOpen(false);
@@ -265,7 +265,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
             await printExportFacade.downloadExcelVisual({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
             triggerSuccessDownload('Excel Visual berhasil diunduh.');
         } catch (e) {
-            onToast('Gagal ekspor Excel Visual.', 'error');
+            onToast((e as Error)?.message || 'Gagal ekspor Excel Visual.', 'error');
         } finally {
             setIsGeneratingFile(false);
             setIsDownloadMenuOpen(false);

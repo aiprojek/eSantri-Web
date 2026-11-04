@@ -4,6 +4,7 @@ import { TenagaPengajar, User, UserPermissions, AccessLevel } from '../../../typ
 import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS, ROLE_TEMPLATES } from '../../../services/authService';
 import { CURRENT_PERMISSION_VERSION, normalizeUserPermissions } from '../../../services/permissionMigrationService';
 import { useAppContext } from '../../../AppContext';
+import { generateSyncSafeId } from '../../../utils/idGenerator';
 
 interface BulkUserFromTeacherModalProps {
     isOpen: boolean;
@@ -183,7 +184,7 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                     : resolvePermissionsFromPreset(config);
 
                 return {
-                    id: Date.now() + Math.random(), // Unique ID
+                    id: generateSyncSafeId(),
                     username,
                     fullName: teacher.nama,
                     role: config.role,
@@ -200,6 +201,7 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                     securityAnswerHash: securityAnswerHash,
                     isDefaultAdmin: false,
                     permissionVersion: CURRENT_PERMISSION_VERSION,
+                    deleted: false,
                     lastModified: Date.now(),
                 };
             });
@@ -224,7 +226,7 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
             onClose();
         } catch (error) {
             console.error(error);
-            showToast('Gagal memproses data.', 'error');
+            showToast((error as Error)?.message || 'Gagal memproses data.', 'error');
         } finally {
             setIsProcessing(false);
         }

@@ -93,20 +93,32 @@ export const getWAUrl = (phone: string, message: string) => {
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 };
 
+export const openExternalLinkSafe = (url: string): void => {
+    if (typeof document === 'undefined') return;
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
 export const sendManualWA = (phone: string | undefined, message: string) => {
     const clean = normalizePhoneNumber(phone);
     if (!clean) {
-        alert("Nomor WhatsApp tidak valid atau tidak tersedia!");
+        console.warn("Nomor WhatsApp tidak valid atau tidak tersedia.");
         return false;
     }
-    window.open(`https://wa.me/${clean}?text=${encodeURIComponent(message)}`, '_blank');
+    openExternalLinkSafe(`https://wa.me/${clean}?text=${encodeURIComponent(message)}`);
     return true;
 };
 
 export const getWAComposerUrl = (message: string) => `https://wa.me/?text=${encodeURIComponent(message)}`;
 
 export const openWAComposer = (message: string) => {
-    window.open(getWAComposerUrl(message), '_blank');
+    openExternalLinkSafe(getWAComposerUrl(message));
 };
 
 /**

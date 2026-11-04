@@ -5,6 +5,7 @@ import { TenagaPengajar, RiwayatJabatan, KetersediaanPengajar, Jenjang, Kelas, R
 import { useAppContext } from '../../../AppContext';
 import { SignatureDropzone } from '../../common/SignatureDropzone';
 import { findStrictTeacherTtdAsset } from '../../../utils/digitalAssetUtils';
+import { generateSyncSafeId } from '../../../utils/idGenerator';
 
 export interface TeacherTtdPayload {
     action: 'upsert' | 'remove' | 'unchanged';
@@ -69,7 +70,7 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
                 status: 'Aktif',
                 jenisPegawai: 'pendidik',
                 kategoriStaf: 'Tata Usaha (TU)',
-                riwayatJabatan: [{ id: Date.now(), jabatan: 'Guru Mapel', tanggalMulai: new Date().toISOString().split('T')[0] }],
+                riwayatJabatan: [{ id: generateSyncSafeId(), jabatan: 'Guru Mapel', tanggalMulai: new Date().toISOString().split('T')[0] }],
                 ketersediaanPengajar: [],
                 hariMasuk: [], 
                 jamMasuk: [],
@@ -154,7 +155,7 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
 
     const addRiwayat = () => {
         const newRiwayat: RiwayatJabatan = {
-            id: Date.now(),
+            id: generateSyncSafeId(),
             jabatan: '',
             tanggalMulai: new Date().toISOString().split('T')[0],
         };
@@ -169,7 +170,7 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
     // --- NEW KETERSEDIAAN LOGIC ---
     const addKetersediaan = () => {
         const newKet: KetersediaanPengajar = {
-            id: Date.now(),
+            id: generateSyncSafeId(),
             jenjangId: 0,
             kelasId: 0,
             rombelId: 0

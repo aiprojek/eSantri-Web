@@ -1,6 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Santri, PondokSettings, Kelas, Rombel } from '../../types';
-import { SantriFilterBar } from '../common/SantriFilterBar';
+import { SantriFilterBar, SantriFilterOption } from '../common/SantriFilterBar';
+
+const SURAT_STATUS_OPTIONS: SantriFilterOption[] = [
+    { value: '', label: 'Semua Status' },
+    { value: 'Aktif', label: 'Aktif' },
+    { value: 'Hiatus', label: 'Hiatus / Cuti' },
+    { value: 'Lulus', label: 'Lulus / Alumni' },
+    { value: 'Keluar/Pindah', label: 'Keluar / Mutasi' },
+    { value: 'Masuk', label: 'Pindahan Masuk' },
+];
 
 interface SuratSantriSelectorModalProps {
     isOpen: boolean;
@@ -14,6 +23,7 @@ interface SuratSantriSelectorModalProps {
     onToggleBulkSelectAll: (filteredIds: number[]) => void;
     santriList: Santri[];
     settings: PondokSettings;
+    initialIncludeNonActive?: boolean;
 }
 
 export const SuratSantriSelectorModal: React.FC<SuratSantriSelectorModalProps> = ({
@@ -27,13 +37,20 @@ export const SuratSantriSelectorModal: React.FC<SuratSantriSelectorModalProps> =
     onToggleBulkSelectOne,
     onToggleBulkSelectAll,
     santriList,
-    settings
+    settings,
+    initialIncludeNonActive = false,
 }) => {
     const [search, setSearch] = useState('');
     const [filterJenjangId, setFilterJenjangId] = useState<string>('');
     const [filterKelasId, setFilterKelasId] = useState<string>('');
     const [filterRombelId, setFilterRombelId] = useState<string>('');
-    const [filterStatus, setFilterStatus] = useState<string>('Aktif');
+    const [filterStatus, setFilterStatus] = useState<string>(initialIncludeNonActive ? '' : 'Aktif');
+
+    useEffect(() => {
+        if (isOpen) {
+            setFilterStatus(initialIncludeNonActive ? '' : 'Aktif');
+        }
+    }, [isOpen, initialIncludeNonActive]);
 
     const filteredSantris = useMemo(() => {
         return santriList.filter(s => {
@@ -111,15 +128,43 @@ export const SuratSantriSelectorModal: React.FC<SuratSantriSelectorModalProps> =
 
                 {/* Filter & Search Bar */}
                 <div className="border-b border-app-border bg-white px-6 py-3 space-y-2.5">
-                    <div className="relative">
-                        <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            placeholder="Cari nama santri, NIS, atau NISN..."
-                            className="app-input w-full pl-8 pr-3 py-2 text-xs rounded-xl"
-                        />
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <div className="relative flex-1">
+                            <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input
+                                type="text"
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                placeholder="Cari nama santri, NIS, atau NISN..."
+                                className="app-input w-full pl-8 pr-3 py-2 text-xs rounded-xl"
+                            />
+                        </div>
+                        <div className="inline-flex rounded-xl bg-slate-100 p-1 text-xs shrink-0 border border-slate-200/80">
+                            <button
+                                type="button"
+                                onClick={() => setFilterStatus('Aktif')}
+                                className={`rounded-lg px-2.5 py-1 font-semibold transition-all ${
+                                    filterStatus === 'Aktif'
+                                        ? 'bg-emerald-600 text-white shadow-2xs'
+                                        : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                                title="Tampilkan hanya santri aktif untuk surat rutin"
+                            >
+                                Hanya Santri Aktif
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFilterStatus('')}
+                                className={`rounded-lg px-2.5 py-1 font-semibold transition-all ${
+                                    filterStatus !== 'Aktif'
+                                        ? 'bg-teal-700 text-white shadow-2xs'
+                                        : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                                title="Sertakan santri Lulus, Hiatus, dan Mutasi/Pindah"
+                            >
+                                Semua Status (Mutasi / Alumni)
+                            </button>
+                        </div>
                     </div>
 
                     <SantriFilterBar
@@ -129,8 +174,9 @@ export const SuratSantriSelectorModal: React.FC<SuratSantriSelectorModalProps> =
                             setFilterJenjangId(next.jenjang || '');
                             setFilterKelasId(next.kelas || '');
                             setFilterRombelId(next.rombel || '');
-                            setFilterStatus(next.status || '');
+                            setFilterStatus(next.status ?? '');
                         }}
+                        statusOptions={SURAT_STATUS_OPTIONS}
                         title="Filter Surat"
                         resultCount={filteredSantris.length}
                         showSearch={false}

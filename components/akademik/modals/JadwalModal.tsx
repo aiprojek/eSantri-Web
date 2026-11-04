@@ -17,7 +17,7 @@ interface JadwalModalProps {
 }
 
 export const JadwalModal: React.FC<JadwalModalProps> = ({ isOpen, onClose, onSave, onDelete, slot, initialData, days, mapelList, teacherList, currentRombelId }) => {
-    const { showConfirmation } = useAppContext();
+    const { showConfirmation, showToast } = useAppContext();
     const [mapelId, setMapelId] = useState<string>('');
     const [guruId, setGuruId] = useState<string>('');
     const [keterangan, setKeterangan] = useState('');
@@ -91,7 +91,7 @@ export const JadwalModal: React.FC<JadwalModalProps> = ({ isOpen, onClose, onSav
 
         if (mode === 'KBM') {
             if (!mapelId || !guruId) {
-                alert('Pilih Mata Pelajaran dan Guru.');
+                showToast('Pilih Mata Pelajaran dan Guru terlebih dahulu.', 'error');
                 return;
             }
             data.mapelId = parseInt(mapelId);
@@ -99,7 +99,7 @@ export const JadwalModal: React.FC<JadwalModalProps> = ({ isOpen, onClose, onSav
             data.keterangan = undefined;
         } else {
             if (!keterangan.trim()) {
-                alert('Isi keterangan kegiatan.');
+                showToast('Isi keterangan kegiatan terlebih dahulu.', 'error');
                 return;
             }
             data.keterangan = keterangan;

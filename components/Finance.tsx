@@ -110,7 +110,7 @@ const Finance: React.FC = () => {
             {activeTab === 'redaksi' && canWrite && <PengaturanRedaksi />}
             
             {isPembayaranModalOpen && selectedSantri && <PembayaranModal isOpen={isPembayaranModalOpen} onClose={() => setIsPembayaranModalOpen(false)} santri={selectedSantri} />}
-            {historySantri && <RiwayatKeuanganSantriModal isOpen={!!historySantri} onClose={() => setHistorySantri(null)} santri={historySantri} onPrint={handlePrintKuitansi} />}
+            {historySantri && <RiwayatKeuanganSantriModal isOpen={!!historySantri} onClose={() => setHistorySantri(null)} santri={historySantri} onPrint={handlePrintKuitansi} canWrite={canWrite} />}
 
             <div className="hidden print:block">
                 {printableData && <div className="printable-content-wrapper"><KuitansiTemplate data={printableData} settings={settings} /></div>}

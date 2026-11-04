@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Santri, Kamar, GedungAsrama } from '../../types';
+import { useAppContext } from '../../AppContext';
 
 interface PindahKamarModalProps {
     isOpen: boolean;
@@ -24,6 +25,7 @@ export const PindahKamarModal: React.FC<PindahKamarModalProps> = ({
     santriList,
     onConfirmPindah
 }) => {
+    const { showToast } = useAppContext();
     const [selectedGedungId, setSelectedGedungId] = useState<number | ''>('');
     const [selectedKamarId, setSelectedKamarId] = useState<number | ''>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,7 +75,7 @@ export const PindahKamarModal: React.FC<PindahKamarModalProps> = ({
 
         const currentCount = penghuniPerKamar.get(targetKamar.id) || 0;
         if (currentCount >= targetKamar.kapasitas) {
-            alert(`Kamar ${targetKamar.nama} sudah penuh.`);
+            showToast(`Kamar ${targetKamar.nama} sudah penuh.`, 'error');
             return;
         }
 

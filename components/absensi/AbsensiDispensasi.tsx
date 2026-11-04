@@ -4,6 +4,7 @@ import { useSantriContext } from '../../contexts/SantriContext';
 import { AbsensiRecord, Santri, SesiAbsensi } from '../../types';
 import { SESI_ABSENSI_LIST } from './absensiConstants';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
+import { generateSyncSafeId } from '../../utils/idGenerator';
 
 interface DispensasiEntry {
     id: string;
@@ -151,8 +152,11 @@ export const AbsensiDispensasi: React.FC = () => {
             return;
         }
 
-        const totalRecordsToCreate = selectedSantriIds.length * dateRangeList.length;
-        const confirmMsg = `Terapkan dispensasi (${statusIzin === 'I' ? 'Izin' : 'Sakit'}) untuk ${selectedSantriIds.length} santri selama ${dateRangeList.length} hari (${dateRangeList[0]} s/d ${dateRangeList[dateRangeList.length - 1]})? Total ${totalRecordsToCreate} data absensi akan dicatat.`;
+        const targetSessions: SesiAbsensi[] = sesiPilihan === 'Semua Sesi'
+            ? ['KBM Pagi', 'Sholat Subuh', 'Sholat Maghrib-Isya', 'Halaqah Asrama']
+            : [sesiPilihan as SesiAbsensi];
+        const totalRecordsToCreate = selectedSantriIds.length * dateRangeList.length * targetSessions.length;
+        const confirmMsg = `Terapkan dispensasi (${statusIzin === 'I' ? 'Izin' : 'Sakit'}) untuk ${selectedSantriIds.length} santri selama ${dateRangeList.length} hari (${dateRangeList[0]} s/d ${dateRangeList[dateRangeList.length - 1]}) pada ${sesiPilihan}? Total ${totalRecordsToCreate} data absensi akan dicatat.`;
 
         showConfirmation(
             'Konfirmasi Terapkan Dispensasi',
@@ -173,26 +177,26 @@ export const AbsensiDispensasi: React.FC = () => {
                         const rId = santri?.rombelId || selectedRombelId || 0;
 
                         dateRangeList.forEach(tgl => {
-                            // If specific session or all sessions
-                            const targetSesi = sesiPilihan === 'Semua Sesi' ? 'KBM Pagi' : sesiPilihan;
-                            
-                            // Check existing
-                            const existing = absensiList.find(a => 
-                                a.santriId === sId && 
-                                a.tanggal === tgl && 
-                                (!a.sesi || a.sesi === targetSesi || sesiPilihan === 'Semua Sesi')
-                            );
+                            targetSessions.forEach(targetSesi => {
+                                const existing = absensiList.find(a =>
+                                    !a.deleted &&
+                                    a.santriId === sId &&
+                                    a.tanggal === tgl &&
+                                    (a.sesi ? a.sesi === targetSesi : targetSesi === 'KBM Pagi')
+                                );
 
-                            newRecords.push({
-                                id: existing?.id || Date.now() + Math.random() * 100000,
-                                santriId: sId,
-                                rombelId: rId,
-                                tanggal: tgl,
-                                status: statusIzin,
-                                keterangan: fullKet,
-                                sesi: targetSesi,
-                                recordedBy: currentUser?.username || 'Dispensasi',
-                                lastModified: Date.now()
+                                newRecords.push({
+                                    id: existing?.id || generateSyncSafeId(),
+                                    santriId: sId,
+                                    rombelId: rId,
+                                    tanggal: tgl,
+                                    status: statusIzin,
+                                    keterangan: fullKet,
+                                    sesi: targetSesi,
+                                    recordedBy: currentUser?.username || 'Dispensasi',
+                                    deleted: false,
+                                    lastModified: Date.now()
+                                });
                             });
                         });
                     });

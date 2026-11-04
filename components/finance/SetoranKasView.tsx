@@ -22,26 +22,33 @@ const REKENING_LIST = [
 export const SetoranKasView: React.FC<SetoranKasViewProps> = ({ canWrite }) => {
     const { showToast, showConfirmation, currentUser } = useAppContext();
     const { santriList } = useSantriContext();
-    const { pembayaranList, onSetorKeKas } = useFinanceContext();
+    const { pembayaranList, onSetorKeKas, onMarkPembayaranSettled } = useFinanceContext();
     
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const btnPrimary = "rounded-md bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60";
-    const [filterMetode, setFilterMetode] = useState<'Semua' | 'Tunai' | 'Transfer' | 'Potong Saldo'>('Semua');
+    const [filterMetode, setFilterMetode] = useState<'Kas & Bank' | 'Tunai' | 'Transfer' | 'Potong Saldo'>('Kas & Bank');
     const [filterTanggal, setFilterTanggal] = useState(new Date().toISOString().split('T')[0]);
     const [semuaTanggal, setSemuaTanggal] = useState(true);
     const [rekeningTujuan, setRekeningTujuan] = useState('Kas Tunai Bendahara');
 
     // Data Derived
     const pendingPayments = useMemo(() => {
-        return pembayaranList.filter(p => 
-            !p.disetorKeKas && 
-            (filterMetode === 'Semua' || p.metode === filterMetode) &&
-            (semuaTanggal || p.tanggal.startsWith(filterTanggal))
-        ).sort((a,b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
+        return pembayaranList.filter(p => {
+            if (p.disetorKeKas) return false;
+            const matchMetode = filterMetode === 'Kas & Bank'
+                ? (p.metode === 'Tunai' || p.metode === 'Transfer')
+                : p.metode === filterMetode;
+            const matchTanggal = semuaTanggal || p.tanggal.startsWith(filterTanggal);
+            return matchMetode && matchTanggal;
+        }).sort((a,b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
     }, [pembayaranList, filterMetode, filterTanggal, semuaTanggal]);
 
-    const totalUnsettledAll = useMemo(() => {
-        return pembayaranList.filter(p => !p.disetorKeKas).reduce((s, p) => s + p.jumlah, 0);
+    const totalUnsettledCashBank = useMemo(() => {
+        return pembayaranList.filter(p => !p.disetorKeKas && p.metode !== 'Potong Saldo').reduce((s, p) => s + p.jumlah, 0);
+    }, [pembayaranList]);
+
+    const unsettledPotongSaldoCount = useMemo(() => {
+        return pembayaranList.filter(p => !p.disetorKeKas && p.metode === 'Potong Saldo').length;
     }, [pembayaranList]);
 
     const totalNominal = useMemo(() => {
@@ -73,7 +80,7 @@ export const SetoranKasView: React.FC<SetoranKasViewProps> = ({ canWrite }) => {
             return;
         }
 
-        const methodLabel = filterMetode === 'Semua' ? 'Gabungan' : filterMetode;
+        const methodLabel = filterMetode === 'Kas & Bank' ? 'Tunai & Transfer' : filterMetode;
         const dateLabel = semuaTanggal ? 'Semua Periode' : new Date(filterTanggal).toLocaleDateString('id-ID');
         const note = `Setoran Penerimaan ${methodLabel} (${dateLabel} - ${selectedIds.length} Transaksi)`;
         const pj = currentUser?.fullName || currentUser?.username || 'Bendahara';
@@ -94,28 +101,67 @@ export const SetoranKasView: React.FC<SetoranKasViewProps> = ({ canWrite }) => {
         );
     };
 
+    const handleMarkNonCashSettled = () => {
+        if (selectedIds.length === 0) {
+            showToast('Pilih minimal satu transaksi Potong Saldo.', 'error');
+            return;
+        }
+        showConfirmation(
+            'Tandai Selesai Tanpa Tambah Kas?',
+            `${selectedIds.length} transaksi Potong Saldo (${formatRupiah(totalSelected)}) akan ditandai selesai rekonsiliasi tanpa menambah saldo kas fisik di Buku Kas Umum (mencegah pencatatan ganda apabila dana titipan uang saku sudah dibukukan saat deposit).`,
+            async () => {
+                try {
+                    await onMarkPembayaranSettled(selectedIds, 'Rekonsiliasi Internal Potong Saldo');
+                    showToast('Transaksi Potong Saldo ditandai selesai rekonsiliasi.', 'success');
+                    setSelectedIds([]);
+                } catch {
+                    showToast('Gagal memperbarui status rekonsiliasi.', 'error');
+                }
+            },
+            { confirmText: 'Ya, Tandai Selesai', confirmColor: 'teal' }
+        );
+    };
+
     const getSantriName = (id: number) => santriList.find(s => s.id === id)?.namaLengkap || 'Hamba Allah';
 
     return (
         <SectionCard
             title="Setoran Kas (Closing Harian & Rekonsiliasi)"
-            description="Pindahkan pembayaran santri yang masih berada di laci kasir ke Pos Rekening / Buku Kas Umum."
+            description="Pindahkan penerimaan pembayaran Tunai & Transfer dari kasir ke Pos Rekening / Buku Kas Umum tanpa mencampur transaksi non-kas."
             contentClassName="space-y-4 p-5 sm:p-6"
         >
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-amber-50 px-4 py-3 rounded-xl border border-amber-200">
-                    <p className="text-xs text-amber-700 font-bold uppercase">Total Belum Disetor (Semua Hari)</p>
-                    <p className="text-xl font-bold text-amber-900 mt-0.5">{formatRupiah(totalUnsettledAll)}</p>
+                    <p className="text-xs text-amber-700 font-bold uppercase">Kas &amp; Transfer Belum Disetor</p>
+                    <p className="text-xl font-bold text-amber-900 mt-0.5 tabular-nums">{formatRupiah(totalUnsettledCashBank)}</p>
+                    {unsettledPotongSaldoCount > 0 && (
+                        <p className="text-[11px] text-purple-700 mt-1 font-medium">
+                            + {unsettledPotongSaldoCount} transaksi Potong Saldo di tab khusus
+                        </p>
+                    )}
                 </div>
                 <div className="bg-slate-50 px-4 py-3 rounded-xl border border-slate-200">
                     <p className="text-xs text-slate-600 font-bold uppercase">Potensi Sesuai Filter ({pendingPayments.length} Tx)</p>
-                    <p className="text-xl font-bold text-slate-800 mt-0.5">{formatRupiah(totalNominal)}</p>
+                    <p className="text-xl font-bold text-slate-800 mt-0.5 tabular-nums">{formatRupiah(totalNominal)}</p>
                 </div>
                 <div className="bg-green-50 px-4 py-3 rounded-xl border border-green-200">
-                    <p className="text-xs text-green-700 font-bold uppercase">Total Dipilih Akan Disetor</p>
-                    <p className="text-xl font-bold text-green-800 mt-0.5">{formatRupiah(totalSelected)}</p>
+                    <p className="text-xs text-green-700 font-bold uppercase">Total Dipilih Akan Diproses</p>
+                    <p className="text-xl font-bold text-green-800 mt-0.5 tabular-nums">{formatRupiah(totalSelected)}</p>
                 </div>
             </div>
+
+            {filterMetode === 'Potong Saldo' && (
+                <div className="rounded-xl border border-purple-200 bg-purple-50/80 p-3.5 text-xs text-purple-900 flex items-start gap-2.5">
+                    <i className="bi bi-info-circle-fill text-purple-600 text-base mt-0.5 shrink-0"></i>
+                    <div>
+                        <p className="font-bold">Perhatian Akuntansi: Transaksi Non-Kas (Potong Saldo Uang Saku)</p>
+                        <p className="mt-0.5 text-purple-800">
+                            Pembayaran via <strong>Potong Saldo</strong> memotong dana titipan uang saku santri (tidak menambah uang fisik baru di laci kasir).
+                            Gunakan <strong>"Tandai Selesai"</strong> jika dana uang saku sudah pernah dicatat ke Buku Kas saat deposit, atau <strong>"Setor ke Buku Kas"</strong> hanya jika kas uang saku dikelola terpisah di luar Buku Kas Umum.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Filter Bar */}
             <div className="app-toolbar flex-wrap gap-3">
@@ -141,20 +187,36 @@ export const SetoranKasView: React.FC<SetoranKasViewProps> = ({ canWrite }) => {
                 </div>
                 <div>
                     <label className="app-label mb-1.5 block pl-1">Metode Pembayaran</label>
-                    <div className="overflow-hidden rounded-md border border-app-border bg-white flex">
-                        {(['Semua', 'Tunai', 'Transfer', 'Potong Saldo'] as const).map(m => (
+                    <div className="overflow-hidden rounded-md border border-app-border bg-white flex flex-wrap">
+                        {(['Kas & Bank', 'Tunai', 'Transfer', 'Potong Saldo'] as const).map(m => (
                             <button
                                 key={m}
                                 onClick={() => { setFilterMetode(m); setSelectedIds([]); }}
                                 className={`h-10 px-3.5 text-xs font-semibold transition-colors ${filterMetode === m ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
                             >
                                 {m}
+                                {m === 'Potong Saldo' && unsettledPotongSaldoCount > 0 && (
+                                    <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${filterMetode === m ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'}`}>
+                                        {unsettledPotongSaldoCount}
+                                    </span>
+                                )}
                             </button>
                         ))}
                     </div>
                 </div>
                 {canWrite && (
                     <div className="ml-auto flex flex-wrap items-end gap-2">
+                        {filterMetode === 'Potong Saldo' && (
+                            <button
+                                type="button"
+                                onClick={handleMarkNonCashSettled}
+                                disabled={selectedIds.length === 0}
+                                className="h-10 rounded-md border border-purple-300 bg-purple-50 px-3.5 text-xs font-semibold text-purple-800 hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <i className="bi bi-check2-all mr-1.5"></i>
+                                Tandai Selesai (Tanpa Masuk Kas)
+                            </button>
+                        )}
                         <div>
                             <label className="app-label mb-1.5 block pl-1">Pos Kas / Rekening Tujuan</label>
                             <select

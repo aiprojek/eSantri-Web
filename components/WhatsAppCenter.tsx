@@ -852,6 +852,14 @@ export const WhatsAppCenter: React.FC = () => {
                                     searchPlaceholder="Cari Santri atau NIS..."
                                     resultCount={filteredSantri.length}
                                     showGender={false}
+                                    statusOptions={[
+                                        { value: '', label: 'Semua Status Santri' },
+                                        { value: 'Aktif', label: 'Aktif' },
+                                        { value: 'Hiatus', label: 'Hiatus' },
+                                        { value: 'Lulus', label: 'Lulus / Alumni' },
+                                        { value: 'Keluar/Pindah', label: 'Keluar / Pindah' },
+                                        { value: 'Masuk', label: 'Santri Baru (Masuk)' },
+                                    ]}
                                     className="bg-transparent border-0 shadow-none p-0"
                                 />
                             ) : (

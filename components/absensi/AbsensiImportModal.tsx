@@ -3,6 +3,7 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { AbsensiRecord, SesiAbsensi } from '../../types';
 import { loadXLSX } from '../../utils/lazyClientLibs';
+import { generateSyncSafeId } from '../../utils/idGenerator';
 
 interface Props {
     isOpen: boolean;
@@ -26,7 +27,7 @@ interface ParsedRow {
 
 export const AbsensiImportModal: React.FC<Props> = ({ isOpen, onClose }) => {
     const { settings, showToast, currentUser } = useAppContext();
-    const { santriList, onSaveAbsensi } = useSantriContext();
+    const { santriList, absensiList, onSaveAbsensi } = useSantriContext();
 
     const [isProcessing, setIsProcessing] = useState(false);
     const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
@@ -190,18 +191,33 @@ export const AbsensiImportModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
         setIsSaving(true);
         try {
-            const records: AbsensiRecord[] = validRows.map(row => ({
-                id: Date.now() + Math.random() * 100000,
-                santriId: row.santriId!,
-                rombelId: row.rombelId || 0,
-                tanggal: row.tanggal,
-                status: row.status,
-                keterangan: row.keterangan || undefined,
-                sesi: row.sesi as SesiAbsensi,
-                recordedBy: currentUser?.username ? `Import (${currentUser.username})` : 'Excel Import',
-                lastModified: Date.now()
-            }));
+            const dedupMap = new Map<string, AbsensiRecord>();
+            validRows.forEach(row => {
+                const targetSesi = (row.sesi || 'KBM Pagi') as SesiAbsensi;
+                const key = `${row.santriId}_${row.tanggal}_${targetSesi}`;
+                const existing = absensiList.find(a =>
+                    !a.deleted &&
+                    a.santriId === row.santriId &&
+                    a.tanggal === row.tanggal &&
+                    (a.sesi ? a.sesi === targetSesi : targetSesi === 'KBM Pagi')
+                );
+                const prevInBatch = dedupMap.get(key);
 
+                dedupMap.set(key, {
+                    id: prevInBatch?.id || existing?.id || generateSyncSafeId(),
+                    santriId: row.santriId!,
+                    rombelId: row.rombelId || 0,
+                    tanggal: row.tanggal,
+                    status: row.status,
+                    keterangan: row.keterangan || undefined,
+                    sesi: targetSesi,
+                    recordedBy: currentUser?.username ? `Import (${currentUser.username})` : 'Excel Import',
+                    deleted: false,
+                    lastModified: Date.now()
+                });
+            });
+
+            const records = Array.from(dedupMap.values());
             await onSaveAbsensi(records);
             showToast(`Alhamdulillah, ${records.length} data presensi berhasil diimpor ke sistem!`, 'success');
             onClose();

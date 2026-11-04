@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArsipSurat, Santri, PondokSettings } from '../../types';
+import { normalizePhoneNumber, openExternalLinkSafe } from '../../services/waService';
 
 interface SuratWhatsAppModalProps {
     isOpen: boolean;
@@ -65,18 +66,15 @@ _Wassalamu'alaikum Warahmatullahi Wabarakatuh_
     if (!isOpen || !arsip) return null;
 
     const handleSendWhatsApp = () => {
-        let cleanPhone = phone.replace(/\D/g, '');
-        if (cleanPhone.startsWith('0')) {
-            cleanPhone = '62' + cleanPhone.slice(1);
-        }
+        const cleanPhone = normalizePhoneNumber(phone);
         if (!cleanPhone) {
-            onToast?.('Nomor WhatsApp tujuan wajib diisi', 'error');
+            onToast?.('Nomor WhatsApp tujuan tidak valid atau wajib diisi', 'error');
             return;
         }
 
         const encodedMsg = encodeURIComponent(message);
         const url = `https://wa.me/${cleanPhone}?text=${encodedMsg}`;
-        window.open(url, '_blank', 'noopener,noreferrer');
+        openExternalLinkSafe(url);
         onToast?.('Membuka WhatsApp...', 'success');
         onClose();
     };

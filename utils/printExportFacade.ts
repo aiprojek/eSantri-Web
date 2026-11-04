@@ -102,4 +102,52 @@ export const printExportFacade = {
     async downloadWord(ctx: PrintExportContext): Promise<void> {
         await exportToWord(ctx.elementId, ctx.fileName);
     },
+    printHtmlViaIframe,
 };
+
+export function printHtmlViaIframe(htmlDocument: string): void {
+    if (typeof document === 'undefined') return;
+    const existing = document.getElementById('esantri-hidden-print-iframe');
+    if (existing && existing.parentNode) {
+        existing.parentNode.removeChild(existing);
+    }
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'esantri-hidden-print-iframe';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (!doc) {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        return;
+    }
+
+    doc.open();
+    doc.write(htmlDocument);
+    doc.close();
+
+    const cleanup = () => {
+        setTimeout(() => {
+            if (iframe.parentNode) {
+                iframe.parentNode.removeChild(iframe);
+            }
+        }, 1500);
+    };
+
+    setTimeout(() => {
+        try {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+        } finally {
+            cleanup();
+        }
+    }, 350);
+}
+

@@ -1,14 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Inventaris, SarprasMaintenanceLog, SarprasBorrowLog } from '../../types';
 import { formatRupiah, formatDate } from '../../utils/formatters';
+import { generateSyncSafeId } from '../../utils/idGenerator';
 
-let sarprasIdSeq = Math.floor(Math.random() * 500);
-const sarprasDeviceSalt = Math.floor(Math.random() * 500);
-
-export const generateSarprasId = (): number => {
-    sarprasIdSeq = (sarprasIdSeq + 1) % 500;
-    return Date.now() * 1000 + sarprasDeviceSalt + sarprasIdSeq;
-};
+export const generateSarprasId = (): number => generateSyncSafeId();
 
 export const SARPRAS_POS_KAS_OPTIONS = [
     'Kas Tunai Bendahara',

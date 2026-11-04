@@ -9,6 +9,16 @@ import { generatePayrollDraft } from '../../services/financeService';
 import { printToPdfNative } from '../../utils/pdfGenerator';
 import { SlipGajiTemplate } from './print/SlipGajiTemplate';
 import { useFinanceContext } from '../../contexts/FinanceContext';
+import { generateSyncSafeId } from '../../utils/idGenerator';
+import { logActivity } from '../../services/logService';
+
+const PAYROLL_REKENING_LIST = [
+    'Kas Tunai Bendahara',
+    'Bank Syariah Indonesia (BSI)',
+    'Bank Muamalat',
+    'Bank BRI / Mandiri',
+    'Kas Kecil Operasional',
+];
 
 // --- PREVIEW MODAL COMPONENT ---
 const PayslipPreviewModal: React.FC<{ 
@@ -66,6 +76,10 @@ const PayrollConfigTab: React.FC<{ settings: any, onSave: (d: any) => void }> = 
     const [editForm, setEditForm] = useState<ConfigGaji>({
         gajiPokok: 0, tunjanganJabatan: 0, honorPerJam: 0, tunjanganLain: 0, potonganLain: 0, bank: '', noRekening: ''
     });
+
+    useEffect(() => {
+        setTeachers(settings.tenagaPengajar);
+    }, [settings.tenagaPengajar]);
 
     const handleEdit = (t: TenagaPengajar) => {
         setEditingId(t.id);
@@ -176,6 +190,8 @@ const GeneratePayrollTab: React.FC<{ settings: any }> = ({ settings }) => {
     const [month, setMonth] = useState(new Date().getMonth() + 1);
     const [year, setYear] = useState(new Date().getFullYear());
     const [weeks, setWeeks] = useState(4);
+    const [jtmSource, setJtmSource] = useState<'jadwal' | 'jurnal'>('jadwal');
+    const [rekeningSumber, setRekeningSumber] = useState('Kas Tunai Bendahara');
     
     const [drafts, setDrafts] = useState<PayrollRecord[]>([]);
     const [isCalculating, setIsCalculating] = useState(false);
@@ -183,7 +199,7 @@ const GeneratePayrollTab: React.FC<{ settings: any }> = ({ settings }) => {
     const handleCalculate = async () => {
         setIsCalculating(true);
         try {
-            const result = await generatePayrollDraft(db, settings.tenagaPengajar, month, year, weeks);
+            const result = await generatePayrollDraft(db, settings.tenagaPengajar, month, year, weeks, jtmSource);
             setDrafts(result);
             if (result.length === 0) showToast('Semua guru sudah digaji untuk periode ini atau tidak ada data.', 'info');
         } catch(e) {
@@ -214,21 +230,35 @@ const GeneratePayrollTab: React.FC<{ settings: any }> = ({ settings }) => {
 
         showConfirmation(
             'Posting Penggajian?',
-            `Anda akan menyimpan ${drafts.length} slip gaji dengan total ${formatRupiah(totalPayout)}. Data ini akan dicatat sebagai Pengeluaran di Buku Kas.`,
+            `Anda akan menyimpan ${drafts.length} slip gaji dengan total ${formatRupiah(totalPayout)}. Pengeluaran akan dibukukan dari "${rekeningSumber}" di Buku Kas Umum.`,
             async () => {
                 try {
                     const nowTs = Date.now();
-                    await db.payrollRecords.bulkPut(drafts.map((d, idx) => ({ ...d, id: d.id || (nowTs * 1000 + idx), lastModified: nowTs })));
+                    const recordsToSave = drafts.map((d) => ({
+                        ...d,
+                        id: d.id || generateSyncSafeId(),
+                        deleted: false,
+                        lastModified: nowTs
+                    }));
+                    await db.payrollRecords.bulkPut(recordsToSave);
                     await onAddTransaksiKas({
                         jenis: 'Pengeluaran',
-                        kategori: 'Gaji & Honor',
-                        deskripsi: `Penggajian Periode ${month}/${year} (${drafts.length} Guru)`,
+                        kategori: 'Gaji & Bisyarah Asatidz',
+                        deskripsi: `Penggajian Periode ${month}/${year} (${drafts.length} Guru — Sumber JTM: ${jtmSource === 'jurnal' ? 'Realisasi Jurnal' : 'Jadwal Aktif'})`,
                         jumlah: totalPayout,
-                        penanggungJawab: currentUser?.fullName || 'Admin',
-                        rekening: 'Kas Tunai Bendahara'
+                        penanggungJawab: currentUser?.fullName || currentUser?.username || 'Bendahara',
+                        rekening: rekeningSumber
+                    });
+                    await logActivity('INSERT', 'payrollRecords', `payroll-${year}-${month}`, null, {
+                        month,
+                        year,
+                        count: recordsToSave.length,
+                        totalPayout,
+                        jtmSource,
+                        rekeningSumber
                     });
                     
-                    showToast('Penggajian berhasil di-posting!', 'success');
+                    showToast(`Penggajian berhasil di-posting ke ${rekeningSumber}!`, 'success');
                     setDrafts([]);
                 } catch(e) {
                     showToast('Gagal menyimpan data.', 'error');
@@ -251,14 +281,23 @@ const GeneratePayrollTab: React.FC<{ settings: any }> = ({ settings }) => {
                 </div>
                 <div>
                     <label className="app-label mb-1.5 block pl-1">Tahun</label>
-                    <input type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="app-input h-10 w-24 rounded-md px-3 text-sm" />
+                    <input type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="app-input h-10 w-24 rounded-md px-3 text-sm tabular-nums" />
                 </div>
                 <div>
-                    <label className="app-label mb-1.5 block pl-1">Minggu Efektif</label>
-                    <input type="number" value={weeks} onChange={e => setWeeks(Number(e.target.value))} className="app-input h-10 w-20 rounded-md px-3 text-sm" min="1" max="5" />
+                    <label className="app-label mb-1.5 block pl-1">Dasar Hitung Honor JTM</label>
+                    <select value={jtmSource} onChange={e => setJtmSource(e.target.value as 'jadwal' | 'jurnal')} className="app-select h-10 px-3 text-sm">
+                        <option value="jadwal">Estimasi Jadwal Aktif × Minggu</option>
+                        <option value="jurnal">Realisasi Jurnal Mengajar Bulan Ini</option>
+                    </select>
                 </div>
-                <button onClick={handleCalculate} disabled={isCalculating} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-blue-700 flex items-center gap-2">
-                    {isCalculating ? <span className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent"></span> : <i className="bi bi-calculator"></i>} Hitung Estimasi
+                {jtmSource === 'jadwal' && (
+                    <div>
+                        <label className="app-label mb-1.5 block pl-1">Minggu Efektif</label>
+                        <input type="number" value={weeks} onChange={e => setWeeks(Number(e.target.value))} className="app-input h-10 w-20 rounded-md px-3 text-sm tabular-nums" min="1" max="5" />
+                    </div>
+                )}
+                <button onClick={handleCalculate} disabled={isCalculating} className="bg-blue-600 text-white h-10 px-4 rounded-md text-sm font-bold hover:bg-blue-700 flex items-center gap-2">
+                    {isCalculating ? <span className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent"></span> : <i className="bi bi-calculator"></i>} Hitung Gaji
                 </button>
             </div>
 
@@ -324,9 +363,19 @@ const GeneratePayrollTab: React.FC<{ settings: any }> = ({ settings }) => {
                             </tfoot>
                         </table>
                     </div>
-                    <div className="flex justify-end">
-                        <button onClick={handlePostToDb} className="bg-green-600 text-white px-6 py-3 rounded-lg font-bold shadow-md hover:bg-green-700 flex items-center gap-2">
-                            <i className="bi bi-check2-circle"></i> Posting Keuangan & Bayar
+                    <div className="flex flex-wrap items-end justify-end gap-3">
+                        <div>
+                            <label className="app-label mb-1 block pl-1">Sumber Dana Buku Kas</label>
+                            <select
+                                value={rekeningSumber}
+                                onChange={e => setRekeningSumber(e.target.value)}
+                                className="app-select h-11 px-3 text-xs font-semibold min-w-[220px]"
+                            >
+                                {PAYROLL_REKENING_LIST.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                        </div>
+                        <button onClick={handlePostToDb} className="bg-green-600 text-white h-11 px-6 rounded-lg font-bold shadow-md hover:bg-green-700 flex items-center gap-2">
+                            <i className="bi bi-check2-circle"></i> Posting Keuangan &amp; Bayar
                         </button>
                     </div>
                 </div>
@@ -344,9 +393,14 @@ const PayrollHistoryTab: React.FC<{ settings: any }> = ({ settings }) => {
     const handleDelete = (id: number) => {
         showConfirmation(
             'Hapus Riwayat Gaji?',
-            'Apakah Anda yakin ingin menghapus riwayat slip gaji ini?',
+            'Apakah Anda yakin ingin menghapus riwayat slip gaji ini? (Jurnal pengeluaran di Buku Kas Umum tetap tersimpan kecuali dihapus terpisah di Buku Kas).',
             async () => {
-                await db.payrollRecords.update(id, { deleted: true, lastModified: Date.now() } as any);
+                const existing = await db.payrollRecords.get(id);
+                if (existing) {
+                    const deletedRec = { ...existing, deleted: true, lastModified: Date.now() };
+                    await db.payrollRecords.put(deletedRec);
+                    await logActivity('DELETE', 'payrollRecords', id, existing, deletedRec);
+                }
                 showToast('Riwayat gaji dihapus.', 'success');
             },
             { confirmColor: 'red', confirmText: 'Ya, Hapus' }

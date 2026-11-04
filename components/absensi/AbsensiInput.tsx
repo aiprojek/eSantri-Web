@@ -10,6 +10,7 @@ import { AbsensiBkModal } from './AbsensiBkModal';
 import { AbsensiWarningBanner } from './AbsensiWarningBanner';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { JurnalMengajarModal } from '../akademik/modals/JurnalMengajarModal';
+import { generateSyncSafeId } from '../../utils/idGenerator';
 
 export const AbsensiInput: React.FC = () => {
     const { settings, showToast, currentUser } = useAppContext();
@@ -239,7 +240,7 @@ export const AbsensiInput: React.FC = () => {
             const recordsToSave: AbsensiRecord[] = targetSantri.map(s => {
                 const existing = existingRecords.find(r => r.santriId === s.id);
                 return {
-                    id: existing ? existing.id : Date.now() + Math.floor(Math.random() * 10000),
+                    id: existing ? existing.id : generateSyncSafeId(),
                     santriId: s.id,
                     rombelId: selectedRombelId,
                     tanggal: selectedDate,
@@ -247,6 +248,7 @@ export const AbsensiInput: React.FC = () => {
                     status: attendanceMap[s.id] || 'H',
                     keterangan: notesMap[s.id] || '',
                     recordedBy: currentUser?.username || 'Staff',
+                    deleted: false,
                     lastModified: Date.now()
                 };
             });

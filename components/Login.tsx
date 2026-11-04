@@ -9,7 +9,7 @@ import { loadSyncService } from '../utils/lazyCloudServices';
 import { isFirebaseClientConfigReady } from '../firebaseApp';
 
 export const LoginScreen: React.FC = () => {
-    const { login, showToast, settings } = useAppContext();
+    const { login, showToast, showConfirmation, settings } = useAppContext();
     const { login: fbLogin, isFbLoading } = useFirebase();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -31,7 +31,7 @@ export const LoginScreen: React.FC = () => {
             const email = result.user.email;
             
             // Match user by email in local database
-            const user = await db.users.where('email').equals(email).first();
+            const user = await db.users.where('email').equals(email).filter(u => !u.deleted).first();
             if (user) {
                 await db.users.update(user.id, { lastLogin: new Date().toISOString() });
                 login(user);
@@ -51,7 +51,7 @@ export const LoginScreen: React.FC = () => {
         e.preventDefault();
         setIsLoading(true);
         try {
-            const user = await db.users.where('username').equals(username).first();
+            const user = await db.users.where('username').equals(username).filter(u => !u.deleted).first();
             if (!user) {
                 showToast('Username atau password salah.', 'error');
                 setIsLoading(false);
@@ -73,30 +73,35 @@ export const LoginScreen: React.FC = () => {
         }
     };
 
-    const handleUpdateFromCloud = async () => {
+    const handleUpdateFromCloud = () => {
         if (!settings.cloudSyncConfig || settings.cloudSyncConfig.provider === 'none') {
             showToast('Fitur Cloud belum aktif. Hubungi Admin untuk mengaktifkan.', 'error');
             return;
         }
-        if (!confirm('Apakah Anda ingin memperbarui data akun (password) dari Cloud? Ini berguna jika Admin telah mereset password Anda.')) return;
-        
-        setIsLoading(true);
-        try {
-            const { updateAccountFromCloud } = await loadSyncService();
-            await updateAccountFromCloud(settings.cloudSyncConfig);
-            showToast('Data akun berhasil diperbarui! Silakan login dengan password baru.', 'success');
-        } catch (e) {
-            showToast(`Gagal update akun: ${(e as Error).message}`, 'error');
-        } finally {
-            setIsLoading(false);
-        }
+        showConfirmation(
+            'Perbarui Akun dari Cloud?',
+            'Apakah Anda ingin memperbarui data akun (password) dari Cloud? Ini berguna jika Admin telah mereset password Anda.',
+            async () => {
+                setIsLoading(true);
+                try {
+                    const { updateAccountFromCloud } = await loadSyncService();
+                    await updateAccountFromCloud(settings.cloudSyncConfig!);
+                    showToast('Data akun berhasil diperbarui! Silakan login dengan password baru.', 'success');
+                } catch (e) {
+                    showToast(`Gagal update akun: ${(e as Error).message}`, 'error');
+                } finally {
+                    setIsLoading(false);
+                }
+            },
+            { confirmText: 'Ya, Perbarui', confirmColor: 'blue' }
+        );
     };
 
     const handleCheckUsername = async () => {
         if (!forgotUsername) return;
         setIsLoading(true);
         try {
-            const user = await db.users.where('username').equals(forgotUsername).first();
+            const user = await db.users.where('username').equals(forgotUsername).filter(u => !u.deleted).first();
             if (user && user.securityQuestion) {
                 setTargetUser(user);
                 setSecurityQuestion(user.securityQuestion);

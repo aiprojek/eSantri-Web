@@ -8,6 +8,7 @@ import { CURRENT_PERMISSION_VERSION, normalizeUserPermissions } from '../../../s
 import { UserModal } from '../modals/UserModal';
 import { BulkUserFromTeacherModal } from '../modals/BulkUserFromTeacherModal';
 import { SectionCard } from '../../common/SectionCard';
+import { generateSyncSafeId } from '../../../utils/idGenerator';
 
 interface TabAkunProps {
     localSettings: PondokSettings;
@@ -29,14 +30,14 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
     useEffect(() => {
         const fetchUsers = async () => {
             const allUsers = await db.users.toArray();
-            setUsers(allUsers);
+            setUsers(allUsers.filter(u => !u.deleted));
         };
         fetchUsers();
     }, []);
 
     const handleToggleMultiUser = async (enabled: boolean) => {
         if (enabled) {
-            const allUsers = await db.users.toArray();
+            const allUsers = (await db.users.toArray()).filter(u => !u.deleted);
             setUsers(allUsers);
             if (allUsers.length > 0) {
                 handleInputChange('multiUserMode', true);
@@ -47,7 +48,7 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
             const keyHash = await hashString(generatedKey);
             
             const defaultAdmin: User = {
-                id: Date.now(),
+                id: generateSyncSafeId(),
                 username: 'admin',
                 passwordHash: await hashString('admin123'),
                 fullName: 'Administrator',
@@ -92,6 +93,7 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
             ...user,
             permissions: normalizeUserPermissions(user),
             permissionVersion: CURRENT_PERMISSION_VERSION,
+            deleted: false,
             lastModified: Date.now(),
         };
 
@@ -100,11 +102,11 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
             setUsers(prev => prev.map(u => u.id === user.id ? normalizedUser : u));
             showToast('User berhasil diperbarui', 'success');
         } else {
-            if (users.some(u => u.username === normalizedUser.username)) {
+            if (users.some(u => !u.deleted && u.username.toLowerCase() === normalizedUser.username.toLowerCase())) {
                 showToast('Username sudah digunakan.', 'error');
                 return;
             }
-            await db.users.add(normalizedUser);
+            await db.users.put(normalizedUser);
             setUsers(prev => [...prev, normalizedUser]);
             showToast('User baru ditambahkan', 'success');
         }
@@ -113,7 +115,7 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
 
     const handleBulkSaveUsers = async (newUsers: User[]) => {
         try {
-            await db.users.bulkAdd(newUsers);
+            await db.users.bulkPut(newUsers);
             setUsers(prev => [...prev, ...newUsers]);
             showToast(`${newUsers.length} user berhasil ditambahkan dari data guru.`, 'success');
         } catch (error) {
@@ -136,9 +138,11 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
 
         showConfirmation(
             `Hapus User ${user?.username}?`,
-            'Tindakan ini tidak dapat dibatalkan.',
+            'Tindakan ini akan menonaktifkan dan menghapus akses akun pengguna tersebut.',
             async () => {
-                await db.users.delete(id);
+                if (user) {
+                    await db.users.put({ ...user, deleted: true, lastModified: Date.now() });
+                }
                 setUsers(prev => prev.filter(u => u.id !== id));
                 showToast('User dihapus.', 'success');
             },

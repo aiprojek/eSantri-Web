@@ -6,6 +6,7 @@ import { TransaksiKoperasi } from '../../types';
 import { formatRupiah } from '../../utils/formatters';
 import { printThermalReceipt, generateKoperasiId } from './Shared';
 import { exportToExcel } from '../../utils/exportUtils';
+import { logActivity } from '../../services/logService';
 
 export const TransactionHistory: React.FC = () => {
     const { settings: pondokSettings, currentUser, showToast } = useAppContext();
@@ -146,10 +147,18 @@ export const TransactionHistory: React.FC = () => {
                     }
                 }
 
-                // 3. Refund Santri Tabungan if paid via Tabungan (or reverse kembalianMasukSaldo if Tunai)
+                // 3. Fetch related PembayaranHutang entries first so any Tabungan installments can be refunded atomically
+                const relatedHutangPayments = await db.pembayaranHutang
+                    .filter(p => !p.deleted && p.transaksiId === voidTarget.id)
+                    .toArray();
+                const tabunganInstallmentTotal = relatedHutangPayments
+                    .filter(p => p.metode === 'Tabungan')
+                    .reduce((sum, p) => sum + (Number(p.jumlah) || 0), 0);
+
+                // 4. Refund Santri Tabungan if paid via Tabungan, or if Kasbon installments were paid via Tabungan, or reverse kembalianMasukSaldo if Tunai
                 if (voidTarget.tipePembeli === 'Santri' && voidTarget.pembeliId) {
                     const currentSaldo = await db.saldoSantri.get(voidTarget.pembeliId);
-                    let balance = currentSaldo ? currentSaldo.saldo : 0;
+                    const balance = currentSaldo && !currentSaldo.deleted ? currentSaldo.saldo : 0;
 
                     if (voidTarget.metodePembayaran === 'Tabungan') {
                         const newBalance = balance + voidTarget.totalFinal;
@@ -157,6 +166,7 @@ export const TransactionHistory: React.FC = () => {
                             santriId: voidTarget.pembeliId,
                             saldo: newBalance,
                             limitHarian: currentSaldo?.limitHarian,
+                            deleted: false,
                             lastModified: now
                         });
                         await db.transaksiSaldo.put({
@@ -171,12 +181,34 @@ export const TransactionHistory: React.FC = () => {
                             deleted: false,
                             lastModified: now
                         } as any);
+                    } else if (voidTarget.metodePembayaran === 'Hutang' && tabunganInstallmentTotal > 0) {
+                        const newBalance = balance + tabunganInstallmentTotal;
+                        await db.saldoSantri.put({
+                            santriId: voidTarget.pembeliId,
+                            saldo: newBalance,
+                            limitHarian: currentSaldo?.limitHarian,
+                            deleted: false,
+                            lastModified: now
+                        });
+                        await db.transaksiSaldo.put({
+                            id: generateKoperasiId(),
+                            santriId: voidTarget.pembeliId,
+                            tanggal: nowIso,
+                            jenis: 'Deposit',
+                            jumlah: tabunganInstallmentTotal,
+                            saldoSetelah: newBalance,
+                            keterangan: `Refund Cicilan Kasbon via Tabungan Batal Nota #${voidTarget.id} (${alasanBatal.trim()})`,
+                            operator: operatorName,
+                            deleted: false,
+                            lastModified: now
+                        } as any);
                     } else if (voidTarget.metodePembayaran === 'Tunai' && voidTarget.kembalianMasukSaldo && voidTarget.kembali && voidTarget.kembali > 0) {
                         const newBalance = Math.max(0, balance - voidTarget.kembali);
                         await db.saldoSantri.put({
                             santriId: voidTarget.pembeliId,
                             saldo: newBalance,
                             limitHarian: currentSaldo?.limitHarian,
+                            deleted: false,
                             lastModified: now
                         });
                         await db.transaksiSaldo.put({
@@ -194,7 +226,7 @@ export const TransactionHistory: React.FC = () => {
                     }
                 }
 
-                // 4. Soft-delete related KeuanganKoperasi entries so revenue & profit are reversed cleanly
+                // 5. Soft-delete related KeuanganKoperasi entries so revenue & profit are reversed cleanly
                 const relatedKeuangan = await db.keuanganKoperasi
                     .filter(k => !k.deleted && (k.transaksiId === voidTarget.id || k.deskripsi.includes(`#${voidTarget.id}`)))
                     .toArray();
@@ -206,10 +238,7 @@ export const TransactionHistory: React.FC = () => {
                     });
                 }
 
-                // 5. Soft-delete related PembayaranHutang entries if any
-                const relatedHutangPayments = await db.pembayaranHutang
-                    .filter(p => !p.deleted && p.transaksiId === voidTarget.id)
-                    .toArray();
+                // 6. Soft-delete related PembayaranHutang entries if any
                 for (const p of relatedHutangPayments) {
                     await db.pembayaranHutang.put({
                         ...p,
@@ -218,6 +247,12 @@ export const TransactionHistory: React.FC = () => {
                     });
                 }
             });
+
+            await logActivity('UPDATE', 'transaksiKoperasi', voidTarget.id, voidTarget, {
+                statusTransaksi: 'Dibatalkan',
+                alasanBatal: alasanBatal.trim(),
+                dibatalkanOleh: operatorName
+            }, operatorName);
 
             showToast(`Transaksi #${voidTarget.id.toString().slice(-6)} berhasil dibatalkan & stok dikembalikan.`, 'success');
             setVoidTarget(null);
@@ -460,7 +495,10 @@ export const TransactionHistory: React.FC = () => {
                                     {voidTarget.metodePembayaran === 'Tabungan' && (
                                         <li>Saldo Tabungan <strong>{voidTarget.namaPembeli}</strong> sebesar <strong>{formatRupiah(voidTarget.totalFinal)}</strong> akan dikembalikan (Refund).</li>
                                     )}
-                                    <li>Pemasukan & Laba pada Keuangan Koperasi untuk nota ini akan dibatalkan secara otomatis.</li>
+                                    {voidTarget.metodePembayaran === 'Hutang' && (
+                                        <li>Seluruh sisa piutang kasbon dihapuskan, dan cicilan yang sempat dipotong dari Tabungan Santri akan di-refund otomatis.</li>
+                                    )}
+                                    <li>Pemasukan &amp; Laba pada Keuangan Koperasi untuk nota ini akan dibatalkan secara otomatis.</li>
                                 </ul>
                             </div>
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { KesehatanRecord, Santri, PondokSettings } from '../../types';
 import { formatDate } from '../../utils/formatters';
+import { normalizePhoneNumber, openExternalLinkSafe } from '../../services/waService';
 
 interface WhatsAppHealthModalProps {
     isOpen: boolean;
@@ -20,16 +21,7 @@ export const WhatsAppHealthModal: React.FC<WhatsAppHealthModalProps> = ({
     onShowToast
 }) => {
     // Normalisasi nomor telepon
-    const formatPhone = (phone?: string) => {
-        if (!phone) return '';
-        let cleaned = phone.replace(/[^0-9]/g, '');
-        if (cleaned.startsWith('0')) {
-            cleaned = '62' + cleaned.slice(1);
-        } else if (cleaned.startsWith('8')) {
-            cleaned = '62' + cleaned;
-        }
-        return cleaned;
-    };
+    const formatPhone = (phone?: string) => normalizePhoneNumber(phone);
 
     const defaultPhone = formatPhone(santri.teleponWali || santri.teleponAyah || santri.teleponIbu);
     const [targetPhone, setTargetPhone] = useState(defaultPhone);
@@ -84,13 +76,13 @@ _Poskestren ${settings.namaPonpes}_`;
     if (!isOpen) return null;
 
     const handleSendWhatsApp = () => {
-        if (!targetPhone) {
-            alert('Silakan masukkan nomor WhatsApp wali terlebih dahulu.');
+        const cleaned = formatPhone(targetPhone);
+        if (!cleaned) {
+            onShowToast('Silakan masukkan nomor WhatsApp wali yang valid terlebih dahulu.', 'error');
             return;
         }
-        const cleaned = formatPhone(targetPhone);
         const encoded = encodeURIComponent(message);
-        window.open(`https://wa.me/${cleaned}?text=${encoded}`, '_blank');
+        openExternalLinkSafe(`https://wa.me/${cleaned}?text=${encoded}`);
         onShowToast('Membuka WhatsApp...', 'info');
         onClose();
     };

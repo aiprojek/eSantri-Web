@@ -4,19 +4,22 @@ import { useSantriContext } from '../../../contexts/SantriContext';
 import { JurnalMengajarRecord } from '../../../types';
 import { db } from '../../../db';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { generateSyncSafeId } from '../../../utils/idGenerator';
 
 interface JurnalMengajarModalProps {
     isOpen: boolean;
     onClose: () => void;
     rombelId?: number;
     tanggal?: string; // YYYY-MM-DD
+    editRecord?: JurnalMengajarRecord | null;
 }
 
 export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ 
     isOpen, 
     onClose, 
     rombelId: propRombelId, 
-    tanggal: propTanggal 
+    tanggal: propTanggal,
+    editRecord: propEditRecord
 }) => {
     const { settings, showToast, currentUser, showConfirmation } = useAppContext();
     const { jurnalMengajarList, onSaveJurnalMengajar, onDeleteJurnalMengajar } = useSantriContext();
@@ -27,6 +30,9 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({
     const [selectedRombelId, setSelectedRombelId] = useState<number>(propRombelId || (settings.rombel[0]?.id ?? 0));
     const [selectedTanggal, setSelectedTanggal] = useState<string>(propTanggal || new Date().toISOString().split('T')[0]);
 
+    // Edit state
+    const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
+
     // Form state
     const [guruId, setGuruId] = useState<number>(0);
     const [mataPelajaranId, setMataPelajaranId] = useState<number>(0);
@@ -35,9 +41,36 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({
     const [kompetensiMateri, setKompetensiMateri] = useState('');
     const [catatanKejadian, setCatatanKejadian] = useState('');
 
-    // Update active rombel/tanggal when props change
+    const loadRecordIntoForm = (rec: JurnalMengajarRecord) => {
+        setEditingRecordId(rec.id);
+        setSelectedRombelId(rec.rombelId);
+        setSelectedTanggal(rec.tanggal);
+        setGuruId(rec.guruId);
+        setMataPelajaranId(rec.mataPelajaranId || 0);
+        setJamPelajaranIds(rec.jamPelajaranIds ? [...rec.jamPelajaranIds] : []);
+        setSesiEkstra(rec.sesiEkstra ? rec.sesiEkstra.map(s => ({ ...s, materi: s.materi || '' })) : []);
+        setKompetensiMateri(rec.kompetensiMateri || '');
+        setCatatanKejadian(rec.catatanKejadian || '');
+    };
+
+    const resetForm = () => {
+        setEditingRecordId(null);
+        setGuruId(0);
+        setMataPelajaranId(0);
+        setJamPelajaranIds([]);
+        setSesiEkstra([]);
+        setKompetensiMateri('');
+        setCatatanKejadian('');
+    };
+
+    // Update active rombel/tanggal/editRecord when modal opens
     useEffect(() => {
         if (isOpen) {
+            if (propEditRecord) {
+                loadRecordIntoForm(propEditRecord);
+                return;
+            }
+            setEditingRecordId(null);
             if (propRombelId) setSelectedRombelId(propRombelId);
             else if (!selectedRombelId && settings.rombel.length > 0) setSelectedRombelId(settings.rombel[0].id);
             
@@ -51,7 +84,7 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({
             setKompetensiMateri('');
             setCatatanKejadian('');
         }
-    }, [isOpen, propRombelId, propTanggal, settings.rombel]);
+    }, [isOpen, propRombelId, propTanggal, propEditRecord, settings.rombel]);
 
     const recordsToday = useMemo(() => {
         return jurnalMengajarList
@@ -59,7 +92,38 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({
             .sort((a,b) => (a.jamPelajaranIds?.[0] || 0) - (b.jamPelajaranIds?.[0] || 0));
     }, [jurnalMengajarList, selectedRombelId, selectedTanggal]);
 
-    const jadwalList = useLiveQuery(() => db.jadwalPelajaran.toArray(), []) || [];
+    const jadwalList = useLiveQuery(() => db.jadwalPelajaran.filter(j => !j.deleted).toArray(), []) || [];
+
+    // Group active schedule slots for selectedRombelId & selectedTanggal day-of-week
+    const scheduledGroupsToday = useMemo(() => {
+        if (!selectedRombelId || !selectedTanggal) return [];
+        const parsed = new Date(`${selectedTanggal}T00:00:00`);
+        if (Number.isNaN(parsed.getTime())) return [];
+        const dayIdx = parsed.getDay(); // 0=Ahad .. 6=Sabtu
+        const daySlots = jadwalList
+            .filter(j => j.rombelId === selectedRombelId && j.hari === dayIdx && j.guruId && j.guruId > 0)
+            .sort((a, b) => (a.jamKe || 0) - (b.jamKe || 0));
+
+        const groups: Array<{ guruId: number; mapelId: number; jamList: number[]; alreadyLogged: boolean }> = [];
+        for (const slot of daySlots) {
+            const gId = slot.guruId || 0;
+            const mId = slot.mapelId || 0;
+            const last = groups[groups.length - 1];
+            if (last && last.guruId === gId && last.mapelId === mId) {
+                if (!last.jamList.includes(slot.jamKe)) last.jamList.push(slot.jamKe);
+            } else {
+                groups.push({ guruId: gId, mapelId: mId, jamList: [slot.jamKe], alreadyLogged: false });
+            }
+        }
+        return groups.map(grp => ({
+            ...grp,
+            alreadyLogged: recordsToday.some(
+                r => r.guruId === grp.guruId &&
+                     (r.mataPelajaranId || 0) === grp.mapelId &&
+                     grp.jamList.some(jk => r.jamPelajaranIds?.includes(jk))
+            )
+        }));
+    }, [jadwalList, selectedRombelId, selectedTanggal, recordsToday]);
 
     const rombel = useMemo(() => settings.rombel.find(r => r.id === selectedRombelId), [settings.rombel, selectedRombelId]);
     const kelas = useMemo(() => rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined, [settings.kelas, rombel]);
@@ -130,8 +194,9 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({
         const tipeEntri: 'kbm' | 'ekstra' | 'campuran' =
             mataPelajaranId && validSesiEkstra.length > 0 ? 'campuran' : mataPelajaranId ? 'kbm' : 'ekstra';
 
+        const isEditing = editingRecordId !== null;
         const record: JurnalMengajarRecord = {
-            id: Date.now() + Math.random(),
+            id: isEditing ? editingRecordId : generateSyncSafeId(),
             tanggal: selectedTanggal,
             rombelId: selectedRombelId,
             guruId,
@@ -146,8 +211,12 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({
 
         try {
             await onSaveJurnalMengajar(record);
-            showToast('Jurnal mengajar berhasil ditambahkan', 'success');
-            // reset form partial
+            showToast(isEditing ? 'Jurnal mengajar berhasil diperbarui' : 'Jurnal mengajar berhasil ditambahkan', 'success');
+            if (isEditing && propEditRecord) {
+                onClose();
+                return;
+            }
+            setEditingRecordId(null);
             setMataPelajaranId(0);
             setJamPelajaranIds([]);
             setSesiEkstra([]);
@@ -273,9 +342,24 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({
                                             )}
                                          </div>
                                          {canWrite && (
-                                            <button onClick={() => handleDelete(r.id)} className="text-red-400 hover:text-red-600 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity rounded-md hover:bg-red-50 bg-white" title="Hapus Entri">
-                                                <i className="bi bi-trash"></i>
-                                            </button>
+                                            <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => loadRecordIntoForm(r)}
+                                                    className="text-teal-600 hover:text-teal-800 p-1.5 rounded-md hover:bg-teal-50 bg-white"
+                                                    title="Edit Entri Jurnal"
+                                                >
+                                                    <i className="bi bi-pencil-square"></i>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDelete(r.id)}
+                                                    className="text-red-400 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 bg-white"
+                                                    title="Hapus Entri"
+                                                >
+                                                    <i className="bi bi-trash"></i>
+                                                </button>
+                                            </div>
                                          )}
                                      </div>
                                 </div>
@@ -283,14 +367,60 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({
                         </div>
                     )}
 
-                    {/* Form Input Baru */}
+                    {/* Form Input Baru / Edit */}
                     {canWrite && (
-                        <div className="bg-white p-5 rounded-xl border border-teal-200 shadow-sm relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-teal-50 rounded-bl-full -z-0"></div>
+                        <div className={`bg-white p-5 rounded-xl border shadow-sm relative overflow-hidden ${editingRecordId !== null ? 'border-amber-300 ring-2 ring-amber-100' : 'border-teal-200'}`}>
+                            <div className={`absolute top-0 right-0 w-24 h-24 rounded-bl-full -z-0 ${editingRecordId !== null ? 'bg-amber-50' : 'bg-teal-50'}`}></div>
                             
-                            <h3 className="font-bold text-teal-800 text-sm uppercase tracking-wider mb-4 relative z-10 flex items-center gap-2">
-                                <i className="bi bi-plus-circle-fill"></i> Tambah Entri Jurnal
-                            </h3>
+                            <div className="flex items-center justify-between mb-4 relative z-10">
+                                <h3 className={`font-bold text-sm uppercase tracking-wider flex items-center gap-2 ${editingRecordId !== null ? 'text-amber-800' : 'text-teal-800'}`}>
+                                    <i className={`bi ${editingRecordId !== null ? 'bi-pencil-square' : 'bi-plus-circle-fill'}`}></i>
+                                    {editingRecordId !== null ? 'Edit Entri Jurnal' : 'Tambah Entri Jurnal'}
+                                </h3>
+                                {editingRecordId !== null && (
+                                    <button
+                                        type="button"
+                                        onClick={resetForm}
+                                        className="text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition-colors"
+                                    >
+                                        Batal Edit
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Quick Auto-Fill from Today's Jadwal Pelajaran */}
+                            {scheduledGroupsToday.length > 0 && editingRecordId === null && (
+                                <div className="mb-4 p-3 rounded-xl bg-teal-50/70 border border-teal-200 relative z-10">
+                                    <div className="text-[11px] font-bold text-teal-900 mb-2 flex items-center gap-1.5">
+                                        <i className="bi bi-lightning-charge-fill text-amber-500"></i>
+                                        <span>Isi Cepat dari Jadwal Aktif Hari Ini:</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {scheduledGroupsToday.map((grp, idx) => (
+                                            <button
+                                                key={`${grp.guruId}-${grp.mapelId}-${idx}`}
+                                                type="button"
+                                                onClick={() => {
+                                                    setGuruId(grp.guruId);
+                                                    setMataPelajaranId(grp.mapelId);
+                                                    setJamPelajaranIds(grp.jamList);
+                                                }}
+                                                className={`text-left text-[11px] px-2.5 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 ${
+                                                    grp.alreadyLogged
+                                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300 opacity-75'
+                                                        : 'bg-white hover:bg-teal-100 text-slate-800 border-teal-300 shadow-2xs font-semibold'
+                                                }`}
+                                                title="Klik untuk mengisi otomatis Guru, Mapel, dan Jam Pelajaran"
+                                            >
+                                                <span className="font-bold text-teal-700">Jam {grp.jamList.join(',')}</span>
+                                                <span>• {getMapelName(grp.mapelId)}</span>
+                                                <span className="text-gray-500">({getGuruName(grp.guruId)})</span>
+                                                {grp.alreadyLogged && <i className="bi bi-check-circle-fill text-emerald-600"></i>}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             
                             <form onSubmit={handleSave} className="space-y-4 relative z-10">
                                 <div>
@@ -411,8 +541,8 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({
                                     <textarea rows={2} value={catatanKejadian} onChange={e => setCatatanKejadian(e.target.value)} placeholder="Misal: Siswa sebagian besar belum hafal, 2 orang tidur..." className="w-full text-sm p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 outline-none resize-none"></textarea>
                                 </div>
 
-                                <button type="submit" disabled={!guruId || !kompetensiMateri.trim() || (!mataPelajaranId && sesiEkstra.length === 0)} className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
-                                    Simpan Jurnal
+                                <button type="submit" disabled={!guruId || !kompetensiMateri.trim() || (!mataPelajaranId && sesiEkstra.length === 0)} className={`w-full text-white font-bold py-3 rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${editingRecordId !== null ? 'bg-amber-600 hover:bg-amber-700' : 'bg-teal-600 hover:bg-teal-700'}`}>
+                                    {editingRecordId !== null ? 'Simpan Perubahan Jurnal' : 'Simpan Jurnal'}
                                 </button>
                             </form>
                         </div>

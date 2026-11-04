@@ -21,11 +21,12 @@ import {
 import { WhatsAppHealthModal } from './kesehatan/WhatsAppHealthModal';
 import { MedicalPrintPreviewModal, MedicalDocumentType } from './kesehatan/MedicalPrintPreviewModal';
 import { generateSyncSafeId } from '../utils/idGenerator';
+import { logActivity } from '../services/logService';
 
 // --- SUB COMPONENTS: STOK OBAT ---
 
 const StokObatView: React.FC<{ canWrite: boolean; initialFilter?: string | null }> = ({ canWrite, initialFilter }) => {
-    const { showToast, showConfirmation } = useAppContext();
+    const { showToast, showConfirmation, currentUser } = useAppContext();
     const obatList = useLiveQuery(() => db.obat.filter(o => !o.deleted).toArray(), []) || [];
     
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -76,10 +77,14 @@ const StokObatView: React.FC<{ canWrite: boolean; initialFilter?: string | null 
             };
 
             if (editingObat) {
-                await db.obat.put({ ...sanitized, id: editingObat.id });
+                const updatedObat: Obat = { ...sanitized, id: editingObat.id };
+                await db.obat.put(updatedObat);
+                await logActivity('UPDATE', 'obat', updatedObat.id, editingObat, updatedObat, currentUser?.username);
                 showToast('Data obat berhasil diperbarui.', 'success');
             } else {
-                await db.obat.put({ ...sanitized, id: generateSyncSafeId(), deleted: false });
+                const createdObat: Obat = { ...sanitized, id: generateSyncSafeId(), deleted: false };
+                await db.obat.put(createdObat);
+                await logActivity('INSERT', 'obat', createdObat.id, null, createdObat, currentUser?.username);
                 showToast('Obat baru berhasil ditambahkan.', 'success');
             }
             setIsModalOpen(false);
@@ -93,7 +98,9 @@ const StokObatView: React.FC<{ canWrite: boolean; initialFilter?: string | null 
         showConfirmation('Hapus Obat?', 'Data obat akan dihapus dari inventaris.', async () => {
             const target = obatList.find(o => o.id === id);
             if (target) {
-                await db.obat.put({ ...target, deleted: true, lastModified: Date.now() });
+                const softDeleted: Obat = { ...target, deleted: true, lastModified: Date.now() };
+                await db.obat.put(softDeleted);
+                await logActivity('DELETE', 'obat', id, target, softDeleted, currentUser?.username);
                 showToast('Obat berhasil dihapus.', 'success');
             }
         }, { confirmColor: 'red' });
@@ -730,18 +737,24 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
         if (!canWrite) return;
         showConfirmation('Hapus Data Pemeriksaan?', 'Data pemeriksaan akan dihapus dan stok obat yang terpakai akan DIKEMBALIKAN ke inventaris.', async () => {
             try {
+                let oldSnapshot: KesehatanRecord | undefined;
+                const now = Date.now();
                 await (db as any).transaction('rw', db.kesehatanRecords, db.obat, async () => {
                     const record = await db.kesehatanRecords.get(id);
+                    oldSnapshot = record;
                     if (record && record.resep && record.resep.length > 0) {
                         for (const item of record.resep) {
                             const obat = await db.obat.get(item.obatId);
                             if (obat) {
-                                await db.obat.update(obat.id, { stok: obat.stok + item.jumlah, lastModified: Date.now() });
+                                await db.obat.update(obat.id, { stok: obat.stok + item.jumlah, lastModified: now });
                             }
                         }
                     }
-                    await db.kesehatanRecords.update(id, { deleted: true, lastModified: Date.now() });
+                    await db.kesehatanRecords.update(id, { deleted: true, lastModified: now });
                 });
+                if (oldSnapshot) {
+                    await logActivity('DELETE', 'kesehatanRecords', id, oldSnapshot, { ...oldSnapshot, deleted: true, lastModified: now }, currentUser?.username);
+                }
                 showToast('Data pemeriksaan dihapus & stok obat dikembalikan.', 'success');
             } catch (e) {
                 showToast('Gagal menghapus data.', 'error');
@@ -780,6 +793,9 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
         if (!canWrite || !selectedSantriId) return;
         try {
             let absensiUpdated = false;
+            let syncedSickDaysCount = 0;
+            let persistedRecord: KesehatanRecord | null = null;
+            const previousRecordSnapshot = editingRecord ? { ...editingRecord } : null;
 
             await (db as any).transaction('rw', db.kesehatanRecords, db.obat, db.absensi, async () => {
                 // 1. Kembalikan stok obat dari resep lama jika sedang mengedit
@@ -828,51 +844,85 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
                 };
 
                 if (editingRecord) {
-                    await db.kesehatanRecords.put({ ...recordData, id: editingRecord.id } as KesehatanRecord);
+                    persistedRecord = { ...recordData, id: editingRecord.id, deleted: editingRecord.deleted ?? false } as KesehatanRecord;
+                    await db.kesehatanRecords.put(persistedRecord);
                 } else {
-                    await db.kesehatanRecords.put({ ...recordData, id: generateSyncSafeId(), deleted: false } as KesehatanRecord);
+                    persistedRecord = { ...recordData, id: generateSyncSafeId(), deleted: false } as KesehatanRecord;
+                    await db.kesehatanRecords.put(persistedRecord);
                 }
 
-                // 5. Integrasi presensi santri jika rawat inap / rujuk
+                // 5. Integrasi presensi santri khusus sesi KBM Pagi selama durasi istirahat (maks 14 hari) jika rawat inap / rujuk
                 const shouldSyncSickAbsence = data.status === 'Rawat Inap (Pondok)' || data.status === 'Rujuk RS/Klinik';
-                if (shouldSyncSickAbsence) {
+                if (shouldSyncSickAbsence && data.tanggal) {
                     const santri = santriList.find(s => s.id === selectedSantriId);
                     if (santri) {
-                        const existingAbsen = await db.absensi
+                        const durationDays = Math.min(Math.max(1, Math.floor(Number(data.lamaIstirahatHari) || 1)), 14);
+                        const baseDate = new Date(`${data.tanggal}T00:00:00`);
+                        const keteranganAbsen = `[Poskestren] ${data.status}: ${data.diagnosa || 'Pemeriksaan Kesehatan'}${durationDays > 1 ? ` (Istirahat ${durationDays} hari)` : ''}`;
+
+                        const santriAbsensiRows = await db.absensi
                             .where({ santriId: santri.id })
-                            .filter(a => !a.deleted && a.tanggal === data.tanggal)
-                            .first();
+                            .filter(a => !a.deleted && (!a.sesi || a.sesi === 'KBM Pagi'))
+                            .toArray();
 
-                        const keteranganAbsen = `[Poskestren] ${data.status}: ${data.diagnosa || 'Pemeriksaan Kesehatan'}`;
+                        const nowTs = Date.now();
+                        for (let dayOffset = 0; dayOffset < durationDays; dayOffset++) {
+                            const targetDateObj = new Date(baseDate);
+                            targetDateObj.setDate(baseDate.getDate() + dayOffset);
+                            const y = targetDateObj.getFullYear();
+                            const m = String(targetDateObj.getMonth() + 1).padStart(2, '0');
+                            const d = String(targetDateObj.getDate()).padStart(2, '0');
+                            const targetDateStr = `${y}-${m}-${d}`;
 
-                        if (existingAbsen) {
-                            await db.absensi.update(existingAbsen.id, {
-                                status: 'S',
-                                keterangan: keteranganAbsen,
-                                lastModified: Date.now()
-                            });
-                        } else {
-                            await db.absensi.put({
-                                id: generateSyncSafeId(),
-                                santriId: santri.id,
-                                rombelId: santri.rombelId,
-                                tanggal: data.tanggal,
-                                sesi: 'KBM Pagi',
-                                status: 'S',
-                                keterangan: keteranganAbsen,
-                                recordedBy: currentUser?.username || 'Poskestren',
-                                deleted: false,
-                                lastModified: Date.now()
-                            });
+                            const existingAbsen = santriAbsensiRows.find(a => a.tanggal === targetDateStr);
+                            if (existingAbsen) {
+                                await db.absensi.update(existingAbsen.id, {
+                                    status: 'S',
+                                    sesi: existingAbsen.sesi || 'KBM Pagi',
+                                    keterangan: keteranganAbsen,
+                                    lastModified: nowTs
+                                });
+                            } else {
+                                await db.absensi.put({
+                                    id: generateSyncSafeId(),
+                                    santriId: santri.id,
+                                    rombelId: santri.rombelId,
+                                    tanggal: targetDateStr,
+                                    sesi: 'KBM Pagi',
+                                    status: 'S',
+                                    keterangan: keteranganAbsen,
+                                    recordedBy: currentUser?.username || 'Poskestren',
+                                    deleted: false,
+                                    lastModified: nowTs
+                                });
+                            }
+                            syncedSickDaysCount++;
                         }
-                        absensiUpdated = true;
+                        absensiUpdated = syncedSickDaysCount > 0;
                     }
                 }
             });
 
+            if (persistedRecord) {
+                await logActivity(
+                    previousRecordSnapshot ? 'UPDATE' : 'INSERT',
+                    'kesehatanRecords',
+                    (persistedRecord as KesehatanRecord).id,
+                    previousRecordSnapshot,
+                    persistedRecord,
+                    currentUser?.username
+                );
+            }
+
             const msgParts = ['Data rekam medis disimpan'];
             if (resepList.length > 0) msgParts.push('stok obat disesuaikan');
-            if (absensiUpdated) msgParts.push('absensi dicatat SAKIT');
+            if (absensiUpdated) {
+                msgParts.push(
+                    syncedSickDaysCount > 1
+                        ? `absensi KBM dicatat SAKIT (${syncedSickDaysCount} hari)`
+                        : 'absensi KBM dicatat SAKIT'
+                );
+            }
 
             showToast(msgParts.join(', ') + '.', 'success');
             setIsModalOpen(false);

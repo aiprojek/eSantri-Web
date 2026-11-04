@@ -8,6 +8,7 @@ import { StructureModal } from '../settings/modals/StructureModal';
 import { BulkMasterEditor } from './modals/BulkMasterEditor';
 import { SignatureDropzone } from '../common/SignatureDropzone';
 import { loadXLSX } from '../../utils/lazyClientLibs';
+import { generateSyncSafeId } from '../../utils/idGenerator';
 import {
     getActiveTenagaPengajar,
     findStrictTeacherTtdAsset,
@@ -118,7 +119,7 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
 
     const handleCloneRombel = (rombel: Rombel) => {
         const list = [...localSettings.rombel];
-        const nextId = list.length > 0 ? Math.max(...list.map(r => r.id)) + 1 : 1;
+        const nextId = list.length > 0 ? Math.floor(Math.max(...list.map(r => r.id))) + 1 : 1;
         const clonedName = `${rombel.nama} (Salinan)`;
         const newRombel: Rombel = {
             ...rombel,
@@ -138,7 +139,7 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
         let updatedList: any[];
         
         if (mode === 'add') {
-             const newItem = { ...item, id: list.length > 0 ? Math.max(...list.map((i: any) => i.id)) + 1 : 1 };
+             const newItem = { ...item, id: list.length > 0 ? Math.floor(Math.max(...list.map((i: any) => i.id))) + 1 : 1 };
              updatedList = [...list, newItem];
         } else {
              updatedList = list.map((i: any) => i.id === item.id ? item : i);
@@ -162,7 +163,7 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
                         return {
                             ...t,
                             riwayatJabatan: [...currentJabatan, {
-                                id: Date.now(),
+                                id: generateSyncSafeId(),
                                 jabatan: 'Wali Kelas' as any,
                                 rombelId: rombel.id,
                                 tanggalMulai: new Date().toISOString().split('T')[0]
@@ -198,7 +199,7 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
         const listName = bulkMode;
         
         const list = [...localSettings[listName]];
-        let nextId = list.length > 0 ? Math.max(...list.map((i: any) => i.id)) + 1 : 1;
+        let nextId = list.length > 0 ? Math.floor(Math.max(...list.map((i: any) => i.id))) + 1 : 1;
 
         data.forEach(item => {
             const isEdit = !!item.id;
@@ -233,7 +234,7 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
                             teachers[teacherIdx] = {
                                 ...t,
                                 riwayatJabatan: [...currentJabatan, {
-                                    id: Date.now() + Math.random(),
+                                    id: generateSyncSafeId(),
                                     jabatan: 'Wali Kelas' as any,
                                     rombelId: rombel.id,
                                     tanggalMulai: new Date().toISOString().split('T')[0]

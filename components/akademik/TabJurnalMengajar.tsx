@@ -8,6 +8,7 @@ import { id } from 'date-fns/locale';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { loadJsPdf, loadJsPdfAutoTable, loadXLSX } from '../../utils/lazyClientLibs';
 import { buildStandardExportFileName } from '../../utils/exportFileName';
+import { printHtmlViaIframe } from '../../utils/printExportFacade';
 import { JurnalMengajarModal } from './modals/JurnalMengajarModal';
 
 export const TabJurnalMengajar: React.FC = () => {
@@ -30,9 +31,11 @@ export const TabJurnalMengajar: React.FC = () => {
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const [isInputModalOpen, setIsInputModalOpen] = useState(false);
+    const [editingJournal, setEditingJournal] = useState<JurnalMengajarRecord | null>(null);
 
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write' || currentUser?.permissions?.absensi === 'write';
     const canDelete = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
+    const showActionColumn = canWrite || canDelete;
     const availableKelas = useMemo(() => (
         filterJenjangId ? settings.kelas.filter(k => k.jenjangId === filterJenjangId) : settings.kelas
     ), [filterJenjangId, settings.kelas]);
@@ -212,9 +215,7 @@ export const TabJurnalMengajar: React.FC = () => {
             </tr>
         `).join('');
 
-        const popup = window.open('', '_blank', 'width=1200,height=800');
-        if (!popup) return;
-        popup.document.write(`
+        printHtmlViaIframe(`
             <html>
                 <head>
                     <title>${reportTitle}</title>
@@ -252,10 +253,6 @@ export const TabJurnalMengajar: React.FC = () => {
                 </body>
             </html>
         `);
-        popup.document.close();
-        popup.focus();
-        popup.print();
-        popup.close();
     };
 
     const handleExportXlsx = async () => {
@@ -355,7 +352,7 @@ export const TabJurnalMengajar: React.FC = () => {
                 {canWrite && (
                     <button
                         type="button"
-                        onClick={() => setIsInputModalOpen(true)}
+                        onClick={() => { setEditingJournal(null); setIsInputModalOpen(true); }}
                         className="w-full md:w-auto px-4 py-2.5 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white rounded-xl text-sm font-bold shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
                     >
                         <i className="bi bi-plus-circle-fill text-base"></i>
@@ -675,7 +672,7 @@ export const TabJurnalMengajar: React.FC = () => {
                                 </th>
                                 <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase">Kompetensi / Materi</th>
                                 <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase">Kejadian / Catatan</th>
-                                {canDelete && <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase w-16 text-center">Aksi</th>}
+                                {showActionColumn && <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase w-24 text-center">Aksi</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -685,7 +682,7 @@ export const TabJurnalMengajar: React.FC = () => {
                                 const groupLabel = groupKey === 'kbm' ? 'Kelompok KBM' : groupKey === 'ekstra' ? 'Kelompok Ekstra' : 'Kelompok Campuran';
                                 return [
                                     <tr key={`group-${groupKey}`}>
-                                        <td colSpan={canDelete ? 5 : 4} className="px-4 py-2 bg-gray-50 text-[11px] font-bold text-gray-600 uppercase tracking-wide border-y border-gray-200">
+                                        <td colSpan={showActionColumn ? 5 : 4} className="px-4 py-2 bg-gray-50 text-[11px] font-bold text-gray-600 uppercase tracking-wide border-y border-gray-200">
                                             {groupLabel}
                                         </td>
                                     </tr>,
@@ -749,15 +746,30 @@ export const TabJurnalMengajar: React.FC = () => {
                                             <span className="text-xs text-gray-400">Tidak ada catatan.</span>
                                         )}
                                     </td>
-                                    {canDelete && (
+                                    {showActionColumn && (
                                         <td className="px-4 py-4 align-top text-center">
-                                            <button 
-                                                onClick={() => handleDelete(record)}
-                                                className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                title="Hapus Jurnal"
-                                            >
-                                                <i className="bi bi-trash"></i>
-                                            </button>
+                                            <div className="flex items-center justify-center gap-1">
+                                                {canWrite && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setEditingJournal(record); setIsInputModalOpen(true); }}
+                                                        className="p-2 text-teal-600 hover:text-teal-800 hover:bg-teal-50 rounded-lg transition-colors"
+                                                        title="Edit Jurnal"
+                                                    >
+                                                        <i className="bi bi-pencil-square"></i>
+                                                    </button>
+                                                )}
+                                                {canDelete && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDelete(record)}
+                                                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title="Hapus Jurnal"
+                                                    >
+                                                        <i className="bi bi-trash"></i>
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                     )}
                                 </tr>
@@ -765,7 +777,7 @@ export const TabJurnalMengajar: React.FC = () => {
                                 ];
                             }) : (
                                 <tr>
-                                    <td colSpan={canDelete ? 5 : 4} className="px-4 py-12 text-center text-gray-400 italic">
+                                    <td colSpan={showActionColumn ? 5 : 4} className="px-4 py-12 text-center text-gray-400 italic">
                                         <i className="bi bi-journal-x text-4xl mb-2 block opacity-20"></i>
                                         Tidak ada catatan jurnal mengajar ditemukan untuk filter tersebut.
                                     </td>
@@ -784,12 +796,13 @@ export const TabJurnalMengajar: React.FC = () => {
                 </div>
             </div>
 
-            {/* Modal Input Jurnal */}
+            {/* Modal Input / Edit Jurnal */}
             <JurnalMengajarModal
                 isOpen={isInputModalOpen}
-                onClose={() => setIsInputModalOpen(false)}
+                onClose={() => { setIsInputModalOpen(false); setEditingJournal(null); }}
                 rombelId={filterRombelId || (settings.rombel[0]?.id ?? 0)}
                 tanggal={filterDateTo || todayStr}
+                editRecord={editingJournal}
             />
         </div>
     );

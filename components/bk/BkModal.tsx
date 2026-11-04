@@ -29,7 +29,7 @@ export const BkModal: React.FC<BkModalProps> = ({
     initialData,
 }) => {
     const { santriList } = useSantriContext();
-    const { currentUser } = useAppContext();
+    const { currentUser, showToast } = useAppContext();
     const { register, handleSubmit, reset, setValue, watch } = useForm<BkSession>();
 
     const [searchSantri, setSearchSantri] = useState('');
@@ -93,7 +93,7 @@ export const BkModal: React.FC<BkModalProps> = ({
 
     const onSubmit = async (data: BkSession) => {
         if (!selectedSantriId) {
-            alert('Pilih santri terlebih dahulu.');
+            showToast('Silakan pilih santri terlebih dahulu.', 'error');
             return;
         }
 

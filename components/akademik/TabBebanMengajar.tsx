@@ -5,6 +5,7 @@ import { db } from '../../db';
 import { JadwalPelajaran, TenagaPengajar, Rombel, MataPelajaran, Jenjang } from '../../types';
 import { loadJsPdf, loadJsPdfAutoTable, loadXLSX } from '../../utils/lazyClientLibs';
 import { buildStandardExportFileName } from '../../utils/exportFileName';
+import { printHtmlViaIframe } from '../../utils/printExportFacade';
 
 interface TeacherLoadDetail {
     guru: TenagaPengajar;
@@ -144,8 +145,8 @@ export const TabBebanMengajar: React.FC = () => {
         return defaultSignatoryCity.trim();
     }, [slipSignatory.kota, defaultSignatoryCity]);
 
-    // Live query for current schedules
-    const jadwalList = useLiveQuery(() => db.jadwalPelajaran.toArray(), []) || [];
+    // Live query for current schedules (exclude soft-deleted items)
+    const jadwalList = useLiveQuery(() => db.jadwalPelajaran.filter(j => !j.deleted).toArray(), []) || [];
 
     // Jam pelajaran mapping for time labels
     const jamConfigMap = useMemo(() => {
@@ -325,12 +326,6 @@ export const TabBebanMengajar: React.FC = () => {
 
     // Print Slip Saku Guru Native
     const handlePrintSlip = (detail: TeacherLoadDetail) => {
-        const popup = window.open('', '_blank', 'width=800,height=900');
-        if (!popup) {
-            showToast('Izinkan pop-up untuk mencetak slip jadwal.', 'error');
-            return;
-        }
-
         // Group schedule by day
         const groupedByDay: { [hari: number]: typeof detail.jadwalDetails } = {};
         for (let h = 0; h <= 6; h++) {
@@ -360,7 +355,7 @@ export const TabBebanMengajar: React.FC = () => {
             tableRowsHtml = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#94a3b8;">Belum ada jadwal mengajar yang diatur.</td></tr>`;
         }
 
-        popup.document.write(`
+        printHtmlViaIframe(`
             <!DOCTYPE html>
             <html>
                 <head>
@@ -443,10 +438,6 @@ export const TabBebanMengajar: React.FC = () => {
                 </body>
             </html>
         `);
-        popup.document.close();
-        popup.focus();
-        popup.print();
-        popup.close();
     };
 
     return (

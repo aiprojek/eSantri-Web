@@ -203,9 +203,9 @@ export const sertifikatPanduan: PanduanSectionData = {
                 <div className="space-y-3 text-sm">
                     <ol className="list-decimal pl-5 space-y-2 text-xs text-gray-700">
                         <li>
-                            <strong>Pilih Preset atau Tema Visual (5 Tema A4 Landscape):</strong>
+                            <strong>Pilih Preset atau Tema Visual (6 Tema A4 Landscape):</strong>
                             <p className="text-[11px] text-gray-600 mt-0.5">
-                                Klik salah satu preset cepat (<em>Mutun Ilmiyah, Tasmi&apos; Mandiri, Khatam Kitab, Juara Lomba, Santri Teladan, Apresiasi Asatidz</em>) lalu pilih satu dari 5 tema desain: <strong>Klasik Pesantren</strong> (krem emas), <strong>Modern Geometris</strong> (zamrud bersih), <strong>Ornamen Samping</strong> (aksen vertikal kiri), <strong>Eksklusif Malam</strong> (biru tua tinta emas), atau <strong>Ceria Berwarna</strong> (untuk marhalah ula/anak).
+                                Klik salah satu preset cepat (<em>Mutun Ilmiyah, Tasmi&apos; Mandiri, Khatam Kitab, Juara Lomba, Santri Teladan, Apresiasi Asatidz</em>) lalu pilih satu dari 6 tema desain: <strong>Klasik Pesantren</strong> (krem emas), <strong>Modern Geometris</strong> (zamrud bersih), <strong>Ornamen Samping</strong> (aksen vertikal kiri), <strong>Eksklusif Malam</strong> (biru tua tinta emas), <strong>Ceria Berwarna</strong> (untuk marhalah ula/anak), atau <strong>Polos Blanko</strong> (tanpa bingkai grafis, khusus cetak langsung di atas kertas piagam/blanko fisik berornamen foil).
                             </p>
                         </li>
                         <li>
@@ -218,7 +218,16 @@ export const sertifikatPanduan: PanduanSectionData = {
                             <strong>Tentukan Mode Penerima (Tunggal, Massal, atau Manual/Non-Santri):</strong>
                             <ul className="list-disc pl-4 mt-1 space-y-1 text-[11px] text-gray-600">
                                 <li><strong>1 Santri:</strong> Cari &amp; pilih santri aktif; NIS, Jenjang, Kelas/Rombel, dan Nama Wali terisi otomatis.</li>
-                                <li><strong>Massal (Banyak Santri):</strong> Filter per Jenjang/Kelas/Rombel lalu centang banyak santri sekaligus. Aktifkan <em>&quot;Kustomisasi Capaian / Predikat per Santri&quot;</em> jika dalam satu rombongan tiap santri berbeda kitab mutun, berbeda juz, atau berbeda peringkat juara (Juara 1, 2, 3) — semuanya tercetak berurutan dalam satu klik!</li>
+                                <li><strong>Massal (Banyak Santri):</strong> Filter per Jenjang/Kelas/Rombel lalu centang banyak santri sekaligus.
+                                    <div className="mt-1 p-2 bg-amber-50/80 rounded-lg border border-amber-200/80 text-[10.5px] text-amber-950 space-y-1">
+                                        <p><strong>💡 Hubungan Predikat Standar (Bawah) vs Kustomisasi Per-Santri (Atas):</strong></p>
+                                        <ul className="list-disc pl-4 space-y-0.5 text-gray-700">
+                                            <li><strong>Bagian 3 (Bawah)</strong> adalah <em>Predikat Standar / Global</em> yang otomatis berlaku seragam untuk semua santri yang dipilih.</li>
+                                            <li><strong>Bagian 2 (Atas)</strong> adalah <em>Override Individual (Opsional)</em>. Hanya perlu diisi bila ada santri yang nilainya berbeda (misalnya Ahmad Mumtaz, Zaid Jayyid, atau Juara 1, 2, 3). Kolom yang dibiarkan kosong otomatis memakai Predikat Standar dari Bagian 3.</li>
+                                            <li><strong>Pintasan Preset Cepat:</strong> Disediakan tombol pintasan <code>Isi Juara 1, 2, 3...</code> untuk otomatis mengurutkan juara dalam satu klik, tombol <code>Semua Mumtaz</code>, serta deretan chip tombol preset (<code>Mumtaz</code>, <code>Jayyid Jiddan</code>, <code>Juara I–III</code>) di setiap baris santri agar tidak perlu mengetik manual.</li>
+                                        </ul>
+                                    </div>
+                                </li>
                                 <li><strong>Manual / Non-Santri:</strong> Ketik nama bebas atau klik pintasan <em>&quot;Ambil dari Data Pengajar&quot;</em> untuk membuat piagam penghargaan ustadz, musyrif, juri, atau pemateri tamu.</li>
                             </ul>
                         </li>

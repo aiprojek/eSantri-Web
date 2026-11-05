@@ -87,12 +87,13 @@ Ideal untuk kepanitiaan di aula, gedung asrama, atau lokasi daurah yang tidak me
 ### Langkah 1: Pilih Preset Kegiatan & Tema Visual
 1. Buka menu **Pendidikan > Sertifikat & Piagam**.
 2. Pada tab **Buat & Cetak Sertifikat** (atau tab **Template & Preset**), pilih salah satu dari 6 preset kegiatan pondok atau muat Template Kustom yang pernah disimpan.
-3. Pilih 1 dari **5 Tema Desain A4 Landscape**:
+3. Pilih 1 dari **6 Tema Desain A4 Landscape**:
    - **Klasik Pesantren**: Nuansa kertas krem hangat dengan bingkai ganda warna emas klasik.
    - **Modern Geometris**: Latar putih bersih dengan aksen sudut zamrud modern.
    - **Ornamen Samping**: Pita aksen vertikal elegan di sisi kiri dokumen.
    - **Eksklusif Malam**: Latar biru gelap (*navy slate*) mewah dengan tipografi emas untuk syahadah utama/wisuda.
    - **Ceria Berwarna**: Aksen warna hangat dan ramah untuk marhalah ula / TPQ / lomba anak.
+   - **Polos Blanko**: Format minimalis tanpa bingkai/ornamen visual (margin aman ~3.5cm) khusus dicetak langsung ke kertas piagam fisik yang sudah memiliki cetakan bingkai ornamen foil dari pabrik.
 
 ### Langkah 2: Menyusun Isi Pesan (Manual atau AI Generator)
 1. Untuk menyusun cepat dengan AI, klik tombol **"Susun Redaksi AI"** di bagian atas halaman.
@@ -105,7 +106,10 @@ Ideal untuk kepanitiaan di aula, gedung asrama, atau lokasi daurah yang tidak me
    - Pilih santri aktif melalui kolom pencarian; data NIS, Jenjang, Kelas/Rombel, dan Nama Wali akan ditarik otomatis sesuai atribut identitas yang dicentang.
 2. **Mode Massal (Banyak Santri)**:
    - Gunakan filter Jenjang, Kelas, dan Rombel untuk memilih puluhan santri sekaligus.
-   - Aktifkan fitur **"Kustomisasi Capaian / Predikat per Santri"** apabila setiap santri dalam rombongan memiliki capaian berbeda (contoh: Ahmad lulus *Jazariyah* predikat *Mumtaz*, Zaid lulus *Tuhfatul Athfal* predikat *Jayyid Jiddan*, atau Juara 1, 2, dan 3 dalam satu sesi cetak).
+   - **Hierarki Nilai Standar (Bagian 3) vs Kustomisasi Per-Santri (Bagian 2)**:
+     - **Predikat di Bagian 3 (bawah)** adalah nilai standar global yang otomatis digunakan seluruh santri terpilih.
+     - **Tabel Kustomisasi di Bagian 2 (atas)** adalah fasilitas *override* opsional jika ada santri yang predikat atau capaiannya berbeda (misal: santri A Juara I, santri B Juara II, atau Ahmad *Mumtaz*, Zaid *Jayyid*). Kolom yang dibiarkan kosong otomatis memakai nilai dari Bagian 3.
+     - **Pintasan Preset Cepat**: Tersedia tombol otomatis **"Isi Juara 1, 2, 3..."** untuk mengurutkan juara dalam satu klik, tombol **"Semua Mumtaz"**, dan chip tombol cepat per santri (`Mumtaz`, `Jayyid Jiddan`, `Jayyid`, `Juara I–III`, serta `Reset`) sehingga pengisian tidak perlu diketik manual satu per satu.
    - Nomor sertifikat akan **diurutkan otomatis** (`001/...`, `002/...`, `003/...`) untuk setiap penerima!
 3. **Mode Manual / Non-Santri**:
    - Gunakan untuk mencetak piagam ustadz, pemateri luar, dewan juri, atau panitia. Tersedia tombol ambil cepat dari daftar **Tenaga Pengajar** pondok.

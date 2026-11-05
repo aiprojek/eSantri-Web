@@ -50,6 +50,14 @@ export const SERTIFIKAT_THEMES: SertifikatThemeInfo[] = [
         swatchAccent: '#f59e0b',
         badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
     },
+    {
+        id: 'polos',
+        name: 'Polos Blanko',
+        subtitle: 'Tanpa bingkai khusus cetak kertas piagam fisik',
+        swatchPrimary: '#334155',
+        swatchAccent: '#94a3b8',
+        badgeClass: 'bg-slate-50 text-slate-800 border-slate-300',
+    },
 ];
 
 export const MUTUN_CAPAIAN_CHIPS: string[] = [

@@ -733,6 +733,48 @@ const SertifikatPiagam: React.FC = () => {
         return manualRecipients.some((m) => m.nama.trim().length > 0);
     }, [recipientMode, selectedSantriId, bulkSelectedIds, manualRecipients]);
 
+    const handleApplyJuaraUrutan = () => {
+        const juaraList = [
+            'Juara I (Pertama)',
+            'Juara II (Kedua)',
+            'Juara III (Ketiga)',
+            'Harapan I',
+            'Harapan II',
+            'Harapan III',
+        ];
+        setSantriOverrides((prev) => {
+            const next = { ...prev };
+            bulkSelectedIds.forEach((id, idx) => {
+                const juara = juaraList[idx] || `Peringkat ${idx + 1}`;
+                next[id] = {
+                    ...next[id],
+                    predikatCustom: juara,
+                };
+            });
+            return next;
+        });
+        showToast('Urutan juara 1, 2, 3... berhasil diterapkan ke santri terpilih', 'success');
+    };
+
+    const handleApplySemuaMumtaz = () => {
+        setSantriOverrides((prev) => {
+            const next = { ...prev };
+            bulkSelectedIds.forEach((id) => {
+                next[id] = {
+                    ...next[id],
+                    predikatCustom: 'Mumtaz (Sangat Baik / Istimewa)',
+                };
+            });
+            return next;
+        });
+        showToast('Semua santri disetel predikat Mumtaz', 'success');
+    };
+
+    const handleResetAllOverrides = () => {
+        setSantriOverrides({});
+        showToast('Kustomisasi dikosongkan; semua santri kembali memakai nilai standar (global)', 'info');
+    };
+
     // =========================================================================
     // ARCHIVE / BUKU AGENDA RECORDING
     // =========================================================================
@@ -1392,7 +1434,7 @@ const SertifikatPiagam: React.FC = () => {
                             {/* 1. Preset & Tema */}
                             <SectionCard
                                 title="1. Jenis Kegiatan & Tema Desain"
-                                description="Pilih preset kegiatan pondok atau template tersimpan, lalu tentukan 1 dari 5 tema ornamen."
+                                description="Pilih preset kegiatan pondok atau template tersimpan, lalu tentukan 1 dari 6 tema desain (termasuk Polos Blanko)."
                                 contentClassName="p-5 space-y-4"
                             >
                                 <div>
@@ -1436,7 +1478,7 @@ const SertifikatPiagam: React.FC = () => {
 
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 mb-2">
-                                        5 Tema Ornamen Sertifikat (A4 Landscape)
+                                        Pilihan Tema Sertifikat (A4 Landscape, 6 Tema)
                                     </label>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                         {SERTIFIKAT_THEMES.map((th) => {
@@ -1624,73 +1666,191 @@ const SertifikatPiagam: React.FC = () => {
                                                     ></i>
                                                 </button>
                                                 {showBulkOverrideTable && (
-                                                    <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 p-2.5 space-y-2">
-                                                        {bulkSelectedIds.map((id, idx) => {
-                                                            const s = santriList.find((x) => x.id === id);
-                                                            if (!s) return null;
-                                                            const ov = santriOverrides[id] || {};
-                                                            return (
-                                                                <div
-                                                                    key={id}
-                                                                    className="pt-2 first:pt-0 space-y-1.5"
+                                                    <div className="p-3 space-y-3 bg-white border-t border-slate-200">
+                                                        {/* Helper Explanation Banner */}
+                                                        <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-2.5 text-[11px] text-amber-900 leading-relaxed flex items-start gap-2">
+                                                            <i className="bi bi-info-circle-fill text-amber-600 mt-0.5 shrink-0"></i>
+                                                            <div>
+                                                                <strong>Hierarki Nilai:</strong> Kolom per santri di bawah ini bersifat <em>override</em> (hanya diisi bila santri memiliki nilai berbeda). Jika dibiarkan kosong, santri otomatis memakai <strong>Predikat &amp; Capaian Standar</strong> di Bagian 3 di bawah.
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Bulk Quick Actions Toolbar */}
+                                                        <div className="flex flex-wrap items-center justify-between gap-1.5 pb-1 border-b border-slate-100">
+                                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                                                Pintasan Cepat Massal:
+                                                            </span>
+                                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={handleApplyJuaraUrutan}
+                                                                    className="text-[10px] px-2 py-1 rounded-lg bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200 font-semibold flex items-center gap-1 shadow-2xs"
+                                                                    title="Terapkan urutan Juara I, Juara II, Juara III berurutan"
                                                                 >
-                                                                    <div className="flex items-center justify-between text-xs">
-                                                                        <span className="font-bold text-slate-800">
-                                                                            {idx + 1}. {s.namaLengkap}
-                                                                        </span>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() =>
-                                                                                setPreviewIndex(idx)
-                                                                            }
-                                                                            className="text-[11px] text-teal-700 hover:underline"
-                                                                        >
-                                                                            Lihat Preview
-                                                                        </button>
+                                                                    <i className="bi bi-trophy-fill text-amber-500"></i>
+                                                                    Isi Juara 1, 2, 3...
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={handleApplySemuaMumtaz}
+                                                                    className="text-[10px] px-2 py-1 rounded-lg bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 font-medium"
+                                                                >
+                                                                    ⭐ Semua Mumtaz
+                                                                </button>
+                                                                {Object.keys(santriOverrides).length > 0 && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={handleResetAllOverrides}
+                                                                        className="text-[10px] px-2 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200"
+                                                                        title="Hapus semua nilai manual per santri dan kembali ke nilai standar Bagian 3"
+                                                                    >
+                                                                        ↺ Reset ke Default
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* HTML5 Suggestions Datalist for Fast Autocomplete */}
+                                                        <datalist id="bulk-predikat-presets">
+                                                            <option value="Mumtaz (Sangat Baik / Istimewa)" />
+                                                            <option value="Mumtaz Murtafi’ (Sangat Istimewa)" />
+                                                            <option value="Jayyid Jiddan (Baik Sekali)" />
+                                                            <option value="Jayyid (Baik)" />
+                                                            <option value="Juara I (Pertama)" />
+                                                            <option value="Juara II (Kedua)" />
+                                                            <option value="Juara III (Ketiga)" />
+                                                            <option value="Harapan I" />
+                                                            <option value="Lulus Mutqin Bil Ghaib" />
+                                                            <option value="Sangat Memuaskan" />
+                                                        </datalist>
+
+                                                        {/* Per-Santri Items */}
+                                                        <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 pr-1 space-y-2">
+                                                            {bulkSelectedIds.map((id, idx) => {
+                                                                const s = santriList.find((x) => x.id === id);
+                                                                if (!s) return null;
+                                                                const ov = santriOverrides[id] || {};
+                                                                return (
+                                                                    <div
+                                                                        key={id}
+                                                                        className="pt-2.5 first:pt-0 space-y-1.5"
+                                                                    >
+                                                                        <div className="flex items-center justify-between text-xs">
+                                                                            <span className="font-bold text-slate-800">
+                                                                                {idx + 1}. {s.namaLengkap}
+                                                                            </span>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    setPreviewIndex(idx)
+                                                                                }
+                                                                                className="text-[11px] text-teal-700 hover:underline flex items-center gap-1"
+                                                                            >
+                                                                                <i className="bi bi-eye"></i>
+                                                                                Lihat Preview
+                                                                            </button>
+                                                                        </div>
+                                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                                                            <input
+                                                                                type="text"
+                                                                                value={ov.capaianCustom || ''}
+                                                                                onChange={(e) =>
+                                                                                    setSantriOverrides(
+                                                                                        (prev) => ({
+                                                                                            ...prev,
+                                                                                            [id]: {
+                                                                                                ...prev[id],
+                                                                                                capaianCustom:
+                                                                                                    e.target
+                                                                                                        .value,
+                                                                                            },
+                                                                                        })
+                                                                                    )
+                                                                                }
+                                                                                placeholder={`Capaian: ${capaianUtama.slice(0, 24)}...`}
+                                                                                className="app-input p-1.5 text-[11px] rounded-lg"
+                                                                            />
+                                                                            <input
+                                                                                type="text"
+                                                                                list="bulk-predikat-presets"
+                                                                                value={ov.predikatCustom || ''}
+                                                                                onChange={(e) =>
+                                                                                    setSantriOverrides(
+                                                                                        (prev) => ({
+                                                                                            ...prev,
+                                                                                            [id]: {
+                                                                                                ...prev[id],
+                                                                                                predikatCustom:
+                                                                                                    e.target
+                                                                                                        .value,
+                                                                                            },
+                                                                                        })
+                                                                                    )
+                                                                                }
+                                                                                placeholder={`Predikat: ${predikatValue || '-'}`}
+                                                                                className="app-input p-1.5 text-[11px] rounded-lg font-medium"
+                                                                            />
+                                                                        </div>
+
+                                                                        {/* Quick Preset Buttons for This Santri */}
+                                                                        <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                                                            <span className="text-[9px] text-slate-400 font-medium">Preset cepat:</span>
+                                                                            {[
+                                                                                'Mumtaz',
+                                                                                'Jayyid Jiddan',
+                                                                                'Jayyid',
+                                                                                'Juara I',
+                                                                                'Juara II',
+                                                                                'Juara III',
+                                                                            ].map((chip) => {
+                                                                                const isSelected = ov.predikatCustom === chip;
+                                                                                return (
+                                                                                    <button
+                                                                                        key={chip}
+                                                                                        type="button"
+                                                                                        onClick={() =>
+                                                                                            setSantriOverrides((prev) => ({
+                                                                                                ...prev,
+                                                                                                [id]: {
+                                                                                                    ...prev[id],
+                                                                                                    predikatCustom: chip,
+                                                                                                },
+                                                                                            }))
+                                                                                        }
+                                                                                        className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${
+                                                                                            isSelected
+                                                                                                ? 'bg-teal-600 text-white border-teal-600 font-bold shadow-2xs'
+                                                                                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-teal-300 hover:text-teal-800'
+                                                                                        }`}
+                                                                                    >
+                                                                                        {chip}
+                                                                                    </button>
+                                                                                );
+                                                                            })}
+                                                                            {ov.predikatCustom && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() =>
+                                                                                        setSantriOverrides((prev) => {
+                                                                                            const next = { ...prev };
+                                                                                            if (next[id]) {
+                                                                                                const { predikatCustom, ...rest } = next[id];
+                                                                                                next[id] = rest;
+                                                                                            }
+                                                                                            return next;
+                                                                                        })
+                                                                                    }
+                                                                                    className="text-[9px] px-1.5 py-0.5 rounded border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                                                                                    title="Kembalikan ke nilai standar Bagian 3"
+                                                                                >
+                                                                                    ↺ Reset
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                                                        <input
-                                                                            type="text"
-                                                                            value={ov.capaianCustom || ''}
-                                                                            onChange={(e) =>
-                                                                                setSantriOverrides(
-                                                                                    (prev) => ({
-                                                                                        ...prev,
-                                                                                        [id]: {
-                                                                                            ...prev[id],
-                                                                                            capaianCustom:
-                                                                                                e.target
-                                                                                                    .value,
-                                                                                        },
-                                                                                    })
-                                                                                )
-                                                                            }
-                                                                            placeholder={`Default: ${capaianUtama.slice(0, 26)}...`}
-                                                                            className="app-input p-1.5 text-[11px] rounded-lg"
-                                                                        />
-                                                                        <input
-                                                                            type="text"
-                                                                            value={ov.predikatCustom || ''}
-                                                                            onChange={(e) =>
-                                                                                setSantriOverrides(
-                                                                                    (prev) => ({
-                                                                                        ...prev,
-                                                                                        [id]: {
-                                                                                            ...prev[id],
-                                                                                            predikatCustom:
-                                                                                                e.target
-                                                                                                    .value,
-                                                                                        },
-                                                                                    })
-                                                                                )
-                                                                            }
-                                                                            placeholder={`Predikat: ${predikatValue || '-'}`}
-                                                                            className="app-input p-1.5 text-[11px] rounded-lg"
-                                                                        />
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
+                                                                );
+                                                            })}
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
@@ -2080,9 +2240,14 @@ const SertifikatPiagam: React.FC = () => {
 
                                 <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3 space-y-2.5">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-xs font-semibold text-slate-700">
-                                            Baris Predikat / Kualifikasi
-                                        </span>
+                                        <div>
+                                            <span className="text-xs font-semibold text-slate-700 block">
+                                                Baris Predikat / Kualifikasi (Nilai Standar Seluruh Penerima)
+                                            </span>
+                                            <span className="text-[10px] text-slate-500">
+                                                Berlaku otomatis untuk seluruh santri, kecuali yang diisi secara manual di Bagian 2 di atas.
+                                            </span>
+                                        </div>
                                         <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                                             <input
                                                 type="checkbox"
@@ -2449,29 +2614,31 @@ const SertifikatPiagam: React.FC = () => {
                                 {/* Scaled Canvas Viewport */}
                                 <div
                                     ref={previewViewportRef}
-                                    className="bg-slate-200/75 p-4 sm:p-5 overflow-auto flex justify-center items-start"
+                                    className="bg-slate-200/75 p-4 sm:p-5 overflow-auto"
                                 >
-                                    <div
-                                        style={{
-                                            width: `${Math.round(SHEET_WIDTH_PX * previewScale)}px`,
-                                            height: `${Math.round(SHEET_HEIGHT_PX * previewScale)}px`,
-                                            position: 'relative',
-                                            flexShrink: 0,
-                                        }}
-                                    >
+                                    <div className="w-fit min-w-full flex justify-center items-start">
                                         <div
                                             style={{
-                                                width: `${SHEET_WIDTH_PX}px`,
-                                                height: `${SHEET_HEIGHT_PX}px`,
-                                                transform: `scale(${previewScale})`,
-                                                transformOrigin: 'top left',
+                                                width: `${Math.round(SHEET_WIDTH_PX * previewScale)}px`,
+                                                height: `${Math.round(SHEET_HEIGHT_PX * previewScale)}px`,
+                                                position: 'relative',
+                                                flexShrink: 0,
                                             }}
-                                            className="shadow-xl"
                                         >
-                                            <SertifikatCanvas
-                                                snapshot={currentPreviewJob.snapshot}
-                                                settings={settings}
-                                            />
+                                            <div
+                                                style={{
+                                                    width: `${SHEET_WIDTH_PX}px`,
+                                                    height: `${SHEET_HEIGHT_PX}px`,
+                                                    transform: `scale(${previewScale})`,
+                                                    transformOrigin: 'top left',
+                                                }}
+                                                className="shadow-xl"
+                                            >
+                                                <SertifikatCanvas
+                                                    snapshot={currentPreviewJob.snapshot}
+                                                    settings={settings}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -3281,12 +3448,14 @@ const SertifikatPiagam: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="flex-grow overflow-auto bg-slate-200/80 p-6 flex justify-center items-start">
-                            <div id="arsip-sertifikat-reprint-area" className="shadow-xl">
-                                <SertifikatCanvas
-                                    snapshot={viewingArsipCert.sertifikatSnapshot}
-                                    settings={settings}
-                                />
+                        <div className="flex-grow overflow-auto bg-slate-200/80 p-6">
+                            <div className="w-fit min-w-full flex justify-center items-start">
+                                <div id="arsip-sertifikat-reprint-area" className="shadow-xl">
+                                    <SertifikatCanvas
+                                        snapshot={viewingArsipCert.sertifikatSnapshot}
+                                        settings={settings}
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>

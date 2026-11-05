@@ -1582,30 +1582,31 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                 {/* Container with Responsive Auto-Zoom */}
                                 <div
                                     ref={raporPreviewContainerRef}
-                                    className="overflow-auto flex justify-center items-start p-1 sm:p-2 bg-slate-900/50 rounded-xl border border-slate-700/50 custom-scrollbar"
+                                    className="overflow-auto p-1 sm:p-2 bg-slate-900/50 rounded-xl border border-slate-700/50 custom-scrollbar"
                                     style={{ minHeight: '320px' }}
                                 >
-                                    <div
-                                        style={{
-                                            width: `${BASE_RAPOR_WIDTH * raporCurrentScale}px`,
-                                            height: `${BASE_RAPOR_HEIGHT * raporCurrentScale}px`,
-                                            position: 'relative'
-                                        }}
-                                        className="shrink-0 transition-all duration-150"
-                                    >
+                                    <div className="w-fit min-w-full flex justify-center items-start">
                                         <div
-                                            id="tahfizh-rapor-preview-screen"
                                             style={{
-                                                transform: `scale(${raporCurrentScale})`,
-                                                transformOrigin: 'top left',
-                                                width: `${BASE_RAPOR_WIDTH}px`,
-                                                height: `${BASE_RAPOR_HEIGHT}px`,
-                                                position: 'absolute',
-                                                top: 0,
-                                                left: 0
+                                                width: `${BASE_RAPOR_WIDTH * raporCurrentScale}px`,
+                                                height: `${BASE_RAPOR_HEIGHT * raporCurrentScale}px`,
+                                                position: 'relative'
                                             }}
-                                            className="shadow-2xl rounded-lg overflow-hidden bg-white print-portrait"
+                                            className="shrink-0 transition-all duration-150"
                                         >
+                                            <div
+                                                id="tahfizh-rapor-preview-screen"
+                                                style={{
+                                                    transform: `scale(${raporCurrentScale})`,
+                                                    transformOrigin: 'top left',
+                                                    width: `${BASE_RAPOR_WIDTH}px`,
+                                                    height: `${BASE_RAPOR_HEIGHT}px`,
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    left: 0
+                                                }}
+                                                className="shadow-2xl rounded-lg overflow-hidden bg-white print-portrait"
+                                            >
                                             <TahfizhSemesterRaporTemplate
                                                 santri={santri}
                                                 records={records}
@@ -1656,7 +1657,8 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                 </div>
                             </div>
                         </div>
-                    )}
+                    </div>
+                )}
 
                     {/* TAB 5: SYAHADAH / PIAGAM PREVIEW & PRINT */}
                     {activeTab === 'syahadah' && (
@@ -1669,25 +1671,26 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                             <i className="bi bi-palette-fill text-teal-600"></i>
                                             Pengaturan Syahadah & Piagam
                                         </h4>
-                                        <p className="text-[11px] text-gray-500">Pilih dari 5 tema, kustomisasi judul & rentang juz sesuai kebutuhan.</p>
+                                        <p className="text-[11px] text-gray-500">Pilih dari 6 tema (termasuk Polos Blanko untuk kertas piagam fisik), kustomisasi judul & rentang juz sesuai kebutuhan.</p>
                                     </div>
                                     <span className="text-[10px] bg-teal-50 text-teal-700 border border-teal-200 px-2.5 py-1 rounded-full font-bold">
                                         Auto-Save Aktif
                                     </span>
                                 </div>
 
-                                {/* 1. Theme Selector (5 Themes from Kartu Santri) */}
+                                {/* 1. Theme Selector (6 Themes) */}
                                 <div>
                                     <label className="block text-[11px] font-bold text-gray-700 uppercase mb-2">
-                                        Pilih 5 Desain Tema Syahadah:
+                                        Pilih Desain Tema Syahadah (6 Tema):
                                     </label>
-                                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                                         {[
                                             { id: 'classic' as SyahadahTheme, name: '1. Klasik Emas', desc: 'Hijau Emerald & Gold', bg: 'bg-emerald-800 text-amber-300 border-amber-400' },
                                             { id: 'modern' as SyahadahTheme, name: '2. Modern Tech', desc: 'Royal Blue & Silver', bg: 'bg-blue-900 text-white border-blue-400' },
                                             { id: 'vertical' as SyahadahTheme, name: '3. Merah Emas', desc: 'Marun Nusantara', bg: 'bg-rose-900 text-amber-200 border-amber-400' },
                                             { id: 'dark' as SyahadahTheme, name: '4. Dark Luxury', desc: 'Slate & Glow Gold', bg: 'bg-slate-950 text-amber-300 border-amber-500' },
                                             { id: 'ceria' as SyahadahTheme, name: '5. Ceria / TPQ', desc: 'Amber & Tosca Fresh', bg: 'bg-amber-500 text-white border-teal-400' },
+                                            { id: 'polos' as SyahadahTheme, name: '6. Polos Blanko', desc: 'Kertas Piagam Fisik', bg: 'bg-slate-100 text-slate-800 border-slate-400' },
                                         ].map((t) => {
                                             const isActive = syahadahTheme === t.id;
                                             return (
@@ -2295,30 +2298,31 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                 {/* Container with Responsive Auto-Zoom (No clipping/cutoff) */}
                                 <div 
                                     ref={previewContainerRef}
-                                    className="overflow-auto flex justify-center items-start p-1 sm:p-2 bg-slate-900/50 rounded-xl border border-slate-700/50"
+                                    className="overflow-auto p-1 sm:p-2 bg-slate-900/50 rounded-xl border border-slate-700/50"
                                     style={{ minHeight: '300px' }}
                                 >
-                                    <div 
-                                        style={{ 
-                                            width: `${BASE_WIDTH * currentScale}px`, 
-                                            height: `${BASE_HEIGHT * currentScale}px`,
-                                            position: 'relative'
-                                        }}
-                                        className="shrink-0 transition-all duration-150"
-                                    >
+                                    <div className="w-fit min-w-full flex justify-center items-start">
                                         <div 
                                             style={{ 
-                                                transform: `scale(${currentScale})`,
-                                                transformOrigin: 'top left',
-                                                width: `${BASE_WIDTH}px`,
-                                                height: `${BASE_HEIGHT}px`,
-                                                position: 'absolute',
-                                                top: 0,
-                                                left: 0
+                                                width: `${BASE_WIDTH * currentScale}px`, 
+                                                height: `${BASE_HEIGHT * currentScale}px`,
+                                                position: 'relative'
                                             }}
-                                            className="shadow-2xl rounded-lg overflow-hidden border border-slate-600"
+                                            className="shrink-0 transition-all duration-150"
                                         >
-                                            <TahfizhSyahadahTemplate
+                                            <div 
+                                                style={{ 
+                                                    transform: `scale(${currentScale})`,
+                                                    transformOrigin: 'top left',
+                                                    width: `${BASE_WIDTH}px`,
+                                                    height: `${BASE_HEIGHT}px`,
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    left: 0
+                                                }}
+                                                className="shadow-2xl rounded-lg overflow-hidden border border-slate-600"
+                                            >
+                                                <TahfizhSyahadahTemplate
                                                 santri={santri}
                                                 settings={{
                                                     ...settings,
@@ -2345,7 +2349,8 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                 </div>
                             </div>
                         </div>
-                    )}
+                    </div>
+                )}
                 </div>
 
                 {/* Footer */}

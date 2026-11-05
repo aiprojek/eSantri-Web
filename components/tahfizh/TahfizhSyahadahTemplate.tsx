@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Santri, PondokSettings, TahfizhRecord } from '../../types';
 import { formatDate, formatTanggalDokumen, DateFormatMode } from '../../utils/formatters';
 
-export type SyahadahTheme = 'classic' | 'modern' | 'vertical' | 'dark' | 'ceria';
+export type SyahadahTheme = 'classic' | 'modern' | 'vertical' | 'dark' | 'ceria' | 'polos';
 
 interface TahfizhSyahadahTemplateProps {
     santri: Santri;
@@ -192,10 +192,10 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
 
                 {/* Header */}
                 <div className="relative z-10 text-center pt-2">
-                    <div className="text-2xl text-[#1B4D3E] font-bold tracking-wider mb-2 leading-relaxed" style={{ fontFamily: "'Amiri', serif" }}>
+                    <div className="text-2xl text-[#1B4D3E] font-bold tracking-wider leading-[1.8] pb-2.5 mb-2" style={{ fontFamily: "'Amiri', serif" }}>
                         بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
                     </div>
-                    <div className="text-xs uppercase tracking-[0.3em] text-[#D4AF37] font-bold mt-2.5">
+                    <div className="text-xs uppercase tracking-[0.3em] text-[#D4AF37] font-bold mt-1.5">
                         {settings.namaYayasan}
                     </div>
                     <h1 className="text-2xl font-bold uppercase tracking-widest text-[#1B4D3E] mt-1">
@@ -296,7 +296,7 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
                 </div>
 
                 <div className="relative z-10 text-center text-[8px] text-gray-400 border-t border-gray-200 pt-1 font-sans">
-                    Dokumen Resmi Syahadah Tahfizh • Dicetak melalui eSantri Web • aiprojek01.my.id
+                    Dokumen Resmi {settings.namaPonpes || 'Pondok Pesantren'}
                 </div>
             </div>
         );
@@ -348,10 +348,10 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
 
                 {/* Header */}
                 <div className="relative z-10 text-center pt-3">
-                    <div className="text-xl text-blue-950 font-bold tracking-wider mb-2 leading-relaxed" style={{ fontFamily: "'Amiri', serif" }}>
+                    <div className="text-xl text-blue-950 font-bold tracking-wider leading-[1.8] pb-2.5 mb-2" style={{ fontFamily: "'Amiri', serif" }}>
                         بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
                     </div>
-                    <div className="text-xs uppercase tracking-[0.25em] text-blue-600 font-bold mt-2.5">
+                    <div className="text-xs uppercase tracking-[0.25em] text-blue-600 font-bold mt-1.5">
                         {settings.namaYayasan}
                     </div>
                     <h1 className="text-2xl font-black uppercase tracking-wider text-blue-950 mt-1">
@@ -450,7 +450,7 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
                 </div>
 
                 <div className="relative z-10 text-center text-[8px] text-slate-400 border-t border-slate-200 pt-1">
-                    Dokumen Resmi eSantri Web • Terverifikasi Sistem Informasi Pesantren • aiprojek01.my.id
+                    Dokumen Resmi {settings.namaPonpes || 'Pondok Pesantren'}
                 </div>
             </div>
         );
@@ -500,10 +500,10 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
 
                 {/* Header */}
                 <div className="relative z-10 text-center pt-2">
-                    <div className="text-2xl text-[#881337] font-bold tracking-wider mb-2 leading-relaxed" style={{ fontFamily: "'Amiri', serif" }}>
+                    <div className="text-2xl text-[#881337] font-bold tracking-wider leading-[1.8] pb-2.5 mb-2" style={{ fontFamily: "'Amiri', serif" }}>
                         بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
                     </div>
-                    <div className="text-xs uppercase tracking-[0.28em] text-[#CA8A04] font-bold mt-2.5">
+                    <div className="text-xs uppercase tracking-[0.28em] text-[#CA8A04] font-bold mt-1.5">
                         {settings.namaYayasan}
                     </div>
                     <h1 className="text-2xl font-bold uppercase tracking-widest text-[#881337] mt-1">
@@ -604,7 +604,7 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
                 </div>
 
                 <div className="relative z-10 text-center text-[8px] text-gray-400 border-t border-rose-100 pt-1 font-sans">
-                    Dokumen Resmi Syahadah Tahfizh • Dicetak melalui eSantri Web • aiprojek01.my.id
+                    Dokumen Resmi {settings.namaPonpes || 'Pondok Pesantren'}
                 </div>
             </div>
         );
@@ -658,10 +658,10 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
 
                 {/* Header */}
                 <div className="relative z-10 text-center pt-2">
-                    <div className="text-2xl text-amber-300 font-bold tracking-wider mb-2 leading-relaxed" style={{ fontFamily: "'Amiri', serif" }}>
+                    <div className="text-2xl text-amber-300 font-bold tracking-wider leading-[1.8] pb-2.5 mb-2" style={{ fontFamily: "'Amiri', serif" }}>
                         بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
                     </div>
-                    <div className="text-xs uppercase tracking-[0.3em] text-amber-400/90 font-bold mt-2.5">
+                    <div className="text-xs uppercase tracking-[0.3em] text-amber-400/90 font-bold mt-1.5">
                         {settings.namaYayasan}
                     </div>
                     <h1 className="text-2xl font-bold uppercase tracking-widest text-amber-100 mt-1">
@@ -762,7 +762,7 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
                 </div>
 
                 <div className="relative z-10 text-center text-[8px] text-slate-500 border-t border-slate-800 pt-1 font-sans">
-                    Dokumen Resmi Syahadah Tahfizh • Dicetak melalui eSantri Web • aiprojek01.my.id
+                    Dokumen Resmi {settings.namaPonpes || 'Pondok Pesantren'}
                 </div>
             </div>
         );
@@ -773,33 +773,172 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
     // =========================================================================
     const textPengantar = kalimatPengantar || "Piagam Penghargaan & Kelulusan ini dengan penuh rasa bangga dianugerahkan kepada:";
 
+    if (temaSyahadah === 'ceria') {
+        return (
+            <div 
+                className={`w-[29.7cm] h-[21cm] p-8 mx-auto bg-[#FFFDF5] text-amber-950 font-sans relative overflow-hidden flex flex-col justify-between box-border select-none print-landscape printable-content-wrapper ${pageBreakAfter ? 'break-after-page' : ''}`}
+            >
+                {/* Playful Colorful Borders */}
+                <div className="absolute inset-4 border-4 border-amber-500 rounded-2xl pointer-events-none"></div>
+                <div className="absolute inset-6 border-2 border-dashed border-teal-500 rounded-xl pointer-events-none"></div>
+                
+                {/* Decorative Colorful Corner Circles */}
+                <div className="absolute top-5 left-5 w-8 h-8 rounded-full bg-amber-400/40 pointer-events-none"></div>
+                <div className="absolute top-5 right-5 w-8 h-8 rounded-full bg-teal-400/40 pointer-events-none"></div>
+                <div className="absolute bottom-5 left-5 w-8 h-8 rounded-full bg-teal-400/40 pointer-events-none"></div>
+                <div className="absolute bottom-5 right-5 w-8 h-8 rounded-full bg-amber-400/40 pointer-events-none"></div>
+
+                {/* Background Watermark (Logo Pondok Pesantren) */}
+                {showWatermarkLogo && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0">
+                        {logoUrl ? (
+                            <img 
+                                src={logoUrl} 
+                                alt="Logo Pondok" 
+                                className="w-80 h-80 object-contain opacity-[0.06] filter grayscale" 
+                                referrerPolicy="no-referrer"
+                            />
+                        ) : (
+                            <div className="w-80 h-80 rounded-full border-8 border-teal-600/10 flex items-center justify-center opacity-[0.06]">
+                                <span className="text-8xl font-sans text-teal-900 font-bold">
+                                    {settings.namaPonpes.charAt(0) || 'P'}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Header */}
+                <div className="relative z-10 text-center pt-2">
+                    <div className="text-xl text-teal-800 font-bold tracking-wider leading-[1.8] pb-2.5 mb-2" style={{ fontFamily: "'Amiri', serif" }}>
+                        بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+                    </div>
+                    <div className="text-xs uppercase tracking-[0.25em] text-amber-700 font-extrabold mt-1.5">
+                        {settings.namaYayasan}
+                    </div>
+                    <h1 className="text-2xl font-black uppercase tracking-wider text-teal-900 mt-1">
+                        {settings.namaPonpes}
+                    </h1>
+                    <p className="text-[10px] text-amber-800/80 max-w-xl mx-auto font-medium mt-0.5">
+                        {settings.alamat} • Telp: {settings.telepon}
+                    </p>
+
+                    <div className="mt-3 inline-block px-10 py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-teal-600 text-white rounded-full shadow-md">
+                        <span className="text-lg font-black tracking-[0.2em] uppercase">
+                            {judulDokumen}
+                        </span>
+                    </div>
+                    <div className="text-[11px] text-teal-800 mt-1 font-mono font-bold tracking-wider">
+                        Nomor Piagam: {displayNomor}
+                    </div>
+                </div>
+
+                {/* Body Content */}
+                <div className="relative z-10 text-center my-auto px-12">
+                    <p className="text-sm text-teal-900 font-medium italic mb-2">
+                        {textPengantar}
+                    </p>
+
+                    <div className="text-3xl font-black text-amber-900 tracking-wide border-b-4 border-amber-400 pb-1.5 max-w-2xl mx-auto">
+                        {santri.namaLengkap}
+                    </div>
+
+                    <div className="flex justify-center items-center gap-4 text-xs text-teal-900 mt-2 font-medium flex-wrap">
+                        <span>NIS: <strong className="text-amber-900 font-mono font-bold">{santri.nis || santri.id}</strong></span>
+                        {jenjangName && (
+                            <>
+                                <span>•</span>
+                                <span>Jenjang: <strong className="text-teal-950 font-bold">{jenjangName}</strong></span>
+                            </>
+                        )}
+                        <span>•</span>
+                        <span>Kelas/Kelompok: <strong className="text-teal-950 font-bold">{rombelName}</strong></span>
+                    </div>
+
+                    <p className="text-sm text-amber-950 font-medium mt-4 max-w-3xl mx-auto">
+                        Telah berhasil dan bersemangat menyelesaikan hafalan Al-Qur'an pada capaian:
+                    </p>
+
+                    <div className="mt-2.5 inline-flex flex-col items-center justify-center px-10 py-3 bg-amber-100/90 rounded-2xl border-2 border-amber-300 shadow-sm">
+                        <span className="text-lg font-black text-amber-950 tracking-wide">
+                            {capaianText}
+                        </span>
+                        <span className="text-xs text-teal-800 mt-0.5 font-bold">
+                            Predikat: <strong className="text-amber-800 font-black">{predikatFinal}</strong>
+                        </span>
+                    </div>
+
+                    {catatanFinal && (
+                        <p className="text-xs text-amber-800/80 italic mt-3 max-w-xl mx-auto font-medium">
+                            "{catatanFinal}"
+                        </p>
+                    )}
+                </div>
+
+                {/* Signatures */}
+                <div className="relative z-10 grid grid-cols-3 items-end pt-2 pb-2 text-center text-xs text-teal-950">
+                    <div className="flex flex-col items-center">
+                        <p className="text-[11px] text-teal-800 mb-12 font-semibold">{defaultLabelTop}</p>
+                        <p className="font-bold text-sm text-amber-950 border-b-2 border-amber-400 pb-0.5 min-w-[180px]">
+                            {guruName}
+                        </p>
+                        <p className="text-[10px] text-teal-700 mt-0.5">{defaultRoleBottom}</p>
+                    </div>
+
+                    <div className="flex flex-col items-center justify-center">
+                        {settings.stempelPonpesUrl ? (
+                            <div className="w-20 h-20 flex items-center justify-center">
+                                <img src={settings.stempelPonpesUrl} alt="Stempel Resmi" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                            </div>
+                        ) : (
+                            <OfficialStampSeal 
+                                namaPonpes={settings.namaPonpes} 
+                                themeColor="#0d9488" 
+                                subColor="#f59e0b" 
+                            />
+                        )}
+                        <p className="text-[11px] text-teal-900 font-medium mt-2">
+                            {tempatPenetapan}, {tanggalDisplay}
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col items-center">
+                        <p className="text-[11px] text-teal-800 mb-12 font-semibold">Mudir / Kepala Madrasah,</p>
+                        <p className="font-bold text-sm text-amber-950 border-b-2 border-amber-400 pb-0.5 min-w-[180px]">
+                            {mudirName}
+                        </p>
+                        <p className="text-[10px] text-teal-700 mt-0.5">Pimpinan Lembaga</p>
+                    </div>
+                </div>
+
+                <div className="relative z-10 text-center text-[8px] text-amber-700/70 border-t border-amber-200 pt-1">
+                    Dokumen Resmi {settings.namaPonpes || 'Pondok Pesantren'}
+                </div>
+            </div>
+        );
+    }
+
+    // =========================================================================
+    // TEMA 6: POLOS BLANKO (Tanpa Bingkai - Didesain untuk Kertas Blanko Piagam Fisik)
+    // Margin horizontal aman ~3.5cm (px-14) & vertikal aman ~2cm (py-8)
+    // =========================================================================
     return (
         <div 
-            className={`w-[29.7cm] h-[21cm] p-8 mx-auto bg-[#FFFDF5] text-amber-950 font-sans relative overflow-hidden flex flex-col justify-between box-border select-none print-landscape printable-content-wrapper ${pageBreakAfter ? 'break-after-page' : ''}`}
+            className={`w-[29.7cm] h-[21cm] px-14 py-8 mx-auto bg-transparent text-slate-900 font-serif relative overflow-hidden flex flex-col justify-between box-border select-none print-landscape printable-content-wrapper ${pageBreakAfter ? 'break-after-page' : ''}`}
         >
-            {/* Playful Colorful Borders */}
-            <div className="absolute inset-4 border-4 border-amber-500 rounded-2xl pointer-events-none"></div>
-            <div className="absolute inset-6 border-2 border-dashed border-teal-500 rounded-xl pointer-events-none"></div>
-            
-            {/* Decorative Colorful Corner Circles */}
-            <div className="absolute top-5 left-5 w-8 h-8 rounded-full bg-amber-400/40 pointer-events-none"></div>
-            <div className="absolute top-5 right-5 w-8 h-8 rounded-full bg-teal-400/40 pointer-events-none"></div>
-            <div className="absolute bottom-5 left-5 w-8 h-8 rounded-full bg-teal-400/40 pointer-events-none"></div>
-            <div className="absolute bottom-5 right-5 w-8 h-8 rounded-full bg-amber-400/40 pointer-events-none"></div>
-
-            {/* Background Watermark (Logo Pondok Pesantren) */}
+            {/* Background Watermark (Opsional jika diaktifkan, tanpa bingkai visual) */}
             {showWatermarkLogo && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0">
                     {logoUrl ? (
                         <img 
                             src={logoUrl} 
                             alt="Logo Pondok" 
-                            className="w-80 h-80 object-contain opacity-[0.06] filter grayscale" 
+                            className="w-72 h-72 object-contain opacity-[0.05] filter grayscale" 
                             referrerPolicy="no-referrer"
                         />
                     ) : (
-                        <div className="w-80 h-80 rounded-full border-8 border-teal-600/10 flex items-center justify-center opacity-[0.06]">
-                            <span className="text-8xl font-sans text-teal-900 font-bold">
+                        <div className="w-72 h-72 rounded-full border border-slate-300/40 flex items-center justify-center opacity-[0.05]">
+                            <span className="text-8xl font-serif text-slate-700 font-bold">
                                 {settings.namaPonpes.charAt(0) || 'P'}
                             </span>
                         </div>
@@ -808,80 +947,80 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
             )}
 
             {/* Header */}
-            <div className="relative z-10 text-center pt-2">
-                <div className="text-xl text-teal-800 font-bold tracking-wider mb-2 leading-relaxed" style={{ fontFamily: "'Amiri', serif" }}>
+            <div className="relative z-10 text-center pt-1">
+                <div className="text-xl text-slate-700 font-normal tracking-wider leading-[1.8] pb-2.5 mb-2" style={{ fontFamily: "'Amiri', serif" }}>
                     بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
                 </div>
-                <div className="text-xs uppercase tracking-[0.25em] text-amber-700 font-extrabold mt-2.5">
+                <div className="text-[11px] uppercase tracking-[0.25em] text-slate-600 font-medium mt-1.5">
                     {settings.namaYayasan}
                 </div>
-                <h1 className="text-2xl font-black uppercase tracking-wider text-teal-900 mt-1">
+                <h1 className="text-2xl font-bold uppercase tracking-wider text-slate-900 mt-1 font-serif">
                     {settings.namaPonpes}
                 </h1>
-                <p className="text-[10px] text-amber-800/80 max-w-xl mx-auto font-medium mt-0.5">
+                <p className="text-[10px] text-slate-500 max-w-xl mx-auto font-sans mt-0.5">
                     {settings.alamat} • Telp: {settings.telepon}
                 </p>
 
-                <div className="mt-3 inline-block px-10 py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-teal-600 text-white rounded-full shadow-md">
-                    <span className="text-lg font-black tracking-[0.2em] uppercase">
+                <div className="mt-3">
+                    <span className="text-xl font-bold tracking-[0.2em] uppercase text-slate-900 border-b-2 border-slate-800 pb-1 inline-block">
                         {judulDokumen}
                     </span>
                 </div>
-                <div className="text-[11px] text-teal-800 mt-1 font-mono font-bold tracking-wider">
-                    Nomor Piagam: {displayNomor}
+                <div className="text-[11px] text-slate-600 mt-2 font-mono tracking-wider font-sans">
+                    Nomor: {displayNomor}
                 </div>
             </div>
 
             {/* Body Content */}
-            <div className="relative z-10 text-center my-auto px-12">
-                <p className="text-sm text-teal-900 font-medium italic mb-2">
+            <div className="relative z-10 text-center my-auto px-8">
+                <p className="text-xs text-slate-600 italic mb-2 font-sans">
                     {textPengantar}
                 </p>
 
-                <div className="text-3xl font-black text-amber-900 tracking-wide border-b-4 border-amber-400 pb-1.5 max-w-2xl mx-auto">
+                <div className="text-3xl font-bold text-slate-950 tracking-wide border-b border-slate-400 pb-1 max-w-2xl mx-auto font-serif">
                     {santri.namaLengkap}
                 </div>
 
-                <div className="flex justify-center items-center gap-4 text-xs text-teal-900 mt-2 font-medium flex-wrap">
-                    <span>NIS: <strong className="text-amber-900 font-mono font-bold">{santri.nis || santri.id}</strong></span>
+                <div className="flex justify-center items-center gap-4 text-xs text-slate-600 mt-2 font-sans flex-wrap">
+                    <span>NIS: <strong className="text-slate-900 font-mono">{santri.nis || santri.id}</strong></span>
                     {jenjangName && (
                         <>
                             <span>•</span>
-                            <span>Jenjang: <strong className="text-teal-950 font-bold">{jenjangName}</strong></span>
+                            <span>Jenjang: <strong className="text-slate-900">{jenjangName}</strong></span>
                         </>
                     )}
                     <span>•</span>
-                    <span>Kelas/Kelompok: <strong className="text-teal-950 font-bold">{rombelName}</strong></span>
+                    <span>Kelas/Kelompok: <strong className="text-slate-900">{rombelName}</strong></span>
                 </div>
 
-                <p className="text-sm text-amber-950 font-medium mt-4 max-w-3xl mx-auto">
-                    Telah berhasil dan bersemangat menyelesaikan hafalan Al-Qur'an pada capaian:
+                <p className="text-xs text-slate-700 mt-4 max-w-3xl mx-auto font-sans">
+                    Telah berhasil dan menyelesaikan target hafalan Al-Qur'an pada capaian:
                 </p>
 
-                <div className="mt-2.5 inline-flex flex-col items-center justify-center px-10 py-3 bg-amber-100/90 rounded-2xl border-2 border-amber-300 shadow-sm">
-                    <span className="text-lg font-black text-amber-950 tracking-wide">
+                <div className="mt-2.5 inline-flex flex-col items-center justify-center px-8 py-2.5 bg-slate-50/80 rounded border border-slate-300">
+                    <span className="text-lg font-bold text-slate-900 tracking-wide font-serif">
                         {capaianText}
                     </span>
-                    <span className="text-xs text-teal-800 mt-0.5 font-bold">
-                        Predikat: <strong className="text-amber-800 font-black">{predikatFinal}</strong>
+                    <span className="text-xs text-slate-600 mt-0.5 font-sans">
+                        Predikat: <strong className="text-slate-900">{predikatFinal}</strong>
                     </span>
                 </div>
 
                 {catatanFinal && (
-                    <p className="text-xs text-amber-800/80 italic mt-3 max-w-xl mx-auto font-medium">
+                    <p className="text-xs text-slate-600 italic mt-3 max-w-xl mx-auto font-sans">
                         "{catatanFinal}"
                     </p>
                 )}
             </div>
 
             {/* Signatures */}
-            <div className="relative z-10 grid grid-cols-3 items-end pt-2 pb-2 text-center text-xs text-teal-950">
+            <div className="relative z-10 grid grid-cols-3 items-end pt-2 pb-2 text-center text-xs text-slate-800 font-sans">
                 <div className="flex flex-col items-center">
-                    <p className="text-[11px] text-teal-800 mb-12 font-semibold">{defaultLabelTop}</p>
-                    <p className="font-bold text-sm text-amber-950 border-b-2 border-amber-400 pb-0.5 min-w-[180px]">
+                    <p className="text-[11px] text-slate-600 mb-12">{defaultLabelTop}</p>
+                    <p className="font-bold text-sm text-slate-900 border-b border-slate-800 pb-0.5 min-w-[180px]">
                         {guruName}
                     </p>
-                    <p className="text-[10px] text-teal-700 mt-0.5">{defaultRoleBottom}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{defaultRoleBottom}</p>
                 </div>
 
                 <div className="flex flex-col items-center justify-center">
@@ -892,26 +1031,26 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
                     ) : (
                         <OfficialStampSeal 
                             namaPonpes={settings.namaPonpes} 
-                            themeColor="#0d9488" 
-                            subColor="#f59e0b" 
+                            themeColor="#334155" 
+                            subColor="#64748b" 
                         />
                     )}
-                    <p className="text-[11px] text-teal-900 font-medium mt-2">
+                    <p className="text-[11px] text-slate-700 font-medium mt-2">
                         {tempatPenetapan}, {tanggalDisplay}
                     </p>
                 </div>
 
                 <div className="flex flex-col items-center">
-                    <p className="text-[11px] text-teal-800 mb-12 font-semibold">Mudir / Kepala Madrasah,</p>
-                    <p className="font-bold text-sm text-amber-950 border-b-2 border-amber-400 pb-0.5 min-w-[180px]">
+                    <p className="text-[11px] text-slate-600 mb-12">Mudir / Kepala Madrasah,</p>
+                    <p className="font-bold text-sm text-slate-900 border-b border-slate-800 pb-0.5 min-w-[180px]">
                         {mudirName}
                     </p>
-                    <p className="text-[10px] text-teal-700 mt-0.5">Pimpinan Lembaga</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Pimpinan Lembaga</p>
                 </div>
             </div>
 
-            <div className="relative z-10 text-center text-[8px] text-amber-700/70 border-t border-amber-200 pt-1">
-                Dokumen Piagam Tahfizh Ceria • Dicetak dengan eSantri Web • aiprojek01.my.id
+            <div className="relative z-10 text-center text-[8px] text-slate-400 border-t border-slate-200 pt-1 font-sans">
+                Dokumen Resmi {settings.namaPonpes || 'Pondok Pesantren'}
             </div>
         </div>
     );

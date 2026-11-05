@@ -174,7 +174,7 @@ const SertifikatCanvasComponent: React.FC<SertifikatCanvasProps> = ({
     const resolvedFooter =
         footerText !== undefined && footerText.trim() !== ''
             ? footerText
-            : `Dokumen Resmi ${settings.namaPonpes} • Tercatat pada Buku Agenda & Arsip eSantri Web`;
+            : `Dokumen Resmi ${settings.namaPonpes || 'Pondok Pesantren'}`;
 
     const breakClasses = pageBreakAfter ? 'page-break-after break-after-page' : '';
 
@@ -219,7 +219,7 @@ const SertifikatCanvasComponent: React.FC<SertifikatCanvasProps> = ({
                 {/* Header */}
                 <div className="relative z-10 text-center pt-1.5">
                     {showBismillah && (
-                        <div className="text-2xl text-[#1B4D3E] font-bold tracking-wider mb-1.5 leading-relaxed" style={{ fontFamily: "'Amiri', serif" }}>
+                        <div className="text-2xl text-[#1B4D3E] font-bold tracking-wider leading-[1.8] pb-2.5 mb-2" style={{ fontFamily: "'Amiri', serif" }}>
                             بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
                         </div>
                     )}
@@ -373,7 +373,7 @@ const SertifikatCanvasComponent: React.FC<SertifikatCanvasProps> = ({
                 {/* Header */}
                 <div className="relative z-10 text-center pt-2">
                     {showBismillah && (
-                        <div className="text-xl text-blue-950 font-bold tracking-wider mb-1.5 leading-relaxed" style={{ fontFamily: "'Amiri', serif" }}>
+                        <div className="text-xl text-blue-950 font-bold tracking-wider leading-[1.8] pb-2.5 mb-2" style={{ fontFamily: "'Amiri', serif" }}>
                             بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
                         </div>
                     )}
@@ -524,7 +524,7 @@ const SertifikatCanvasComponent: React.FC<SertifikatCanvasProps> = ({
                 {/* Header */}
                 <div className="relative z-10 text-center pt-1.5">
                     {showBismillah && (
-                        <div className="text-2xl text-[#881337] font-bold tracking-wider mb-1.5 leading-relaxed" style={{ fontFamily: "'Amiri', serif" }}>
+                        <div className="text-2xl text-[#881337] font-bold tracking-wider leading-[1.8] pb-2.5 mb-2" style={{ fontFamily: "'Amiri', serif" }}>
                             بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
                         </div>
                     )}
@@ -677,7 +677,7 @@ const SertifikatCanvasComponent: React.FC<SertifikatCanvasProps> = ({
                 {/* Header */}
                 <div className="relative z-10 text-center pt-1.5">
                     {showBismillah && (
-                        <div className="text-2xl text-amber-300 font-bold tracking-wider mb-1.5 leading-relaxed" style={{ fontFamily: "'Amiri', serif" }}>
+                        <div className="text-2xl text-amber-300 font-bold tracking-wider leading-[1.8] pb-2.5 mb-2" style={{ fontFamily: "'Amiri', serif" }}>
                             بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
                         </div>
                     )}
@@ -794,31 +794,176 @@ const SertifikatCanvasComponent: React.FC<SertifikatCanvasProps> = ({
     // =========================================================================
     // TEMA 5: CERIA (Amber & Tosca Playful Madrasah/TPQ)
     // =========================================================================
+    if (tema === 'ceria') {
+        return (
+            <div
+                data-print-orientation="landscape"
+                className={`w-[29.7cm] h-[20.95cm] p-8 mx-auto bg-[#FFFDF5] text-amber-950 font-sans relative overflow-hidden flex flex-col justify-between box-border select-none print-landscape printable-content-wrapper ${breakClasses}`}
+            >
+                <div className="absolute inset-4 border-4 border-amber-500 rounded-2xl pointer-events-none"></div>
+                <div className="absolute inset-6 border-2 border-dashed border-teal-500 rounded-xl pointer-events-none"></div>
+
+                <div className="absolute top-5 left-5 w-8 h-8 rounded-full bg-amber-400/40 pointer-events-none"></div>
+                <div className="absolute top-5 right-5 w-8 h-8 rounded-full bg-teal-400/40 pointer-events-none"></div>
+                <div className="absolute bottom-5 left-5 w-8 h-8 rounded-full bg-teal-400/40 pointer-events-none"></div>
+                <div className="absolute bottom-5 right-5 w-8 h-8 rounded-full bg-amber-400/40 pointer-events-none"></div>
+
+                {showWatermarkLogo && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0">
+                        {logoUrl ? (
+                            <img
+                                src={logoUrl}
+                                alt="Logo Pondok"
+                                className="w-80 h-80 object-contain opacity-[0.06] filter grayscale"
+                                referrerPolicy="no-referrer"
+                            />
+                        ) : (
+                            <div className="w-80 h-80 rounded-full border-8 border-teal-600/10 flex items-center justify-center opacity-[0.06]">
+                                <span className="text-8xl font-sans text-teal-900 font-bold">
+                                    {settings.namaPonpes.charAt(0) || 'P'}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Header */}
+                <div className="relative z-10 text-center pt-1.5">
+                    {showBismillah && (
+                        <div className="text-xl text-teal-800 font-bold tracking-wider leading-[1.8] pb-2.5 mb-2" style={{ fontFamily: "'Amiri', serif" }}>
+                            بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+                        </div>
+                    )}
+                    <div className="text-xs uppercase tracking-[0.25em] text-amber-700 font-extrabold mt-1.5">
+                        {settings.namaYayasan}
+                    </div>
+                    <h1 className="text-2xl font-black uppercase tracking-wider text-teal-900 mt-1">
+                        {settings.namaPonpes}
+                    </h1>
+                    <p className="text-[10px] text-amber-800/80 max-w-xl mx-auto font-medium mt-0.5">
+                        {settings.alamat}{settings.telepon ? ` • Telp: ${settings.telepon}` : ''}
+                    </p>
+
+                    <div className="mt-2.5 inline-block px-10 py-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-teal-600 text-white rounded-full">
+                        <span className="text-lg font-black tracking-[0.18em] uppercase">
+                            {judulDokumen}
+                        </span>
+                    </div>
+                    {nomorSertifikat && (
+                        <div className="text-[11px] text-teal-800 mt-1 font-mono font-bold tracking-wider">
+                            Nomor Piagam: {nomorSertifikat}
+                        </div>
+                    )}
+                </div>
+
+                {/* Body */}
+                <div className="relative z-10 text-center my-auto px-12">
+                    {kalimatPengantar && (
+                        <p className="text-sm text-teal-900 font-medium italic mb-2">
+                            {kalimatPengantar}
+                        </p>
+                    )}
+
+                    <div className="text-3xl font-black text-amber-900 tracking-wide border-b-4 border-amber-400 pb-1.5 max-w-2xl mx-auto">
+                        {namaPenerima}
+                    </div>
+
+                    {validIdentitas.length > 0 && (
+                        <div className="flex justify-center items-center gap-3 text-xs text-teal-900 mt-2 font-medium flex-wrap">
+                            {validIdentitas.map((item, idx) => (
+                                <React.Fragment key={idx}>
+                                    {idx > 0 && <span>•</span>}
+                                    <span>
+                                        {item.label ? <>{item.label}: </> : null}
+                                        <strong className="text-teal-950 font-bold">{item.value}</strong>
+                                    </span>
+                                </React.Fragment>
+                            ))}
+                        </div>
+                    )}
+
+                    {deskripsiCapaian && (
+                        <p className="text-sm text-amber-950 font-medium mt-3.5 max-w-3xl mx-auto leading-relaxed">
+                            {deskripsiCapaian}
+                        </p>
+                    )}
+
+                    {capaianUtama && (
+                        <div className="mt-2.5 inline-flex flex-col items-center justify-center px-10 py-2.5 bg-amber-100/90 rounded-2xl border-2 border-amber-300">
+                            <span className="text-lg font-black text-amber-950 tracking-wide">
+                                {capaianUtama}
+                            </span>
+                            {showPredikat && predikatValue && (
+                                <span className="text-xs text-teal-800 mt-0.5 font-bold">
+                                    {predikatLabel}: <strong className="text-amber-800 font-black">{predikatValue}</strong>
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {catatanDoa && (
+                        <p className="text-xs text-amber-800/80 italic mt-2.5 max-w-2xl mx-auto font-medium leading-relaxed">
+                            &ldquo;{catatanDoa}&rdquo;
+                        </p>
+                    )}
+                </div>
+
+                {/* Signatures */}
+                <div className="relative z-10 grid grid-cols-3 items-end pt-1 pb-1.5 text-center text-xs text-teal-950">
+                    {signatoryCount === 2 && leftSignatory ? (
+                        <SignatureSlot
+                            sig={leftSignatory}
+                            labelClass="text-[11px] text-teal-800 font-semibold"
+                            nameClass="font-bold text-sm text-amber-950 border-b-2 border-amber-400 pb-0.5 min-w-[180px]"
+                            roleClass="text-[10px] text-teal-700 mt-0.5"
+                            nipClass="text-[9.5px] text-teal-700 font-mono"
+                        />
+                    ) : (
+                        <div></div>
+                    )}
+
+                    {renderCenterStamp('#0d9488', '#f59e0b', 'text-[11px] text-teal-900 font-medium mt-1.5')}
+
+                    <SignatureSlot
+                        sig={rightSignatory}
+                        labelClass="text-[11px] text-teal-800 font-semibold"
+                        nameClass="font-bold text-sm text-amber-950 border-b-2 border-amber-400 pb-0.5 min-w-[180px]"
+                        roleClass="text-[10px] text-teal-700 mt-0.5"
+                        nipClass="text-[9.5px] text-teal-700 font-mono"
+                    />
+                </div>
+
+                <div className="relative z-10 text-center text-[8px] text-amber-700/70 border-t border-amber-200 pt-1">
+                    {resolvedFooter}
+                </div>
+            </div>
+        );
+    }
+
+    // =========================================================================
+    // TEMA 6: POLOS BLANKO (Tanpa Hiasan Bingkai / Khusus Kertas Piagam Fisik)
+    // =========================================================================
     return (
         <div
             data-print-orientation="landscape"
-            className={`w-[29.7cm] h-[20.95cm] p-8 mx-auto bg-[#FFFDF5] text-amber-950 font-sans relative overflow-hidden flex flex-col justify-between box-border select-none print-landscape printable-content-wrapper ${breakClasses}`}
+            className={`w-[29.7cm] h-[20.95cm] px-14 py-8 mx-auto bg-transparent text-slate-900 font-serif relative overflow-hidden flex flex-col justify-between box-border select-none print-landscape printable-content-wrapper ${breakClasses}`}
+            style={{ fontFamily: "'Cinzel', 'Amiri', 'Georgia', serif" }}
         >
-            <div className="absolute inset-4 border-4 border-amber-500 rounded-2xl pointer-events-none"></div>
-            <div className="absolute inset-6 border-2 border-dashed border-teal-500 rounded-xl pointer-events-none"></div>
+            {/* Tanpa garis/bingkai hiasan agar pas dengan kertas piagam berbingkai fisik */}
 
-            <div className="absolute top-5 left-5 w-8 h-8 rounded-full bg-amber-400/40 pointer-events-none"></div>
-            <div className="absolute top-5 right-5 w-8 h-8 rounded-full bg-teal-400/40 pointer-events-none"></div>
-            <div className="absolute bottom-5 left-5 w-8 h-8 rounded-full bg-teal-400/40 pointer-events-none"></div>
-            <div className="absolute bottom-5 right-5 w-8 h-8 rounded-full bg-amber-400/40 pointer-events-none"></div>
-
+            {/* Background Watermark Opsional */}
             {showWatermarkLogo && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0">
                     {logoUrl ? (
                         <img
                             src={logoUrl}
                             alt="Logo Pondok"
-                            className="w-80 h-80 object-contain opacity-[0.06] filter grayscale"
+                            className="w-80 h-80 object-contain opacity-[0.04] filter grayscale"
                             referrerPolicy="no-referrer"
                         />
                     ) : (
-                        <div className="w-80 h-80 rounded-full border-8 border-teal-600/10 flex items-center justify-center opacity-[0.06]">
-                            <span className="text-8xl font-sans text-teal-900 font-bold">
+                        <div className="w-80 h-80 rounded-full border-4 border-slate-900/10 flex items-center justify-center opacity-[0.04]">
+                            <span className="text-8xl font-serif text-slate-900 font-bold">
                                 {settings.namaPonpes.charAt(0) || 'P'}
                             </span>
                         </div>
@@ -829,52 +974,56 @@ const SertifikatCanvasComponent: React.FC<SertifikatCanvasProps> = ({
             {/* Header */}
             <div className="relative z-10 text-center pt-1.5">
                 {showBismillah && (
-                    <div className="text-xl text-teal-800 font-bold tracking-wider mb-1.5 leading-relaxed" style={{ fontFamily: "'Amiri', serif" }}>
+                    <div className="text-2xl text-slate-800 font-bold tracking-wider leading-[1.8] pb-2.5 mb-2" style={{ fontFamily: "'Amiri', serif" }}>
                         بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
                     </div>
                 )}
-                <div className="text-xs uppercase tracking-[0.25em] text-amber-700 font-extrabold mt-1.5">
-                    {settings.namaYayasan}
-                </div>
-                <h1 className="text-2xl font-black uppercase tracking-wider text-teal-900 mt-1">
+                {settings.namaYayasan && (
+                    <div className="text-xs uppercase tracking-[0.25em] text-slate-600 font-bold mt-1.5">
+                        {settings.namaYayasan}
+                    </div>
+                )}
+                <h1 className="text-2xl font-bold uppercase tracking-widest text-slate-900 mt-0.5">
                     {settings.namaPonpes}
                 </h1>
-                <p className="text-[10px] text-amber-800/80 max-w-xl mx-auto font-medium mt-0.5">
+                <p className="text-[10px] text-slate-500 max-w-xl mx-auto italic mt-0.5">
                     {settings.alamat}{settings.telepon ? ` • Telp: ${settings.telepon}` : ''}
                 </p>
 
-                <div className="mt-2.5 inline-block px-10 py-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-teal-600 text-white rounded-full">
-                    <span className="text-lg font-black tracking-[0.18em] uppercase">
+                <div className="w-48 h-0.5 bg-gradient-to-r from-transparent via-slate-400 to-transparent mx-auto my-2"></div>
+
+                <div className="inline-block px-8 py-1 border-y border-slate-700 text-slate-900">
+                    <span className="text-xl font-bold tracking-[0.18em] uppercase font-sans">
                         {judulDokumen}
                     </span>
                 </div>
                 {nomorSertifikat && (
-                    <div className="text-[11px] text-teal-800 mt-1 font-mono font-bold tracking-wider">
-                        Nomor Piagam: {nomorSertifikat}
+                    <div className="text-[11px] text-slate-600 mt-1 font-mono tracking-widest">
+                        Nomor: {nomorSertifikat}
                     </div>
                 )}
             </div>
 
             {/* Body */}
-            <div className="relative z-10 text-center my-auto px-12">
+            <div className="relative z-10 text-center my-auto px-10">
                 {kalimatPengantar && (
-                    <p className="text-sm text-teal-900 font-medium italic mb-2">
+                    <p className="text-sm text-slate-700 italic mb-2">
                         {kalimatPengantar}
                     </p>
                 )}
 
-                <div className="text-3xl font-black text-amber-900 tracking-wide border-b-4 border-amber-400 pb-1.5 max-w-2xl mx-auto">
+                <div className="text-3xl font-bold text-slate-900 tracking-wide border-b border-slate-400 pb-1.5 max-w-2xl mx-auto">
                     {namaPenerima}
                 </div>
 
                 {validIdentitas.length > 0 && (
-                    <div className="flex justify-center items-center gap-3 text-xs text-teal-900 mt-2 font-medium flex-wrap">
+                    <div className="flex justify-center items-center gap-3 text-xs text-slate-700 mt-2 font-sans flex-wrap">
                         {validIdentitas.map((item, idx) => (
                             <React.Fragment key={idx}>
                                 {idx > 0 && <span>•</span>}
                                 <span>
                                     {item.label ? <>{item.label}: </> : null}
-                                    <strong className="text-teal-950 font-bold">{item.value}</strong>
+                                    <strong className="text-slate-900 font-semibold">{item.value}</strong>
                                 </span>
                             </React.Fragment>
                         ))}
@@ -882,57 +1031,57 @@ const SertifikatCanvasComponent: React.FC<SertifikatCanvasProps> = ({
                 )}
 
                 {deskripsiCapaian && (
-                    <p className="text-sm text-amber-950 font-medium mt-3.5 max-w-3xl mx-auto leading-relaxed">
+                    <p className="text-sm text-slate-700 mt-3 max-w-3xl mx-auto leading-relaxed">
                         {deskripsiCapaian}
                     </p>
                 )}
 
                 {capaianUtama && (
-                    <div className="mt-2.5 inline-flex flex-col items-center justify-center px-10 py-2.5 bg-amber-100/90 rounded-2xl border-2 border-amber-300">
-                        <span className="text-lg font-black text-amber-950 tracking-wide">
+                    <div className="mt-2.5 inline-flex flex-col items-center justify-center px-8 py-2 bg-slate-50/70 rounded-xl border border-slate-300">
+                        <span className="text-lg font-bold text-slate-900 tracking-wide">
                             {capaianUtama}
                         </span>
                         {showPredikat && predikatValue && (
-                            <span className="text-xs text-teal-800 mt-0.5 font-bold">
-                                {predikatLabel}: <strong className="text-amber-800 font-black">{predikatValue}</strong>
+                            <span className="text-xs text-slate-600 mt-0.5 font-sans">
+                                {predikatLabel}: <strong className="text-slate-900 font-bold">{predikatValue}</strong>
                             </span>
                         )}
                     </div>
                 )}
 
                 {catatanDoa && (
-                    <p className="text-xs text-amber-800/80 italic mt-2.5 max-w-2xl mx-auto font-medium leading-relaxed">
+                    <p className="text-xs text-slate-600 italic mt-2.5 max-w-2xl mx-auto leading-relaxed">
                         &ldquo;{catatanDoa}&rdquo;
                     </p>
                 )}
             </div>
 
             {/* Signatures */}
-            <div className="relative z-10 grid grid-cols-3 items-end pt-1 pb-1.5 text-center text-xs text-teal-950">
+            <div className="relative z-10 grid grid-cols-3 items-end pt-1 pb-1.5 text-center text-xs text-slate-900 font-sans">
                 {signatoryCount === 2 && leftSignatory ? (
                     <SignatureSlot
                         sig={leftSignatory}
-                        labelClass="text-[11px] text-teal-800 font-semibold"
-                        nameClass="font-bold text-sm text-amber-950 border-b-2 border-amber-400 pb-0.5 min-w-[180px]"
-                        roleClass="text-[10px] text-teal-700 mt-0.5"
-                        nipClass="text-[9.5px] text-teal-700 font-mono"
+                        labelClass="text-[11px] text-slate-600 font-medium"
+                        nameClass="font-bold text-sm text-slate-900 border-b border-slate-400 pb-0.5 min-w-[180px]"
+                        roleClass="text-[10px] text-slate-600 mt-0.5"
+                        nipClass="text-[9.5px] text-slate-500 font-mono"
                     />
                 ) : (
                     <div></div>
                 )}
 
-                {renderCenterStamp('#0d9488', '#f59e0b', 'text-[11px] text-teal-900 font-medium mt-1.5')}
+                {renderCenterStamp('#1e293b', '#475569', 'text-[11px] text-slate-600 font-medium mt-1.5')}
 
                 <SignatureSlot
                     sig={rightSignatory}
-                    labelClass="text-[11px] text-teal-800 font-semibold"
-                    nameClass="font-bold text-sm text-amber-950 border-b-2 border-amber-400 pb-0.5 min-w-[180px]"
-                    roleClass="text-[10px] text-teal-700 mt-0.5"
-                    nipClass="text-[9.5px] text-teal-700 font-mono"
+                    labelClass="text-[11px] text-slate-600 font-medium"
+                    nameClass="font-bold text-sm text-slate-900 border-b border-slate-400 pb-0.5 min-w-[180px]"
+                    roleClass="text-[10px] text-slate-600 mt-0.5"
+                    nipClass="text-[9.5px] text-slate-500 font-mono"
                 />
             </div>
 
-            <div className="relative z-10 text-center text-[8px] text-amber-700/70 border-t border-amber-200 pt-1">
+            <div className="relative z-10 text-center text-[8px] text-slate-400 border-t border-slate-200/80 pt-1 font-sans">
                 {resolvedFooter}
             </div>
         </div>

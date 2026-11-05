@@ -1023,7 +1023,7 @@ export interface SuratTemplate {
     lastModified?: number;
 }
 
-export type SertifikatTheme = 'classic' | 'modern' | 'vertical' | 'dark' | 'ceria';
+export type SertifikatTheme = 'classic' | 'modern' | 'vertical' | 'dark' | 'ceria' | 'polos';
 export type SertifikatStampMode = 'auto' | 'seal' | 'image' | 'none';
 export type SertifikatKategori = 'Mutun' | 'Tahfizh' | 'Daurah & Kitab' | 'Perlombaan' | 'Apresiasi';
 

@@ -5,10 +5,10 @@ export const pusatSyncPanduan: PanduanSectionData = {
     id: 'pusat_sync',
     badge: 'UPDATE',
     badgeColor: 'teal',
-    title: 'Pusat Sinkronisasi, Resolusi Konflik & Kontrol Firebase',
+    title: 'Pusat Sinkronisasi, Resolusi Konflik & Multi-Admin Cloud',
     steps: [
         {
-            title: '1. Ikhtisar Operasional: Mode Hub-and-Spoke (Dropbox/WebDAV) vs Status Firebase (Real-Time Hub)',
+            title: '1. Ikhtisar Operasional: Mode Hub-and-Spoke (R2/Dropbox/WebDAV) vs Real-Time (Firebase/Supabase/D1)',
             color: 'teal',
             content: (
                 <div className="space-y-3.5 text-sm text-gray-700">
@@ -16,7 +16,7 @@ export const pusatSyncPanduan: PanduanSectionData = {
                         <i className="bi bi-shield-check text-amber-600 shrink-0 text-base mt-0.5"></i>
                         <div>
                             <strong className="font-bold text-amber-900 block mb-0.5">Hak Akses &amp; Delegasi Wewenang Admin Pengepul (syncAdmin):</strong>
-                            Menu <strong>Pusat Sync</strong> di sidebar secara otomatis menyesuaikan tampilannya berdasarkan penyedia Cloud yang aktif di <em>Pengaturan &gt; Sync Cloud</em>. Selain <strong>Super Admin</strong>, akses ke halaman ini juga dapat didelegasikan kepada kepala tata usaha atau operator koordinator dengan mengaktifkan izin <strong>&quot;Admin Pengepul (Sync)&quot;</strong> pada menu <em>Pengaturan &gt; User &amp; Keamanan</em>.
+                            Menu <strong>Pusat Sync</strong> di sidebar secara otomatis menyesuaikan tampilannya berdasarkan model dan penyedia Cloud yang aktif di <em>Pengaturan &gt; Cloud</em>. Selain <strong>Super Admin</strong>, akses ke halaman ini juga dapat didelegasikan kepada kepala tata usaha atau operator koordinator dengan mengaktifkan izin <strong>&quot;Admin Pengepul (Sync)&quot;</strong> pada menu <em>Pengaturan &gt; User &amp; Keamanan</em>.
                         </div>
                     </div>
 
@@ -26,34 +26,34 @@ export const pusatSyncPanduan: PanduanSectionData = {
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">A</span>
-                                    Mode Hub &amp; Spoke (Dropbox / Nextcloud WebDAV)
+                                    Mode Hub &amp; Spoke (Cloudflare R2 / Dropbox / WebDAV)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Pusat Sync</span>
                             </div>
                             <p className="text-[11px] text-gray-600 leading-relaxed">
-                                Digunakan ketika pesantren mengandalkan penyimpanan awan berbasis berkas (<em>File-Based Sync</em>). Menu di sidebar akan bernama <strong>Pusat Sync</strong>.
+                                Digunakan ketika pesantren mengandalkan penyimpanan awan berbasis berkas (<em>File-Based Sync</em> / Offline-First). Menu di sidebar akan bernama <strong>Pusat Sync</strong>.
                             </p>
                             <ul className="list-disc pl-4 space-y-1 text-[11px] text-gray-600 leading-relaxed">
-                                <li><strong>Perangkat Staff (Spoke):</strong> Menekan tombol <em>Setor Data</em> di pojok kanan atas untuk mengirim paket perubahan (<code>.json</code>) ke folder <code>/inbox</code> di Cloud.</li>
-                                <li><strong>Komputer Admin Pengepul (Hub):</strong> Membuka <strong>Pusat Sync</strong> untuk meninjau kiriman staff, menyelesaikan konflik jika ada, menggabungkannya ke database induk, lalu menekan <strong>Publikasikan Master</strong>.</li>
+                                <li><strong>Perangkat Staf (Spoke):</strong> Menekan tombol <em>Setor Data</em> di pojok kanan atas untuk mengirim paket perubahan (<code>.json</code> terkompresi) ke folder <code>/inbox</code> di Cloud (Cloudflare R2, Dropbox, atau WebDAV).</li>
+                                <li><strong>Komputer Admin Pengepul (Hub):</strong> Membuka <strong>Pusat Sync</strong> untuk meninjau kiriman staf, menyelesaikan konflik jika ada, menggabungkannya ke database induk, lalu menekan <strong>Publikasikan Master</strong>.</li>
                             </ul>
                         </div>
 
-                        {/* Mode Firebase Realtime */}
+                        {/* Mode Realtime */}
                         <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
                             <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                 <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] font-black">B</span>
-                                    Mode Cloud Real-Time (Firebase Firestore)
+                                    Mode Cloud Real-Time (Firebase / Supabase / Cloudflare D1)
                                 </h5>
-                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Status Firebase</span>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Status Cloud</span>
                             </div>
                             <p className="text-[11px] text-gray-600 leading-relaxed">
-                                Digunakan ketika pesantren mengaktifkan database <em>Firebase Firestore</em>. Menu di sidebar otomatis berubah menjadi <strong>Status Firebase</strong>.
+                                Digunakan ketika pesantren mengaktifkan database live (<em>Firebase Firestore</em>, <em>Supabase PostgreSQL</em>, atau <em>Cloudflare D1 SQLite</em>).
                             </p>
                             <ul className="list-disc pl-4 space-y-1 text-[11px] text-gray-600 leading-relaxed">
-                                <li><strong>Sinkronisasi Otomatis Detik Itu Juga:</strong> Tidak perlu lagi menggabungkan file inbox satu per satu karena setiap perubahan langsung mengalir antar perangkat.</li>
-                                <li><strong>Pusat Kontrol &amp; Diagnostik:</strong> Halaman ini berfungsi untuk memantau status koneksi Hub/Spoke, <em>Tenant ID</em>, jumlah dokumen aktif, serta menjalankan <strong>Tarik Paksa / Unggah Paksa / Sinkronisasi PSB</strong>.</li>
+                                <li><strong>Sinkronisasi Otomatis Seketika:</strong> Tidak perlu lagi menggabungkan file inbox manual karena setiap perubahan langsung mengalir antar perangkat via jaringan data.</li>
+                                <li><strong>Pusat Kontrol &amp; Diagnostik:</strong> Halaman ini berfungsi memantau status koneksi, jumlah entri aktif, serta menjalankan <strong>Tarik Paksa / Unggah Paksa Data Master</strong>.</li>
                             </ul>
                         </div>
                     </div>
@@ -61,7 +61,7 @@ export const pusatSyncPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '2. SOP 5 Langkah Harian Admin Pengepul (Mode Hub & Spoke: Dropbox / WebDAV)',
+            title: '2. SOP 5 Langkah Harian Admin Pengepul (Mode Hub & Spoke: Cloudflare R2 / Dropbox / WebDAV)',
             color: 'indigo',
             content: (
                 <div className="space-y-3 text-sm text-gray-700">
@@ -203,7 +203,7 @@ export const pusatSyncPanduan: PanduanSectionData = {
                                 <i className="bi bi-trash3-fill text-red-600"></i> Pembersihan File Inbox Cloud
                             </strong>
                             <p className="text-[11px] text-gray-600 leading-relaxed">
-                                File yang sudah berstatus <span className="text-emerald-700 font-bold">Sudah Digabung</span> datanya telah tersimpan aman di database komputer Admin. Klik tombol <strong>&quot;Bersihkan yang Sudah Digabung&quot;</strong> untuk menghapus file-file lama tersebut dari folder Dropbox/WebDAV agar kuota penyimpanan Cloud tidak penuh.
+                                File yang sudah berstatus <span className="text-emerald-700 font-bold">Sudah Digabung</span> datanya telah tersimpan aman di database komputer Admin. Klik tombol <strong>&quot;Bersihkan yang Sudah Digabung&quot;</strong> untuk menghapus file-file lama tersebut dari folder penyimpanan Cloud (R2/Dropbox/WebDAV) agar kuota penyimpanan tetap lega.
                             </p>
                         </div>
 

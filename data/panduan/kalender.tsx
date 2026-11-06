@@ -25,7 +25,7 @@ export const kalenderPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                             <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                 <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
-                                Model A: Real-Time Live Sync (Firebase Firestore)
+                                Model A: Real-Time Live Sync (Firebase / Supabase / Cloudflare D1)
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                         </div>
@@ -65,7 +65,7 @@ export const kalenderPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                             <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                 <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                Model B: Hub-and-Spoke (Offline-First / File Cadangan / Sinkronisasi Berkala)
+                                Model B: Hub-and-Spoke (Offline-First / Cloudflare R2 / Dropbox / WebDAV)
                             </h5>
                             <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                         </div>

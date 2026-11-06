@@ -420,10 +420,22 @@ export interface NisSettings {
     dobPadding: number;
 }
 
-export type SyncProvider = 'none' | 'dropbox' | 'webdav' | 'firebase';
+export type SyncModelType = 'none' | 'realtime' | 'hub_spoke';
+
+export type SyncProvider = 
+    | 'none' 
+    // Real-Time Live Sync:
+    | 'firebase' 
+    | 'supabase' 
+    | 'cloudflare_d1'
+    // Hub & Spoke (Offline-First / Batch):
+    | 'cloudflare_r2' 
+    | 'dropbox' 
+    | 'webdav';
 
 export interface CloudSyncConfig {
     provider: SyncProvider;
+    syncModel?: SyncModelType;
     role?: 'hub' | 'spoke';
     dropboxAppKey?: string;
     dropboxAppSecret?: string; // New field for Secret
@@ -439,6 +451,22 @@ export interface CloudSyncConfig {
     firebaseProjectId?: string;
     firebaseAppId?: string;
     firebaseDatabaseId?: string;
+    // Cloudflare R2 (Hub & Spoke - S3-Compatible Storage)
+    r2AccountId?: string;
+    r2AccessKeyId?: string;
+    r2SecretAccessKey?: string;
+    r2BucketName?: string;
+    r2Endpoint?: string;
+    r2PublicUrl?: string;
+    // Supabase (Real-Time Database)
+    supabaseUrl?: string;
+    supabaseAnonKey?: string;
+    supabaseTablePrefix?: string;
+    // Cloudflare D1 (Real-Time Database via Worker API)
+    d1WorkerUrl?: string;
+    d1ApiToken?: string;
+    d1DatabaseName?: string;
+    // Metadata & Notifications
     lastSync?: string;
     lastPushAt?: string;
     lastPullAt?: string;

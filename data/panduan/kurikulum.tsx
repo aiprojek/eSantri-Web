@@ -302,7 +302,7 @@ export const kurikulumPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                             <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                 <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">A</span>
-                                Model A: Cloud Real-Time (Firebase Firestore)
+                                Model A: Cloud Real-Time (Firebase / Supabase / Cloudflare D1)
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                         </div>
@@ -334,7 +334,7 @@ export const kurikulumPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                             <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                 <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">B</span>
-                                Model B: Hub-and-Spoke (Offline-First / Penyusunan Bertahap)
+                                Model B: Hub-and-Spoke (Offline-First / Cloudflare R2 / Dropbox / WebDAV)
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                         </div>

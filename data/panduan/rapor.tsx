@@ -50,7 +50,7 @@ export const raporPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-teal-200/70 pb-2">
                             <h5 className="font-bold text-teal-950 flex items-center gap-2 text-xs md:text-sm">
                                 <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] font-black">1</span>
-                                Standar Format A: Mode Realtime (Firebase Cloud Hub)
+                                Standar Format A: Mode Real-Time (Firebase / Supabase / Cloudflare D1)
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold uppercase tracking-wide">
                                 Realtime &amp; Otomatis
@@ -66,7 +66,7 @@ export const raporPanduan: PanduanSectionData = {
                                     <i className="bi bi-cloud-check-fill text-teal-600"></i> Alur Kerja Input &amp; Auto-Sync:
                                 </strong>
                                 <ul className="list-disc pl-4 space-y-1 text-[11px] text-gray-600">
-                                    <li>Setiap nilai atau catatan wali kelas yang diinput akan <strong>langsung tersimpan otomatis</strong> ke Firebase Cloud dalam hitungan detik.</li>
+                                    <li>Setiap nilai atau catatan wali kelas yang diinput akan <strong>langsung tersimpan otomatis</strong> ke Cloud Database dalam hitungan detik.</li>
                                     <li>Monitoring kelengkapan nilai di meja Admin Kurikulum akan langsung ter-update (dari merah/kuning menjadi hijau) tanpa perlu refresh browser.</li>
                                     <li>Jika terjadi gangguan jaringan sesaat, sistem menyimpan ke IndexedDB lokal dan otomatis menyinkronkan begitu internet tersambung kembali.</li>
                                 </ul>
@@ -89,7 +89,7 @@ export const raporPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-indigo-200/70 pb-2">
                             <h5 className="font-bold text-indigo-950 flex items-center gap-2 text-xs md:text-sm">
                                 <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">2</span>
-                                Standar Format B: Mode Hub-and-Spoke (Offline-First / Cloud Pairing / File Cadangan)
+                                Standar Format B: Mode Hub-and-Spoke (Cloudflare R2 / Dropbox / WebDAV / File Cadangan)
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase tracking-wide">
                                 Hybrid / Terjadwal

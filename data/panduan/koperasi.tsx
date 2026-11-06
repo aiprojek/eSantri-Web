@@ -305,7 +305,7 @@ export const koperasiPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-emerald-200 pb-1.5">
                             <h5 className="font-bold text-emerald-900 flex items-center gap-1.5 text-xs">
                                 <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-[10px] font-black">A</span>
-                                Model A: SOP Cloud Real-Time (Firebase Firestore)
+                                Model A: SOP Cloud Real-Time (Firebase / Supabase / Cloudflare D1)
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Multi-Kasir Live</span>
                         </div>
@@ -327,7 +327,7 @@ export const koperasiPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-indigo-200 pb-1.5">
                             <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                 <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">B</span>
-                                Model B: SOP Cloud Hub-and-Spoke (Dropbox / Nextcloud WebDAV)
+                                Model B: SOP Cloud Hub-and-Spoke (Cloudflare R2 / Dropbox / WebDAV)
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Offline-First Kantin</span>
                         </div>

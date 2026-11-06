@@ -25,7 +25,7 @@ export const auditlogPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                             <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                 <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] font-black">1</span>
-                                Model A: Cloud Real-Time (Firebase Firestore)
+                                Model A: Cloud Real-Time (Firebase / Supabase / Cloudflare D1)
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Live Audit Stream</span>
                         </div>
@@ -38,7 +38,7 @@ export const auditlogPanduan: PanduanSectionData = {
                                     <i className="bi bi-broadcast text-teal-600"></i> Pemantauan Detik Itu Juga
                                 </strong>
                                 <p className="text-[11px] text-gray-600 leading-relaxed">
-                                    Setiap kali staf menambah, mengubah, atau menghapus data di perangkatnya, jejak audit langsung terkirim ke koleksi Cloud <code>auditLogs</code> dan tampil seketika di layar Super Admin tanpa perlu muat ulang halaman.
+                                    Setiap kali staf menambah, mengubah, atau menghapus data di perangkatnya, jejak audit langsung terkirim ke Cloud Database dan tampil seketika di layar Super Admin tanpa perlu muat ulang halaman.
                                 </p>
                             </div>
                             <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs space-y-1">
@@ -65,7 +65,7 @@ export const auditlogPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                             <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                 <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">2</span>
-                                Model B: Hub-and-Spoke (Dropbox / Nextcloud / WebDAV / Offline)
+                                Model B: Hub-and-Spoke (Cloudflare R2 / Dropbox / WebDAV / Offline)
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Offline-First Audit</span>
                         </div>

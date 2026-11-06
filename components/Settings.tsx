@@ -43,7 +43,11 @@ const Settings: React.FC = () => {
                 ...settings.cloudSyncConfig,
                 dropboxAppKey: '',
                 dropboxAppSecret: '',
-                webdavPassword: ''
+                webdavPassword: '',
+                r2AccessKeyId: '',
+                r2SecretAccessKey: '',
+                supabaseAnonKey: '',
+                d1ApiToken: ''
             }
         });
     }, [settings]);
@@ -105,7 +109,11 @@ const Settings: React.FC = () => {
                 ...settings.cloudSyncConfig,
                 dropboxAppKey: localSettings.cloudSyncConfig?.dropboxAppKey || '',
                 dropboxAppSecret: localSettings.cloudSyncConfig?.dropboxAppSecret || '',
-                webdavPassword: localSettings.cloudSyncConfig?.webdavPassword || ''
+                webdavPassword: localSettings.cloudSyncConfig?.webdavPassword || '',
+                r2AccessKeyId: localSettings.cloudSyncConfig?.r2AccessKeyId || '',
+                r2SecretAccessKey: localSettings.cloudSyncConfig?.r2SecretAccessKey || '',
+                supabaseAnonKey: localSettings.cloudSyncConfig?.supabaseAnonKey || '',
+                d1ApiToken: localSettings.cloudSyncConfig?.d1ApiToken || ''
             }
         };
         return JSON.stringify(localSettings) !== JSON.stringify(normalizedCurrent);
@@ -118,7 +126,11 @@ const Settings: React.FC = () => {
                 ...settings.cloudSyncConfig,
                 dropboxAppKey: '',
                 dropboxAppSecret: '',
-                webdavPassword: ''
+                webdavPassword: '',
+                r2AccessKeyId: '',
+                r2SecretAccessKey: '',
+                supabaseAnonKey: '',
+                d1ApiToken: ''
             }
         });
         showToast('Perubahan dibatalkan dan dikembalikan ke pengaturan tersimpan.', 'info');
@@ -148,6 +160,18 @@ const Settings: React.FC = () => {
                     if (!dataToSave.cloudSyncConfig.webdavPassword && settings.cloudSyncConfig.webdavPassword) {
                         dataToSave.cloudSyncConfig.webdavPassword = settings.cloudSyncConfig.webdavPassword;
                     }
+                    if (!dataToSave.cloudSyncConfig.r2AccessKeyId && settings.cloudSyncConfig.r2AccessKeyId) {
+                        dataToSave.cloudSyncConfig.r2AccessKeyId = settings.cloudSyncConfig.r2AccessKeyId;
+                    }
+                    if (!dataToSave.cloudSyncConfig.r2SecretAccessKey && settings.cloudSyncConfig.r2SecretAccessKey) {
+                        dataToSave.cloudSyncConfig.r2SecretAccessKey = settings.cloudSyncConfig.r2SecretAccessKey;
+                    }
+                    if (!dataToSave.cloudSyncConfig.supabaseAnonKey && settings.cloudSyncConfig.supabaseAnonKey) {
+                        dataToSave.cloudSyncConfig.supabaseAnonKey = settings.cloudSyncConfig.supabaseAnonKey;
+                    }
+                    if (!dataToSave.cloudSyncConfig.d1ApiToken && settings.cloudSyncConfig.d1ApiToken) {
+                        dataToSave.cloudSyncConfig.d1ApiToken = settings.cloudSyncConfig.d1ApiToken;
+                    }
 
                     await onSaveSettings(dataToSave);
                     
@@ -158,7 +182,11 @@ const Settings: React.FC = () => {
                             ...prev.cloudSyncConfig,
                             dropboxAppKey: '',
                             dropboxAppSecret: '',
-                            webdavPassword: ''
+                            webdavPassword: '',
+                            r2AccessKeyId: '',
+                            r2SecretAccessKey: '',
+                            supabaseAnonKey: '',
+                            d1ApiToken: ''
                         }
                     }));
 

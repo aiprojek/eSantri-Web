@@ -22,7 +22,14 @@ export const WebDavCloudPanel: React.FC<WebDavCloudPanelProps> = ({
     <div className="space-y-6">
         <div className="app-panel-soft grid grid-cols-1 gap-4 rounded-[24px] p-5 sm:p-6">
             <div className="flex justify-between items-center">
-                <h4 className="font-bold text-orange-800 text-sm">A. Setup WebDAV (Nextcloud/CasaOS)</h4>
+                <h4 className="font-bold text-orange-800 text-sm">Setup WebDAV (Nextcloud / CasaOS)</h4>
+                <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent('open-panduan', { detail: 'cloud' }))}
+                    className="text-xs text-orange-700 hover:text-orange-900 hover:underline flex items-center gap-1 font-semibold bg-orange-100/70 hover:bg-orange-100 px-2.5 py-1 rounded-lg border border-orange-200 transition-colors"
+                >
+                    <i className="bi bi-question-circle"></i> Panduan WebDAV
+                </button>
             </div>
 
             <div>

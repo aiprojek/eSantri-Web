@@ -12,6 +12,9 @@ import { koperasiPanduan } from './panduan/koperasi';
 import { auditlogPanduan } from './panduan/auditlog';
 import { pengaturanPanduan } from './panduan/pengaturan';
 import { pusatSyncPanduan } from './panduan/pusatSync';
+import { r2Panduan } from './panduan/r2Sync';
+import { supabasePanduan } from './panduan/supabaseSync';
+import { d1Panduan } from './panduan/d1Sync';
 
 export interface PanduanStepData {
     title: string;
@@ -293,12 +296,12 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="bg-teal-50/70 p-3.5 rounded-xl border border-teal-200 space-y-2">
                                 <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                     <h6 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
-                                        <i className="bi bi-cloud-check-fill text-teal-600 text-sm"></i> Model A: Firebase Real-Time Cloud
+                                        <i className="bi bi-cloud-check-fill text-teal-600 text-sm"></i> Model A: Real-Time Live Cloud (Firebase / Supabase / Cloudflare D1)
                                     </h6>
                                     <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-100 text-emerald-800 font-bold uppercase">Online Aktif</span>
                                 </div>
                                 <p className="text-xs text-gray-600 leading-relaxed">
-                                    Menyinkronkan data seketika antar-laptop dan smartphone staf secara otomatis tanpa perlu kirim atau gabung file manual.
+                                    Menyinkronkan data seketika antar-laptop dan smartphone staf secara otomatis tanpa perlu kirim atau gabung file manual via WebSocket/Streaming.
                                 </p>
                                 <div className="space-y-1 text-[11px] text-gray-700">
                                     <div className="flex items-start gap-1.5">
@@ -319,7 +322,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="bg-indigo-50/70 p-3.5 rounded-xl border border-indigo-200 space-y-2">
                                 <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                     <h6 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
-                                        <i className="bi bi-diagram-3-fill text-indigo-600 text-sm"></i> Model B: Hub &amp; Spoke (Dropbox / WebDAV)
+                                        <i className="bi bi-diagram-3-fill text-indigo-600 text-sm"></i> Model B: Hub &amp; Spoke (Cloudflare R2 / Dropbox / WebDAV)
                                     </h6>
                                     <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-100 text-indigo-800 font-bold uppercase">Hybrid / Offline</span>
                                 </div>
@@ -810,12 +813,12 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-emerald-200 pb-1.5">
                                 <h5 className="font-bold text-emerald-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-[10px] font-black">A</span>
-                                    Model A: Cloud Real-Time (Firebase Firestore Terpadu)
+                                    Model A: Cloud Real-Time (Firebase / Supabase / Cloudflare D1)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                             </div>
                             <p className="text-xs text-gray-600">
-                                Berlaku saat pesantren menggunakan koneksi Firebase terpusat dan seluruh admin terhubung ke jaringan internet/WiFi pondok secara realtime.
+                                Berlaku saat pesantren menggunakan koneksi Cloud terpusat (Firebase Firestore, Supabase Realtime, atau Cloudflare D1) dan seluruh admin terhubung ke jaringan internet/WiFi pondok.
                             </p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                                 <div className="p-2.5 bg-white rounded-lg border border-emerald-100 shadow-2xs space-y-1">
@@ -823,7 +826,7 @@ export const panduanData: PanduanSectionData[] = [
                                         <i className="bi bi-cloud-check text-emerald-600"></i> Distribusi Perubahan Instan (Auto-Broadcast)
                                     </strong>
                                     <p className="text-[11px] text-gray-600 leading-relaxed">
-                                        Saat Admin Pusat menekan tombol <strong>Simpan Perubahan</strong>, dokumen <code>tenants/{'{tenantId}'}/settings/main</code> otomatis diperbarui dan disebarkan ke seluruh laptop staf dalam hitungan detik via Firestore realtime listener tanpa perlu refresh halaman.
+                                        Saat Admin Pusat menekan tombol <strong>Simpan Perubahan</strong>, dokumen master otomatis diperbarui dan disebarkan ke seluruh laptop staf dalam hitungan detik via Realtime Listener tanpa perlu refresh halaman.
                                     </p>
                                 </div>
                                 <div className="p-2.5 bg-white rounded-lg border border-emerald-100 shadow-2xs space-y-1">
@@ -831,7 +834,7 @@ export const panduanData: PanduanSectionData[] = [
                                         <i className="bi bi-person-lines-fill text-emerald-600"></i> Aturan Pembagian Peran Tab (Anti-Konflik)
                                     </strong>
                                     <p className="text-[11px] text-gray-600 leading-relaxed">
-                                        Untuk mencegah bentrok edit bersamaan (<em>Last-Write-Wins</em>), bagi wewenang admin secara ketat: Admin Akademik mengelola Struktur & TA, Kurikulum mengelola Mapel & Jam Guru, Admin TU mengelola Biodata Guru/Staf, dan Pengasuhan mengelola Fasilitas Asrama.
+                                        Untuk mencegah bentrok edit bersamaan (<em>Last-Write-Wins</em>), bagi wewenang admin secara ketat: Admin Akademik mengelola Struktur &amp; TA, Kurikulum mengelola Mapel &amp; Jam Guru, Admin TU mengelola Biodata Guru/Staf, dan Pengasuhan mengelola Fasilitas Asrama.
                                     </p>
                                 </div>
                             </div>
@@ -844,7 +847,7 @@ export const panduanData: PanduanSectionData[] = [
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">B</span>
                                     Model B: Cloud Hub-and-Spoke (Offline-First / Mode Pengepul)
                                 </h5>
-                                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Dropbox / WebDAV</span>
+                                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / R2 / Dropbox / WebDAV</span>
                             </div>
                             <p className="text-xs text-gray-600">
                                 Digunakan saat laptop staf/tata usaha marhalah bekerja secara mandiri (offline) atau lokasi jaringan antar kantor cabang terpisah.
@@ -1090,82 +1093,139 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'cloud',
-        badge: 3,
+        badge: 'UPDATE',
         badgeColor: 'purple',
-        title: 'Sinkronisasi Cloud',
+        title: 'Sinkronisasi Cloud & Multi-Admin',
         steps: [
             {
-                title: 'Konsep Sinkronisasi',
+                title: '1. Konsep 2 Model Kerja Sama Tim (Multi-Admin)',
+                color: 'purple',
                 content: (
-                    <>
-                        <p className="mb-2">Aplikasi ini menyimpan data di laptop Anda (Offline). Sinkronisasi Cloud berguna untuk:</p>
-                        <ul className="list-disc pl-5 space-y-1 text-sm">
-                            <li><strong>Backup Otomatis:</strong> Data aman jika laptop rusak.</li>
-                            <li><strong>Kerja Tim (Multi-User):</strong> Banyak laptop bisa mengakses data yang sama.</li>
-                            <li><strong>Jembatan Portal:</strong> Menghubungkan data internal ke Portal Wali Santri secara aman.</li>
-                        </ul>
-                        <div className="mt-3 p-2 bg-yellow-50 border border-yellow-100 rounded text-xs text-yellow-800">
-                            <i className="bi bi-info-circle mr-1"></i> 
-                            <strong>Catatan:</strong> Panduan di bawah ini (Hub & Spoke) berlaku khusus untuk pengguna <strong>Dropbox</strong> dan <strong>WebDAV</strong>. Untuk pengguna <strong>Firebase</strong>, sinkronisasi berjalan otomatis secara real-time.
+                    <div className="space-y-3.5 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Aplikasi e-Santri menyimpan data secara lokal di browser komputer Anda (Offline-First). Untuk berkolaborasi antar admin, 
+                            aplikasi menyediakan <strong>2 Model Arsitektur Sinkronisasi</strong> yang dapat dipilih di menu <em>Pengaturan &gt; Cloud</em>:
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div className="p-3.5 bg-teal-50 border border-teal-200 rounded-xl space-y-2">
+                                <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                    <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                        <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] font-black">1</span>
+                                        Model Real-Time (Live Cloud Sync)
+                                    </h5>
+                                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Otomatis</span>
+                                </div>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Setiap transaksi yang diinput admin langsung mengalir seketika ke komputer lain via WebSocket &amp; Cloud DB.
+                                </p>
+                                <ul className="list-disc pl-4 space-y-1 text-[11px] text-teal-900 font-medium">
+                                    <li><strong>Firebase Firestore:</strong> Login Google 1-klik, pairing tenant otomatis.</li>
+                                    <li><strong>Supabase:</strong> PostgreSQL Cloud, 500 MB gratis, WebSocket realtime.</li>
+                                    <li><strong>Cloudflare D1:</strong> Edge SQLite super cepat, 5 juta baris baca/hari gratis.</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
+                                <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                    <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                        <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">2</span>
+                                        Model Hub &amp; Spoke (Offline-First)
+                                    </h5>
+                                    <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold">Kurasi Terpusat</span>
+                                </div>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Staf bekerja offline mandiri, lalu menyetor paket berkas perubahan ke folder cloud untuk disahkan oleh Admin Pusat.
+                                </p>
+                                <ul className="list-disc pl-4 space-y-1 text-[11px] text-indigo-900 font-medium">
+                                    <li><strong>Cloudflare R2:</strong> S3 Object Storage, 10 GB gratis, $0 biaya unduh, bebas batas perangkat.</li>
+                                    <li><strong>Dropbox:</strong> Populer &amp; mudah, gratis 2 GB (maksimal 3 perangkat akun gratis).</li>
+                                    <li><strong>WebDAV:</strong> Server mandiri pesantren (CasaOS, Synology, Nextcloud).</li>
+                                </ul>
+                            </div>
                         </div>
-                    </>
+                    </div>
                 )
             },
             {
-                title: 'Pilih Penyedia Cloud',
+                title: '2. PENTING: Penjelasan Batasan 3 Perangkat Dropbox & Solusinya',
+                color: 'red',
                 content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka menu <strong>Pengaturan &gt; Sync Cloud</strong>.</li>
-                        <li><strong>Firebase (Rekomendasi):</strong> Real-time, sangat cepat, cocok untuk kerja tim yang intensif.</li>
-                        <li><strong>Dropbox:</strong> Mudah, gratis, cocok untuk backup dan sinkronisasi berkala.</li>
-                        <li><strong>WebDAV:</strong> Untuk Anda yang punya server sendiri (Nextcloud/CasaOS) demi privasi maksimal.</li>
-                    </ul>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <div className="bg-red-50 p-4 rounded-xl border border-red-200 text-xs text-red-950 space-y-2">
+                            <h5 className="font-bold flex items-center gap-2 text-red-900 text-sm">
+                                <i className="bi bi-exclamation-triangle-fill text-red-600 text-base"></i>
+                                Mengapa Muncul Peringatan: &quot;Batasan Dropbox: Maksimal 3 Perangkat Terhubung&quot;?
+                            </h5>
+                            <p className="leading-relaxed">
+                                Dropbox Inc. secara resmi memberlakukan kebijakan keamanan ketat pada jenis akun <strong>Dropbox Basic (Gratis 2 GB)</strong>: 
+                                <strong> satu akun hanya boleh menautkan maksimal 3 perangkat secara bersamaan</strong> (termasuk laptop, PC, dan smartphone).
+                            </p>
+                        </div>
+
+                        <div className="bg-white p-3.5 rounded-xl border border-gray-200 text-xs space-y-2">
+                            <strong className="text-slate-800 block font-bold">Dampaknya pada Penggunaan Multi-Admin di Pesantren:</strong>
+                            <p className="text-gray-600 leading-relaxed">
+                                Jika Admin membagikan <em>Pairing Code</em> Dropbox ke lebih dari 2 orang staf (sehingga total komputer yang aktif menjadi 4 perangkat atau lebih), 
+                                sistem Dropbox dapat <strong>menolak otorisasi sesi baru atau mencabut token sesi lama secara sepihak</strong>.
+                            </p>
+                            <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 space-y-1 mt-2">
+                                <strong className="block font-bold">Rekomendasi Solusi Jika Staf Lebih dari 3 Orang:</strong>
+                                <ul className="list-disc pl-4 space-y-1 text-[11px]">
+                                    <li><strong>Gunakan Cloudflare R2 (Sangat Direkomendasikan):</strong> Kuota 10 GB permanen gratis, <strong>tanpa batasan jumlah perangkat</strong>, dan token API tidak kedaluwarsa.</li>
+                                    <li><strong>Gunakan Supabase atau Firebase:</strong> Bebas digunakan oleh banyak admin secara serentak tanpa batasan perangkat komputer.</li>
+                                    <li><strong>Gunakan WebDAV / Nextcloud:</strong> Dipasang di server lokal atau VPS mandiri pondok tanpa intervensi pihak ketiga.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                 )
             },
             {
-                title: 'Konsep: Pusat (Hub) & Cabang (Spoke)',
-                color: 'black',
-                content: (
-                    <ul className="list-disc pl-5 space-y-2 text-sm mt-1">
-                        <li><strong>Admin Pusat (Hub):</strong> Laptop Utama. Pemegang "Kebenaran Data". Tugasnya menerima data dari staff, menggabungkannya, dan membagikan data Master terbaru.</li>
-                        <li><strong>Staff (Spoke):</strong> Laptop Pendukung. Tugasnya input data harian (bayar SPP, input santri baru) dan menyetorkannya ke Pusat.</li>
-                    </ul>
-                )
-            },
-            {
-                title: 'Aktivasi & Setup (Oleh Admin)',
-                color: 'black',
-                content: (
-                    <ol className="list-decimal pl-5 space-y-2 text-sm mt-1 bg-gray-50 p-3 rounded border">
-                        <li><strong>Di Laptop Admin Pusat:</strong> Buka <em>Pengaturan &gt; Sync Cloud</em>.</li>
-                        <li>Pilih Provider (Dropbox atau WebDAV).</li>
-                        <li>Jika menggunakan <strong>Dropbox</strong>: Masukkan <em>App Key</em> & <em>App Secret</em> (Didapat dari Dropbox Developer Console), lalu klik "Dapatkan Kode" dan ikuti proses otorisasi manual.</li>
-                        <li>Setelah terhubung, klik tombol <strong>"Bagikan Akses (Pairing Code)"</strong>. Salin kode rahasia yang muncul.</li>
-                    </ol>
-                )
-            },
-             {
-                title: 'Koneksi Staff (Pairing)',
-                color: 'black',
-                content: (
-                    <ol className="list-decimal pl-5 space-y-2 text-sm mt-1">
-                         <li><strong>Di Laptop Staff:</strong> Buka menu <em>Pengaturan &gt; Sync Cloud</em>.</li>
-                         <li>Paste kode dari Admin ke kolom <strong>"Setup Cepat"</strong> di bagian bawah.</li>
-                         <li>Klik <strong>Hubungkan</strong>. Sistem akan otomatis mengonfigurasi akses cloud dan mendownload data terbaru.</li>
-                    </ol>
-                )
-            },
-            {
-                title: 'Sinkronisasi Antar Admin (2 Perangkat)',
+                title: '3. Setup Platform: Dropbox Developer App & Kredensial',
                 color: 'blue',
                 content: (
-                    <div className="bg-blue-50 p-3 rounded border border-blue-200 text-sm">
-                        <p className="mb-2">Jika ada 2 perangkat Admin (misal Laptop Kantor & Laptop Rumah) menggunakan Dropbox/WebDAV:</p>
-                        <ol className="list-decimal pl-5 space-y-2">
-                            <li><strong>Admin 1:</strong> Lakukan perubahan data, lalu klik tombol Sync di samping dan pilih <strong>"Publikasikan Master"</strong>.</li>
-                            <li><strong>Admin 2:</strong> Klik tombol Sync di samping dan pilih <strong>"Ambil Data Terbaru"</strong> untuk menarik perubahan dari Admin 1.</li>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="text-xs">Jika Anda memilih Dropbox untuk Hub &amp; Spoke, ikuti langkah pembuatan aplikasi di portal Dropbox Developer:</p>
+                        <ol className="list-decimal pl-5 space-y-2 text-xs bg-gray-50 p-3.5 rounded-xl border border-gray-200">
+                            <li>Buka <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noreferrer" className="text-blue-600 font-bold underline">Dropbox Developer Console</a> dan login dengan akun Dropbox Anda.</li>
+                            <li>Klik tombol <strong>Create app</strong>.</li>
+                            <li>Pilih <strong>Scoped access</strong> &gt; Pilih <strong>Full Dropbox</strong> (atau App folder).</li>
+                            <li>Beri nama aplikasi, misal: <code className="bg-white px-1.5 py-0.5 rounded border border-gray-300 font-bold">eSantri-Cloud-Pondok</code> &gt; Klik <strong>Create app</strong>.</li>
+                            <li>
+                                <strong>Atur Permissions:</strong> Masuk ke tab <strong>Permissions</strong>, centang izin:
+                                <ul className="list-disc pl-4 mt-1 space-y-0.5 text-blue-900 font-mono text-[11px]">
+                                    <li><code>files.content.write</code></li>
+                                    <li><code>files.content.read</code></li>
+                                </ul>
+                                Klik tombol <strong>Submit</strong> di bagian bawah halaman.
+                            </li>
+                            <li>
+                                <strong>Atur Redirect URIs:</strong> Masuk ke tab <strong>Settings</strong>, cari kolom <em>Redirect URIs</em>, dan masukkan URL website e-Santri tempat aplikasi berjalan (misal: <code>https://esantri.domainanda.com</code> atau URL preview Anda).
+                            </li>
+                            <li>
+                                <strong>Salin Kredensial:</strong> Salin <strong>App key</strong> dan <strong>App secret</strong>.
+                            </li>
+                            <li>
+                                <strong>Otorisasi di e-Santri:</strong> Buka <em>Pengaturan &gt; Cloud &gt; Dropbox</em>, masukkan App Key &amp; Secret, klik <strong>Dapatkan Kode Otorisasi</strong>, setujui akses di browser, lalu salin kode yang muncul ke kolom verifikasi.
+                            </li>
                         </ol>
-                        <p className="mt-2 text-xs text-blue-800 italic">* Jika menggunakan Firebase, data tersinkron otomatis secara real-time tanpa langkah ini.</p>
+                    </div>
+                )
+            },
+            {
+                title: '4. Setup Platform: WebDAV / Nextcloud / CasaOS',
+                color: 'orange',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="text-xs">Untuk pondok yang memiliki server lokal (NAS, CasaOS, Synology, TrueNAS, atau VPS Nextcloud):</p>
+                        <ol className="list-decimal pl-5 space-y-2 text-xs bg-gray-50 p-3.5 rounded-xl border border-gray-200">
+                            <li>Buka aplikasi Nextcloud / server WebDAV Anda.</li>
+                            <li>Buka menu <strong>Files</strong> &gt; di pojok kiri bawah klik <strong>Files settings</strong> untuk menyalin URL WebDAV (contoh: <code>https://nextcloud.domain.com/remote.php/dav/files/user/</code>).</li>
+                            <li>Disarankan membuat <strong>App Password</strong> di menu <em>Settings &gt; Security &gt; Devices &amp; client credentials</em> agar tidak menggunakan password akun utama.</li>
+                            <li>Pastikan server mengizinkan <strong>CORS</strong> untuk domain e-Santri Anda.</li>
+                            <li>Buka menu <em>Pengaturan &gt; Cloud &gt; WebDAV</em> di e-Santri, masukkan URL, Username, dan Password, lalu klik <strong>Test Koneksi &amp; Simpan</strong>.</li>
+                        </ol>
                     </div>
                 )
             },
@@ -1245,7 +1305,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                 <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] font-black">A</span>
-                                    Model A: Cloud Real-Time (Firebase Firestore)
+                                    Model A: Cloud Real-Time (Firebase / Supabase / Cloudflare D1)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Terpadu</span>
                             </div>
@@ -1274,7 +1334,7 @@ export const panduanData: PanduanSectionData[] = [
                                         <i className="bi bi-shield-check text-emerald-600 mr-1"></i> Proteksi Dokumen Publik Cloud
                                     </strong>
                                     <p className="text-[11px] text-gray-600 leading-relaxed">
-                                        Dokumen publik <code>publicPortals/{'{tenantId}'}</code> di Firestore otomatis menyembunyikan URL GAS &amp; Token API mentah dan hanya menyimpan kunci terenkripsi (<code>encryptedKey: ep2_...</code>).
+                                        Dokumen publik portal di cloud otomatis menyembunyikan kredensial mentah dan hanya menyimpan kunci terenkripsi (<code>encryptedKey: ep2_...</code>).
                                     </p>
                                 </div>
                             </div>
@@ -1285,7 +1345,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">B</span>
-                                    Model B: Hub-and-Spoke (Dropbox / Nextcloud / WebDAV / Offline)
+                                    Model B: Hub-and-Spoke (Cloudflare R2 / Dropbox / WebDAV / Offline)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Pusatkan Sync di HUB</span>
                             </div>
@@ -1557,7 +1617,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                 <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
-                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                    Model A: Real-Time Live Sync (Firebase / Supabase / Cloudflare D1)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                             </div>
@@ -1597,7 +1657,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                    Model B: Hub-and-Spoke (Offline-First / Cloudflare R2 / Dropbox / WebDAV)
                                 </h5>
                                 <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                             </div>
@@ -1867,7 +1927,7 @@ export const panduanData: PanduanSectionData[] = [
                             <i className="bi bi-exclamation-triangle-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
                             <div>
                                 <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin di Poskestren:</strong>
-                                Jangan biarkan Admin Kantor TU menginput seluruh data kesehatan sendirian. Poskestren beroperasi optimal saat didelegasikan langsung ke Petugas Medis / UKS di klinik pondok. Sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File Cadangan)</strong>. Ikuti SOP di bawah ini agar pencatatan medis dan mutasi stok obat akurat tanpa tumpang tindih.
+                                Jangan biarkan Admin Kantor TU menginput seluruh data kesehatan sendirian. Poskestren beroperasi optimal saat didelegasikan langsung ke Petugas Medis / UKS di klinik pondok. Sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase / Supabase / Cloudflare D1)</strong> dan <strong>Hub-and-Spoke (Offline / Cloudflare R2 / Dropbox / WebDAV)</strong>. Ikuti SOP di bawah ini agar pencatatan medis dan mutasi stok obat akurat tanpa tumpang tindih.
                             </div>
                         </div>
 
@@ -1876,7 +1936,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                 <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
-                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                    Model A: Real-Time Live Sync (Firebase / Supabase / Cloudflare D1)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                             </div>
@@ -1916,7 +1976,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                    Model B: Hub-and-Spoke (Offline-First / Cloudflare R2 / Dropbox / WebDAV)
                                 </h5>
                                 <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                             </div>
@@ -2139,7 +2199,7 @@ export const panduanData: PanduanSectionData[] = [
                             <i className="bi bi-shield-exclamation text-amber-600 shrink-0 text-base mt-0.5"></i>
                             <div>
                                 <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin di Pos Keamanan (Satpam):</strong>
-                                Pos Satpam beroperasi 24 jam dengan pergantian regu jaga (Shift Pagi, Siang, Malam). Penggunaan akun mandiri dan penerapan arsitektur sinkronisasi yang terstandarisasi memastikan riwayat tamu, titipan identitas fisik, dan paket kurir tercatat tertib tanpa risiko data saling menimpa. Sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File Cadangan)</strong>.
+                                Pos Satpam beroperasi 24 jam dengan pergantian regu jaga (Shift Pagi, Siang, Malam). Penggunaan akun mandiri dan penerapan arsitektur sinkronisasi yang terstandarisasi memastikan riwayat tamu, titipan identitas fisik, dan paket kurir tercatat tertib tanpa risiko data saling menimpa. Sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase / Supabase / Cloudflare D1)</strong> dan <strong>Hub-and-Spoke (Offline / Cloudflare R2 / Dropbox / WebDAV)</strong>.
                             </div>
                         </div>
 
@@ -2148,7 +2208,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                 <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
-                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                    Model A: Real-Time Live Sync (Firebase / Supabase / Cloudflare D1)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                             </div>
@@ -2188,7 +2248,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                    Model B: Hub-and-Spoke (Offline-First / Cloudflare R2 / Dropbox / WebDAV)
                                 </h5>
                                 <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                             </div>
@@ -2355,7 +2415,7 @@ export const panduanData: PanduanSectionData[] = [
                             <i className="bi bi-shield-exclamation text-amber-600 shrink-0 text-base mt-0.5"></i>
                             <div>
                                 <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin Bimbingan Konseling:</strong>
-                                Layanan Bimbingan Konseling memuat catatan pribadi santri yang sensitif. Pembagian akun mandiri dan penerapan arsitektur sinkronisasi yang jelas melindungi kerahasiaan santri dan memastikan catatan tindak lanjut tersimpan aman tanpa tertimpa. Sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File Cadangan)</strong>.
+                                Layanan Bimbingan Konseling memuat catatan pribadi santri yang sensitif. Pembagian akun mandiri dan penerapan arsitektur sinkronisasi yang jelas melindungi kerahasiaan santri dan memastikan catatan tindak lanjut tersimpan aman tanpa tertimpa. Sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase / Supabase / Cloudflare D1)</strong> dan <strong>Hub-and-Spoke (Offline / Cloudflare R2 / Dropbox / WebDAV)</strong>.
                             </div>
                         </div>
 
@@ -2364,7 +2424,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                 <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
-                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                    Model A: Real-Time Live Sync (Firebase / Supabase / Cloudflare D1)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                             </div>
@@ -2404,7 +2464,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                    Model B: Hub-and-Spoke (Offline-First / Cloudflare R2 / Dropbox / WebDAV)
                                 </h5>
                                 <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                             </div>
@@ -2584,7 +2644,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                 <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
-                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                    Model A: Real-Time Live Sync (Firebase / Supabase / Cloudflare D1)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                             </div>
@@ -2624,7 +2684,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                    Model B: Hub-and-Spoke (Offline-First / Cloudflare R2 / Dropbox / WebDAV)
                                 </h5>
                                 <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                             </div>
@@ -2809,7 +2869,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                 <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
-                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                    Model A: Real-Time Live Sync (Firebase / Supabase / Cloudflare D1)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                             </div>
@@ -2849,7 +2909,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                    Model B: Hub-and-Spoke (Offline-First / Cloudflare R2 / Dropbox / WebDAV)
                                 </h5>
                                 <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                             </div>
@@ -3049,14 +3109,14 @@ export const panduanData: PanduanSectionData[] = [
                             </p>
                             <ul className="list-disc pl-5 space-y-1 text-xs text-gray-700">
                                 <li>
-                                    <strong>Mode Firebase (Real-time):</strong> Ustadz yang menginput setoran di halaqah langsung mengalirkan data ke Admin & Portal Wali Santri secara instan tanpa perlu tindakan manual.
+                                    <strong>Mode Real-time (Firebase / Supabase / Cloudflare D1):</strong> Ustadz yang menginput setoran di halaqah langsung mengalirkan data ke Admin &amp; Portal Wali Santri secara instan tanpa perlu tindakan manual.
                                 </li>
                                 <li>
-                                    <strong>Mode Hub & Spoke (Dropbox/WebDAV):</strong>
+                                    <strong>Mode Hub &amp; Spoke (Cloudflare R2 / Dropbox / WebDAV):</strong>
                                     <ol className="list-decimal pl-4 mt-1 space-y-0.5 text-gray-700">
                                         <li><strong>Ustadz (Spoke):</strong> Setelah selesai halaqah, klik <em>"Kirim Perubahan ke Admin"</em>.</li>
                                         <li><strong>Admin Utama (Hub):</strong> Buka menu <em>Pusat Sinkronisasi</em> &gt; Klik <em>"Gabung"</em> pada file setoran ustadz &gt; <strong>WAJIB Klik "Publikasikan Master"</strong>.</li>
-                                        <li><strong>Ustadz / Staff Lain:</strong> Klik <em>"Ambil Data Master"</em> di pagi hari sebelum halaqah berikutnya agar data santri & mutaba'ah selalu up-to-date.</li>
+                                        <li><strong>Ustadz / Staff Lain:</strong> Klik <em>"Ambil Data Master"</em> di pagi hari sebelum halaqah berikutnya agar data santri &amp; mutaba'ah selalu up-to-date.</li>
                                     </ol>
                                 </li>
                             </ul>
@@ -3087,7 +3147,7 @@ export const panduanData: PanduanSectionData[] = [
                             <i className="bi bi-exclamation-triangle-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
                             <div>
                                 <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin Keasramaan &amp; Pengasuhan:</strong>
-                                Di pondok pesantren dengan asrama putra (banin) dan putri (banat) yang terpisah secara fisik serta puluhan musyrif/musyrifah piket harian, sistem mendukung 2 arsitektur sinkronisasi utama: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File Cadangan)</strong>. Ikuti tata kelola di bawah ini agar penempatan kamar, mutasi santri, sidak kebersihan, dan jurnal pengasuhan berjalan tertib tanpa bentrok data antar-gedung.
+                                Di pondok pesantren dengan asrama putra (banin) dan putri (banat) yang terpisah secara fisik serta puluhan musyrif/musyrifah piket harian, sistem mendukung 2 arsitektur sinkronisasi utama: <strong>Real-Time Cloud (Firebase / Supabase / Cloudflare D1)</strong> dan <strong>Hub-and-Spoke (Offline / Cloudflare R2 / Dropbox / WebDAV)</strong>. Ikuti tata kelola di bawah ini agar penempatan kamar, mutasi santri, sidak kebersihan, dan jurnal pengasuhan berjalan tertib tanpa bentrok data antar-gedung.
                             </div>
                         </div>
 
@@ -3096,7 +3156,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                 <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
-                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                    Model A: Real-Time Live Sync (Firebase / Supabase / Cloudflare D1)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                             </div>
@@ -3136,7 +3196,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                    Model B: Hub-and-Spoke (Offline-First / Cloudflare R2 / Dropbox / WebDAV)
                                 </h5>
                                 <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                             </div>
@@ -4105,7 +4165,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                 <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] font-black">A</span>
-                                    Model A: Cloud Real-Time (Firebase Firestore)
+                                    Model A: Cloud Real-Time (Firebase / Supabase / Cloudflare D1)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold uppercase tracking-wider">Disarankan / Online Penuh</span>
                             </div>
@@ -4140,7 +4200,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">B</span>
-                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                    Model B: Hub-and-Spoke (Offline-First / Cloudflare R2 / Dropbox / WebDAV)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase tracking-wider">Hybrid / Tanpa Internet Rutin</span>
                             </div>
@@ -4238,6 +4298,9 @@ export const panduanData: PanduanSectionData[] = [
     auditlogPanduan,
     pengaturanPanduan,
     pusatSyncPanduan,
+    r2Panduan,
+    supabasePanduan,
+    d1Panduan,
     kalenderPanduan,
     perpustakaanPanduan,
     {
@@ -4436,7 +4499,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                 <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
-                                    Model A: Cloud Real-Time Sync (Firebase Firestore)
+                                    Model A: Cloud Real-Time Sync (Firebase / Supabase / Cloudflare D1)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Live Multi-Device</span>
                             </div>
@@ -4476,7 +4539,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                    Model B: Hub-and-Spoke (Dropbox / Nextcloud / WebDAV / Offline Lapangan)
+                                    Model B: Hub-and-Spoke (Cloudflare R2 / Dropbox / WebDAV / Offline Lapangan)
                                 </h5>
                                 <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Offline-First</span>
                             </div>
@@ -5119,7 +5182,7 @@ export const panduanData: PanduanSectionData[] = [
                                 Penyelarasan Multi-Admin: Real-Time Cloud vs Hub-and-Spoke
                             </h4>
                             <p className="text-xs text-orange-900 leading-relaxed">
-                                Pengiriman WhatsApp Center melibatkan koordinasi antar-divisi (Bendahara, Panitia PSB, Wali Kelas, Musyrif). eSantri Web mendukung dua arsitektur kerja multi-admin: <strong>Model A: Cloud Real-Time (Firebase)</strong> dan <strong>Model B: Hub-and-Spoke (Offline-First / Hybrid)</strong>. Ikuti tata kelola di bawah ini agar data tagihan akurat dan tidak terjadi pengiriman pesan ganda.
+                                Pengiriman WhatsApp Center melibatkan koordinasi antar-divisi (Bendahara, Panitia PSB, Wali Kelas, Musyrif). eSantri Web mendukung dua arsitektur kerja multi-admin: <strong>Model A: Cloud Real-Time (Firebase / Supabase / Cloudflare D1)</strong> dan <strong>Model B: Hub-and-Spoke (Offline-First / Cloudflare R2 / Dropbox / WebDAV)</strong>. Ikuti tata kelola di bawah ini agar data tagihan akurat dan tidak terjadi pengiriman pesan ganda.
                             </p>
                         </div>
 
@@ -5128,7 +5191,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                                 <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">A</span>
-                                    Model A: Cloud Real-Time (Firebase Firestore)
+                                    Model A: Cloud Real-Time (Firebase / Supabase / Cloudflare D1)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                             </div>
@@ -5160,7 +5223,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">B</span>
-                                    Model B: Hub-and-Spoke (Offline-First / Hybrid / File Sync)
+                                    Model B: Hub-and-Spoke (Offline-First / Hybrid / Cloudflare R2 / Dropbox / WebDAV)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                             </div>

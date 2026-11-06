@@ -78,12 +78,12 @@ export const sertifikatPanduan: PanduanSectionData = {
                         </div>
                     </div>
 
-                    {/* Model 1: Firebase Realtime */}
+                    {/* Model 1: Real-Time Live Sync */}
                     <div className="p-3.5 bg-teal-50/80 border border-teal-200 rounded-xl space-y-2.5">
                         <div className="flex items-center justify-between border-b border-teal-200/70 pb-2">
                             <h5 className="font-bold text-teal-950 flex items-center gap-2 text-xs md:text-sm">
                                 <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] font-black">A</span>
-                                SOP Mode Realtime (Firebase Cloud Firestore) — Rekomendasi Utama
+                                SOP Mode Real-Time (Firebase / Supabase / Cloudflare D1) — Rekomendasi Utama
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold uppercase tracking-wide">
                                 Auto-Sync Instan
@@ -95,7 +95,7 @@ export const sertifikatPanduan: PanduanSectionData = {
                                     <i className="bi bi-cloud-check-fill text-teal-600"></i> Alur Penerbitan &amp; Buku Agenda Live:
                                 </strong>
                                 <ul className="list-disc pl-4 space-y-1 text-[11px] text-gray-600">
-                                    <li>Saat staf mengeklik <strong>Cetak</strong>, <strong>Unduh PDF</strong>, atau <strong>Simpan Arsip</strong>, data sertifikat langsung terkirim ke Firestore dalam hitungan detik.</li>
+                                    <li>Saat staf mengeklik <strong>Cetak</strong>, <strong>Unduh PDF</strong>, atau <strong>Simpan Arsip</strong>, data sertifikat langsung terkirim ke Cloud Database dalam hitungan detik.</li>
                                     <li>Urutan nomor agenda otomatis di laptop staf lain langsung menyesuaikan dengan arsip terbaru yang baru saja terbit.</li>
                                     <li>Kantor TU dapat langsung melihat, mengirim WA ke wali, atau mencetak ulang sertifikat tersebut dari menu <em>Surat Menyurat &gt; Arsip Surat</em> tanpa minta file ulang ke panitia.</li>
                                 </ul>
@@ -117,7 +117,7 @@ export const sertifikatPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-indigo-200/70 pb-2">
                             <h5 className="font-bold text-indigo-950 flex items-center gap-2 text-xs md:text-sm">
                                 <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">B</span>
-                                SOP Mode Hub-and-Spoke (Dropbox / WebDAV) — Hybrid &amp; Lapangan Offline
+                                SOP Mode Hub-and-Spoke (Cloudflare R2 / Dropbox / WebDAV) — Hybrid &amp; Lapangan Offline
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase tracking-wide">
                                 Semi-Offline

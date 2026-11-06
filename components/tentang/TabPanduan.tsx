@@ -44,7 +44,7 @@ const PANDUAN_CATEGORIES: PanduanCategoryGroup[] = [
         id: 'cat_sistem',
         title: 'VI. Cloud Sync, Audit & Sistem',
         icon: 'bi-hdd-network',
-        sectionIds: ['cloud', 'firebase', 'pusat_sync', 'auditlog', 'pengaturan', 'offline', 'maintenance', 'fitur'],
+        sectionIds: ['cloud', 'r2', 'firebase', 'supabase', 'd1', 'pusat_sync', 'auditlog', 'pengaturan', 'offline', 'maintenance', 'fitur'],
     },
 ];
 

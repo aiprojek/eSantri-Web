@@ -276,7 +276,7 @@ export const perpustakaanPanduan: PanduanSectionData = {
                         <i className="bi bi-exclamation-triangle-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
                         <div>
                             <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin di Perpustakaan Pesantren:</strong>
-                            Perpustakaan umumnya memiliki ruang fisik atau komputer meja sirkulasi tersendiri yang terpisah dari kantor Tata Usaha (TU) dan Bendahara. Layanan perpustakaan dijaga oleh petugas piket bergilir (ustadz pustakawan, staf TU, atau santri pengurus OPPM/ISPA). Karena puluhan santri meminjam dan mengembalikan buku serentak pada jam istirahat, sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File Cadangan)</strong>. Ikuti SOP di bawah ini agar katalog buku tidak bentrok, mutasi stok akurat, dan denda terlacak tertib.
+                            Perpustakaan umumnya memiliki ruang fisik atau komputer meja sirkulasi tersendiri yang terpisah dari kantor Tata Usaha (TU) dan Bendahara. Layanan perpustakaan dijaga oleh petugas piket bergilir (ustadz pustakawan, staf TU, atau santri pengurus OPPM/ISPA). Karena puluhan santri meminjam dan mengembalikan buku serentak pada jam istirahat, sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase / Supabase / Cloudflare D1)</strong> dan <strong>Hub-and-Spoke (Cloudflare R2 / Dropbox / WebDAV / File Cadangan)</strong>. Ikuti SOP di bawah ini agar katalog buku tidak bentrok, mutasi stok akurat, dan denda terlacak tertib.
                         </div>
                     </div>
 
@@ -285,7 +285,7 @@ export const perpustakaanPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
                             <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
                                 <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
-                                Model A: Real-Time Live Sync (Firebase Firestore)
+                                Model A: Real-Time Live Sync (Firebase / Supabase / Cloudflare D1)
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                         </div>
@@ -306,7 +306,7 @@ export const perpustakaanPanduan: PanduanSectionData = {
                                     <i className="bi bi-broadcast text-teal-600"></i> Sinkronisasi Detik Itu Juga
                                 </strong>
                                 <p className="text-[11px] text-gray-600">
-                                    Setiap peminjaman, perpanjangan, atau pengembalian langsung masuk ke Cloud Firestore secara instan (<em>two-way live sync</em>). Data stok buku di katalog selalu mutakhir di seluruh gawai staf.
+                                    Setiap peminjaman, perpanjangan, atau pengembalian langsung masuk ke Cloud Database secara instan (<em>two-way live sync</em>). Data stok buku di katalog selalu mutakhir di seluruh gawai staf.
                                 </p>
                             </div>
                             <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
@@ -325,7 +325,7 @@ export const perpustakaanPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                             <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                 <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                Model B: Hub-and-Spoke (Offline-First / Cloudflare R2 / Dropbox / WebDAV)
                             </h5>
                             <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                         </div>
@@ -352,7 +352,7 @@ export const perpustakaanPanduan: PanduanSectionData = {
                                 </div>
                                 <ol className="list-decimal pl-4 mt-2 space-y-1 text-[11px] text-gray-600">
                                     <li>Pustakawan melayani transaksi peminjaman santri sepanjang jam operasional perpus secara mandiri di komputer sirkulasi.</li>
-                                    <li>Pada saat pergantian shift atau sebelum perpustakaan tutup, pustakawan membuka menu <strong>Sinkronisasi</strong> lalu mengeklik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong> ke Dropbox/Cloud atau export file perubahan.</li>
+                                    <li>Pada saat pergantian shift atau sebelum perpustakaan tutup, pustakawan membuka menu <strong>Sinkronisasi</strong> lalu mengeklik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong> ke Cloud (R2/Dropbox/WebDAV) atau export file perubahan.</li>
                                     <li>Admin Utama di Kantor TU mengeklik <strong>"Gabungkan Perubahan Staff (Merge Changes)"</strong>. Sistem menggabungkan riwayat sirkulasi dan pemotongan stok buku secara cerdas tanpa menimpa modul lain (seperti keuangan, absensi, atau tahfizh).</li>
                                     <li>Admin Utama menerbitkan master berkala (<em>Publish Master</em>) agar semua laptop divisi lain selaras.</li>
                                 </ol>

@@ -218,7 +218,7 @@ export const bukukasPanduan: PanduanSectionData = {
                         <i className="bi bi-shield-lock-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
                         <div>
                             <strong className="font-bold text-amber-900 block mb-0.5">Standar Operasional Prosedur (SOP) Multi-Bendahara:</strong>
-                            Buku Kas Umum mendukung kolaborasi beberapa bendahara (misal: <em>Bendahara Umum Yayasan</em>, <em>Bendahara Operasional Putra/Putri</em>, dan <em>Pemegang Kas Kecil Dapur/Pembangunan</em>) baik menggunakan <strong>Cloud Real-Time (Firebase)</strong> maupun <strong>Cloud Hub-and-Spoke (Dropbox / WebDAV)</strong>.
+                            Buku Kas Umum mendukung kolaborasi beberapa bendahara (misal: <em>Bendahara Umum Yayasan</em>, <em>Bendahara Operasional Putra/Putri</em>, dan <em>Pemegang Kas Kecil Dapur/Pembangunan</em>) baik menggunakan <strong>Cloud Real-Time (Firebase / Supabase / Cloudflare D1)</strong> maupun <strong>Cloud Hub-and-Spoke (Cloudflare R2 / Dropbox / WebDAV)</strong>.
                         </div>
                     </div>
 
@@ -227,7 +227,7 @@ export const bukukasPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-emerald-200 pb-1.5">
                             <h5 className="font-bold text-emerald-900 flex items-center gap-1.5 text-xs">
                                 <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-[10px] font-black">A</span>
-                                Model A: SOP Cloud Real-Time (Firebase Firestore)
+                                Model A: SOP Cloud Real-Time (Firebase / Supabase / Cloudflare D1)
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Sinkronisasi Instan</span>
                         </div>
@@ -236,7 +236,7 @@ export const bukukasPanduan: PanduanSectionData = {
                                 <strong>Pemisahan Pos Kas per Bendahara:</strong> Setiap bendahara menginput transaksi sesuai pos yang dikelolanya (misal Bendahara Dapur memilih pos <code>Kas Kecil Operasional</code>, sedangkan Bendahara Pusat memilih <code>Kas Tunai Bendahara</code> atau <code>Bank BSI</code>).
                             </li>
                             <li>
-                                <strong>Reaktivitas Saldo Langsung:</strong> Penambahan transaksi, pengeditan nominal, mutasi antar kas, maupun penghapusan (<em>soft-delete</em>) langsung disinkronkan secara utuh (<em>full-document put</em>) ke Firestore dan memperbarui tampilan Buku Kas di seluruh layar admin secara *real-time*.
+                                <strong>Reaktivitas Saldo Langsung:</strong> Penambahan transaksi, pengeditan nominal, mutasi antar kas, maupun penghapusan (<em>soft-delete</em>) langsung disinkronkan secara utuh (<em>full-document put</em>) ke Cloud Database dan memperbarui tampilan Buku Kas di seluruh layar admin secara *real-time*.
                             </li>
                             <li>
                                 <strong>Konsistensi Bagan Akun (COA):</strong> Kode akun COA menggunakan <strong>ID Deterministik berbasis Kode Akun</strong>, sehingga meskipun dua bendahara memuat preset COA secara bersamaan, tidak akan terbentuk duplikasi akun di Cloud.
@@ -249,7 +249,7 @@ export const bukukasPanduan: PanduanSectionData = {
                         <div className="flex items-center justify-between border-b border-indigo-200 pb-1.5">
                             <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                 <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">B</span>
-                                Model B: SOP Cloud Hub-and-Spoke (Dropbox / Nextcloud WebDAV)
+                                Model B: SOP Cloud Hub-and-Spoke (Cloudflare R2 / Dropbox / WebDAV)
                             </h5>
                             <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Offline-First Terpusat</span>
                         </div>

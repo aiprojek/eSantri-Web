@@ -28,16 +28,31 @@ export const DropboxCloudPanel: React.FC<DropboxCloudPanelProps> = ({
     <div className="space-y-6">
         <div className="app-panel-soft grid grid-cols-1 gap-4 rounded-[24px] p-5 sm:p-6">
             <div className="flex justify-between items-center">
-                <h4 className="font-bold text-blue-800 text-sm">A. Setup Dropbox (Mode Desktop/Manual)</h4>
-                {savedCloudConfig.dropboxRefreshToken && (
-                    <span className="text-green-600 text-xs font-bold bg-green-100 px-2 py-1 rounded border border-green-200">
-                        <i className="bi bi-check-circle-fill"></i> Terhubung
-                    </span>
-                )}
+                <h4 className="font-bold text-blue-800 text-sm">Setup Dropbox (Hub &amp; Spoke)</h4>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => window.dispatchEvent(new CustomEvent('open-panduan', { detail: 'cloud' }))}
+                        className="text-xs text-blue-700 hover:text-blue-900 hover:underline flex items-center gap-1 font-semibold bg-blue-100/70 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors"
+                    >
+                        <i className="bi bi-question-circle"></i> Panduan Dropbox
+                    </button>
+                    {savedCloudConfig.dropboxRefreshToken && (
+                        <span className="text-green-600 text-xs font-bold bg-green-100 px-2.5 py-1 rounded-full border border-green-200 flex items-center gap-1">
+                            <i className="bi bi-check-circle-fill"></i> Terhubung
+                        </span>
+                    )}
+                </div>
             </div>
 
-            <div className="rounded-[18px] border border-blue-200 bg-blue-100 p-3 text-[11px] text-blue-900">
-                <strong>Kredensial Aplikasi:</strong> Masukkan App Key & Secret dari <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noreferrer" className="underline font-bold">Dropbox Console</a>. Keduanya wajib diisi untuk keamanan enkripsi saat membagikan akses (Pairing Code).
+            <div className="rounded-[18px] border border-blue-200 bg-blue-100 p-3 text-[11px] text-blue-900 space-y-1">
+                <div>
+                    <strong>Kredensial Aplikasi:</strong> Masukkan App Key &amp; Secret dari <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noreferrer" className="underline font-bold">Dropbox Developer Console</a>. Keduanya wajib diisi untuk keamanan enkripsi saat membagikan akses (Pairing Code).
+                </div>
+                <div className="text-[10px] text-blue-800 pt-1 border-t border-blue-200/60 flex items-start gap-1.5">
+                    <i className="bi bi-info-circle-fill text-blue-600 shrink-0 mt-0.5"></i>
+                    <span><strong>Info Kuota Perangkat:</strong> Dropbox Basic gratis membatasi maksimal 3 perangkat terhubung per akun. Jika pesantren Anda mengoperasikan &gt;3 laptop/perangkat admin, gunakan opsi <strong>Cloudflare R2</strong> (10 GB gratis, tanpa batas perangkat) atau <strong>WebDAV</strong>.</span>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

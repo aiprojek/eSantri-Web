@@ -48,6 +48,18 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // Never intercept or cache dev server resources or Vite dependencies
+  if (
+    SW_VERSION === '__BUILD_TIMESTAMP__' ||
+    url.pathname.includes('/@vite/') ||
+    url.pathname.includes('/@fs/') ||
+    url.pathname.includes('/node_modules/') ||
+    url.pathname.endsWith('.tsx') ||
+    url.pathname.endsWith('.ts')
+  ) {
+    return;
+  }
+
   // 1. Version checking: Always Network-Only (no-store)
   if (url.pathname === '/version.json') {
     event.respondWith(

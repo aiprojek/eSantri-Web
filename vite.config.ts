@@ -102,6 +102,12 @@ export default defineConfig(({ mode }) => {
     define: {
       __APP_VERSION__: JSON.stringify(buildTimestamp),
     },
+    resolve: {
+      dedupe: ['dexie', 'dexie-react-hooks', 'react', 'react-dom'],
+    },
+    optimizeDeps: {
+      include: ['dexie', 'dexie-react-hooks'],
+    },
     server: {
       port: 3000,
       host: '0.0.0.0',

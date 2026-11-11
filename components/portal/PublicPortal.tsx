@@ -5,6 +5,7 @@ import {
     decodePortalKey,
     fetchPortalPublicInfoFromGas,
     loginPortalSantriViaGas,
+    getLocalSantriSummary,
     PortalSantriSummary,
     submitPortalPsbToGas
 } from '../../services/portalGasService';
@@ -161,6 +162,7 @@ export const PublicPortal: React.FC = () => {
         const fetchTenantData = async () => {
             try {
                 let conn = resolvePortalConnectionFromUrl(tenantId);
+                const isPreview = searchParams.get('preview') === 'true' || searchParams.get('mode') === 'preview';
 
                 // Fallback otomatis jika gasEndpoint belum ada di URL dan jenisnya PSB
                 if (!conn.gasEndpoint && portalType === 'psb') {
@@ -198,26 +200,23 @@ export const PublicPortal: React.FC = () => {
 
                 setResolvedConn(conn);
 
-                if (!conn.gasEndpoint) {
-                    if (portalType === 'psb') {
-                        throw new Error('Koneksi Pendaftaran PSB belum terhubung ke Google Apps Script (GAS). Pastikan Admin telah mengatur URL GAS di menu PSB.');
-                    }
-                    throw new Error('Koneksi Portal belum terkonfigurasi. Pastikan menggunakan tautan Portal Wali resmi dari pihak pondok.');
-                }
-
+                // Cek apakah database lokal tersedia (Admin / Preview Mode / Localhost)
+                let localSett: PondokSettings | undefined = undefined;
                 try {
-                    const publicBundle = await fetchPortalPublicInfoFromGas(conn.gasEndpoint, conn.portalId, conn.gasApiKey);
-                    const isBundleValid = publicBundle.settings && 
-                        typeof publicBundle.settings === 'object' && 
-                        !Array.isArray(publicBundle.settings) &&
-                        ((publicBundle.settings as any).namaPonpes || (publicBundle.settings as any).psbConfig);
+                    localSett = await db.settings.toCollection().first();
+                } catch {}
 
-                    if (isBundleValid && publicBundle.settings) {
-                        let finalSettings = publicBundle.settings;
-                        // Jika dibuka di browser yang memiliki database lokal (admin/pondok), 
-                        // gabungkan psbConfig lokal agar desain terbaru yang belum sempat disinkronkan tetap tampil
-                        try {
-                            const localSett = await db.settings.toCollection().first();
+                // Jika ada endpoint GAS, coba ambil dari GAS
+                if (conn.gasEndpoint) {
+                    try {
+                        const publicBundle = await fetchPortalPublicInfoFromGas(conn.gasEndpoint, conn.portalId, conn.gasApiKey);
+                        const isBundleValid = publicBundle.settings && 
+                            typeof publicBundle.settings === 'object' && 
+                            !Array.isArray(publicBundle.settings) &&
+                            ((publicBundle.settings as any).namaPonpes || (publicBundle.settings as any).psbConfig);
+
+                        if (isBundleValid && publicBundle.settings) {
+                            let finalSettings = publicBundle.settings;
                             if (localSett?.psbConfig) {
                                 finalSettings = {
                                     ...publicBundle.settings,
@@ -228,32 +227,79 @@ export const PublicPortal: React.FC = () => {
                                         ...publicBundle.settings.psbConfig,
                                         ...localSett.psbConfig,
                                         templates: (localSett.psbConfig.templates && localSett.psbConfig.templates.length > 0)
-                                            ? localSett.psbConfig.templates
-                                            : publicBundle.settings.psbConfig?.templates
+                                             ? localSett.psbConfig.templates
+                                             : publicBundle.settings.psbConfig?.templates
                                     }
                                 };
                             }
-                        } catch {}
-                        setTenantSettings(finalSettings);
-                        setSyncedAt(publicBundle.syncedAt);
-                        setIsLegacyGasWarning(Boolean(publicBundle.isLegacyGas));
-                        setLegacySantriList(publicBundle.legacySantriSummary || []);
-                    } else if (portalType === 'psb') {
-                        // GAS script PSB standar (atau respon array pendaftar) tidak mengembalikan profil lengkap,
-                        // muat konfigurasi formulir dari database lokal
-                        const localSett = await db.settings.toCollection().first();
-                        setTenantSettings(localSett || initialSettings);
-                    } else {
-                        setError('Data profil pesantren belum ditemukan di server Portal.');
+                            setTenantSettings(finalSettings);
+                            setSyncedAt(publicBundle.syncedAt);
+                            setIsLegacyGasWarning(Boolean(publicBundle.isLegacyGas));
+                            setLegacySantriList(publicBundle.legacySantriSummary || []);
+                            return;
+                        }
+                    } catch (gasErr) {
+                        console.warn('Gagal ambil dari GAS, mencoba fallback lokal:', gasErr);
                     }
-                } catch (gasErr) {
-                    // Jika fetch info gagal tetapi ini pendaftaran PSB dan GAS aktif
+                }
+
+                // Cek provider lain jika ada setting lokal
+                if (localSett) {
+                    const prov = localSett.portalConfig?.provider;
+
+                    // Provider: Cloudflare Worker
+                    if (prov === 'cloudflare' && localSett.portalConfig?.cloudflareWorkerUrl) {
+                        try {
+                            const cfUrl = localSett.portalConfig.cloudflareWorkerUrl.replace(/\/+$/, '');
+                            const cfRes = await fetch(`${cfUrl}?action=getPortalPublicInfo&portalId=${encodeURIComponent(conn.portalId)}`);
+                            if (cfRes.ok) {
+                                const cfData = await cfRes.json();
+                                if (cfData?.settings) {
+                                    setTenantSettings(cfData.settings);
+                                    setSyncedAt(cfData.updatedAt || localSett.portalConfig?.lastSyncedAt);
+                                    return;
+                                }
+                            }
+                        } catch (cfErr) {
+                            console.warn('Gagal ambil dari Cloudflare Worker:', cfErr);
+                        }
+                    }
+
+                    // Provider: Supabase
+                    if (prov === 'supabase' && localSett.portalConfig?.supabaseUrl && localSett.portalConfig?.supabaseAnonKey) {
+                        try {
+                            const sbUrl = localSett.portalConfig.supabaseUrl.replace(/\/+$/, '');
+                            const tbl = localSett.portalConfig.supabaseTable || 'portal_data';
+                            const sbRes = await fetch(`${sbUrl}/rest/v1/${tbl}?portal_id=eq.${encodeURIComponent(conn.portalId)}&select=payload,updated_at`, {
+                                headers: {
+                                    'apikey': localSett.portalConfig.supabaseAnonKey,
+                                    'Authorization': `Bearer ${localSett.portalConfig.supabaseAnonKey}`,
+                                }
+                            });
+                            if (sbRes.ok) {
+                                const rows = await sbRes.json();
+                                if (Array.isArray(rows) && rows[0]?.payload?.settings) {
+                                    setTenantSettings(rows[0].payload.settings);
+                                    setSyncedAt(rows[0].updated_at || rows[0].payload.metadata?.updatedAt);
+                                    return;
+                                }
+                            }
+                        } catch (sbErr) {
+                            console.warn('Gagal ambil dari Supabase:', sbErr);
+                        }
+                    }
+
+                    // Local fallback / Preview Mode
+                    setTenantSettings(localSett);
+                    setSyncedAt(localSett.portalConfig?.lastSyncedAt || new Date().toISOString());
+                    return;
+                }
+
+                if (!conn.gasEndpoint) {
                     if (portalType === 'psb') {
-                        const localSett = await db.settings.toCollection().first();
-                        setTenantSettings(localSett || initialSettings);
-                    } else {
-                        throw gasErr;
+                        throw new Error('Koneksi Pendaftaran PSB belum terhubung ke Google Apps Script (GAS). Pastikan Admin telah mengatur URL GAS di menu PSB.');
                     }
+                    throw new Error('Koneksi Portal belum terkonfigurasi. Pastikan menggunakan tautan Portal Wali resmi dari pihak pondok atau aktifkan mode Pratinjau.');
                 }
             } catch (err) {
                 console.error('Portal error:', err);
@@ -374,17 +420,79 @@ export const PublicPortal: React.FC = () => {
         setIsLoggingIn(true);
         setLoginNotice('');
         try {
-            const matched = await loginPortalSantriViaGas(
-                resolvedConn.gasEndpoint,
-                resolvedConn.portalId,
-                normalizedNis,
-                dobInput.trim(),
-                resolvedConn.gasApiKey,
-                legacySantriList
-            );
+            let matched: PortalSantriSummary | null = null;
+
+            if (resolvedConn.gasEndpoint) {
+                try {
+                    matched = await loginPortalSantriViaGas(
+                        resolvedConn.gasEndpoint,
+                        resolvedConn.portalId,
+                        normalizedNis,
+                        dobInput.trim(),
+                        resolvedConn.gasApiKey,
+                        legacySantriList
+                    );
+                } catch (gasErr) {
+                    console.warn('Login via GAS gagal, mencoba provider berikutnya:', gasErr);
+                }
+            }
+
+            // Cek Cloudflare Worker jika provider cloudflare
+            if (!matched && tenantSettings?.portalConfig?.provider === 'cloudflare' && tenantSettings.portalConfig.cloudflareWorkerUrl) {
+                try {
+                    const cfUrl = tenantSettings.portalConfig.cloudflareWorkerUrl.replace(/\/+$/, '');
+                    const cfRes = await fetch(`${cfUrl}?action=loginSantri&portalId=${encodeURIComponent(resolvedConn.portalId)}&nis=${encodeURIComponent(normalizedNis)}&dob=${encodeURIComponent(dobInput.trim())}`);
+                    if (cfRes.ok) {
+                        const cfJson = await cfRes.json();
+                        if (cfJson?.success && cfJson?.data?.santri) {
+                            matched = cfJson.data.santri;
+                        }
+                    }
+                } catch (cfErr) {
+                    console.warn('Login via Cloudflare Worker gagal:', cfErr);
+                }
+            }
+
+            // Cek Supabase jika provider supabase
+            if (!matched && tenantSettings?.portalConfig?.provider === 'supabase' && tenantSettings.portalConfig.supabaseUrl && tenantSettings.portalConfig.supabaseAnonKey) {
+                try {
+                    const sbUrl = tenantSettings.portalConfig.supabaseUrl.replace(/\/+$/, '');
+                    const tbl = tenantSettings.portalConfig.supabaseTable || 'portal_data';
+                    const sbRes = await fetch(`${sbUrl}/rest/v1/${tbl}?portal_id=eq.${encodeURIComponent(resolvedConn.portalId)}&select=payload`, {
+                        headers: {
+                            'apikey': tenantSettings.portalConfig.supabaseAnonKey,
+                            'Authorization': `Bearer ${tenantSettings.portalConfig.supabaseAnonKey}`,
+                        }
+                    });
+                    if (sbRes.ok) {
+                        const rows = await sbRes.json();
+                        const list: PortalSantriSummary[] = rows[0]?.payload?.santriSummary || [];
+                        const cleanNis = normalizedNis.toLowerCase();
+                        const cleanDob = dobInput.trim().slice(0, 10);
+                        const found = list.find(s => (s.nis || '').replace(/\s+/g, '').toLowerCase() === cleanNis && (s.tanggalLahir || '').slice(0, 10) === cleanDob);
+                        if (found) matched = found;
+                    }
+                } catch (sbErr) {
+                    console.warn('Login via Supabase gagal:', sbErr);
+                }
+            }
+
+            // Fallback ke legacySantriList jika ada
+            if (!matched && legacySantriList && legacySantriList.length > 0) {
+                const cleanNis = normalizedNis.toLowerCase();
+                const cleanDob = dobInput.trim().slice(0, 10);
+                const found = legacySantriList.find(s => (s.nis || '').replace(/\s+/g, '').toLowerCase() === cleanNis && (s.tanggalLahir || '').slice(0, 10) === cleanDob);
+                if (found) matched = found;
+            }
+
+            // Fallback ke database lokal untuk Mode Pratinjau / Testing Mandiri
+            if (!matched) {
+                matched = await getLocalSantriSummary(normalizedNis, dobInput.trim(), tenantSettings || undefined);
+            }
+
             if (!matched) {
                 setLoggedInSantri(null);
-                setLoginNotice('NIS atau tanggal lahir tidak sesuai. Silakan periksa kembali.');
+                setLoginNotice('NIS atau tanggal lahir tidak sesuai dengan data santri aktif. Silakan periksa kembali.');
                 return;
             }
             setLoggedInSantri(matched);
@@ -414,25 +522,25 @@ export const PublicPortal: React.FC = () => {
     const waContact = portalContacts.find(c => c.icon === 'bi-whatsapp');
 
     return (
-        <div className={`min-h-screen bg-gradient-to-br ${theme.bgGradient} flex items-center justify-center p-3 sm:p-6`}>
-            <div className={`bg-white rounded-3xl shadow-2xl text-center w-full border ${theme.borderLight} ${loggedInSantri ? 'max-w-5xl p-4 sm:p-7' : 'max-w-lg p-6 sm:p-8'}`}>
+        <div className={`min-h-screen bg-gradient-to-br ${theme.bgGradient} flex items-center justify-center p-2.5 sm:p-6`}>
+            <div className={`bg-white rounded-2xl sm:rounded-3xl shadow-2xl text-center w-full border ${theme.borderLight} ${loggedInSantri ? 'max-w-5xl p-3 sm:p-6 md:p-7' : 'max-w-lg p-4 sm:p-7 md:p-8'}`}>
                 {!loggedInSantri && (
                     <div className="flex flex-col items-center mb-5">
                         {tenantSettings.logoPonpesUrl ? (
-                            <img src={tenantSettings.logoPonpesUrl} alt="Logo" className="w-18 h-18 rounded-2xl mb-3 object-contain bg-white p-1.5" referrerPolicy="no-referrer" />
+                            <img src={tenantSettings.logoPonpesUrl} alt="Logo" className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl mb-3 object-contain bg-white p-1.5" referrerPolicy="no-referrer" />
                         ) : (
-                            <div className={`w-16 h-16 rounded-2xl ${theme.btnPrimary} flex items-center justify-center text-white text-2xl font-bold mb-3 shadow-md`}>
+                            <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl ${theme.btnPrimary} flex items-center justify-center text-white text-xl sm:text-2xl font-bold mb-3 shadow-md`}>
                                 {(tenantSettings.namaPonpes || 'E').charAt(0)}
                             </div>
                         )}
-                        <h1 className={`text-xl sm:text-2xl font-extrabold ${theme.textDark} mb-1`}>{tenantSettings.namaPonpes}</h1>
+                        <h1 className={`text-lg sm:text-2xl font-extrabold ${theme.textDark} mb-1 break-words max-w-full px-2`}>{tenantSettings.namaPonpes}</h1>
                         <div className="text-amber-600 font-extrabold uppercase tracking-widest text-[11px] mb-2 flex items-center gap-1.5">
                             <i className="bi bi-shield-lock-fill"></i> Portal Resmi Wali Santri
                         </div>
-                        <p className="text-xs text-slate-500 max-w-sm">{portalConfig?.welcomeMessage || 'Selamat Datang di Portal Informasi Akademik, Asrama & Keuangan Santri'}</p>
+                        <p className="text-xs text-slate-500 max-w-sm px-2">{portalConfig?.welcomeMessage || 'Selamat Datang di Portal Informasi Akademik, Asrama & Keuangan Santri'}</p>
                         {syncedAt && (
-                            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[10px] font-semibold text-slate-600">
-                                <i className="bi bi-cloud-check-fill text-emerald-600"></i> Sinkron Terakhir: {formatDateId(syncedAt)}
+                            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[10px] font-semibold text-slate-600 max-w-full truncate">
+                                <i className="bi bi-cloud-check-fill text-emerald-600 shrink-0"></i> <span className="truncate">Sinkron Terakhir: {formatDateId(syncedAt)}</span>
                             </span>
                         )}
                     </div>
@@ -489,18 +597,18 @@ export const PublicPortal: React.FC = () => {
                         </form>
 
                         {announcementPosts.length > 0 && (
-                            <div className={`text-left mb-6 rounded-2xl border ${theme.borderLight} ${theme.bgLight} p-4`}>
+                            <div className={`text-left mb-6 rounded-2xl border ${theme.borderLight} ${theme.bgLight} p-3.5 sm:p-4`}>
                                 <h3 className={`mb-2.5 text-xs font-extrabold uppercase tracking-wider ${theme.textDark} flex items-center gap-1.5`}>
                                     <i className="bi bi-megaphone-fill"></i> Pengumuman Pondok
                                 </h3>
                                 <div className="space-y-2">
                                     {announcementPosts.slice(0, 3).map((post) => (
                                         <div key={post.id} className="rounded-xl bg-white p-3 border border-slate-200/80 shadow-xs">
-                                            <div className="flex items-center justify-between gap-2 mb-1">
-                                                <p className="text-xs font-bold text-slate-800">{post.title || 'Pengumuman'}</p>
-                                                <span className="text-[10px] text-slate-400">{formatDateId(post.publishedAt)}</span>
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+                                                <p className="text-xs font-bold text-slate-800 break-words">{post.title || 'Pengumuman'}</p>
+                                                <span className="text-[10px] text-slate-400 shrink-0">{formatDateId(post.publishedAt)}</span>
                                             </div>
-                                            <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">{post.content}</p>
+                                            <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed break-words">{post.content}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -510,17 +618,17 @@ export const PublicPortal: React.FC = () => {
                         {portalContacts.length > 0 && (
                             <div className="mt-6 border-t border-slate-100 pt-4">
                                 <p className="text-[11px] text-center text-slate-500 mb-3 font-medium">Butuh bantuan? Hubungi Pengurus Pondok:</p>
-                                <div className="flex flex-wrap justify-center gap-2">
+                                <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2">
                                     {portalContacts.map((c) => (
                                         <a
                                             key={c.id}
                                             href={normalizeExternalUrl(c.value || '', c.icon)}
                                             target="_blank"
                                             rel="noreferrer"
-                                            className={`inline-flex items-center gap-1.5 rounded-full border ${theme.borderLight} ${theme.bgLight} px-3.5 py-1.5 text-xs font-bold ${theme.textPrimary} hover:opacity-90 transition-opacity`}
+                                            className={`inline-flex items-center gap-1.5 rounded-full border ${theme.borderLight} ${theme.bgLight} px-3 py-1.5 text-[11px] sm:text-xs font-bold ${theme.textPrimary} hover:opacity-90 transition-opacity max-w-full`}
                                         >
-                                            <i className={`bi ${c.icon}`}></i>
-                                            <span>{c.label}</span>
+                                            <i className={`bi ${c.icon} shrink-0`}></i>
+                                            <span className="truncate">{c.label}</span>
                                         </a>
                                     ))}
                                 </div>
@@ -529,36 +637,23 @@ export const PublicPortal: React.FC = () => {
                     </>
                 ) : (
                     <div className="mb-2 text-left">
-                        {/* HEADER PROFIL SANTRI */}
-                        <div className={`rounded-2xl bg-gradient-to-r ${theme.bannerGradient} text-white p-5 sm:p-6 shadow-lg`}>
-                            <div className="flex flex-wrap items-start justify-between gap-4">
-                                <div>
-                                    <div className="flex items-center gap-2 text-xs font-semibold text-white/80 mb-1">
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-[11px]">
-                                            <i className="bi bi-check-circle-fill"></i> {loggedInSantri.statusSantri || 'Aktif'}
+                        {/* HEADER PROFIL SANTRI - DISUSUN KE BAWAH DENGAN RAPIH */}
+                        <div className={`rounded-2xl bg-gradient-to-r ${theme.bannerGradient} text-white p-4 sm:p-5 shadow-lg`}>
+                            {/* Baris Atas: Status Santri & Waktu Sinkronisasi (Kiri) + Tombol Keluar (Kanan) */}
+                            <div className="flex items-center justify-between gap-2 border-b border-white/15 pb-3">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-semibold shrink-0">
+                                        <i className="bi bi-check-circle-fill"></i> {loggedInSantri.statusSantri || 'Aktif'}
+                                    </span>
+                                    {syncedAt && (
+                                        <span className="text-[11px] text-white/80 truncate">
+                                            • Diperbarui {formatDateId(syncedAt)}
                                         </span>
-                                        {syncedAt && <span>• Diperbarui {formatDateId(syncedAt)}</span>}
-                                    </div>
-                                    <h2 className="text-xl sm:text-2xl font-extrabold">{loggedInSantri.namaLengkap}</h2>
-                                    <p className="text-xs text-white/90 mt-1">
-                                        NIS: <strong>{loggedInSantri.nis}</strong> • Wali: <strong>{loggedInSantri.namaWali || '-'}</strong>
-                                    </p>
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                        <span className="inline-flex items-center gap-1 rounded-lg bg-black/20 px-2.5 py-1 text-[11px] font-medium">
-                                            <i className="bi bi-mortarboard-fill"></i>
-                                            {loggedInSantri.jenjangNama || jenjangMap.get(loggedInSantri.jenjangId) || '-'} / {loggedInSantri.kelasNama || kelasMap.get(loggedInSantri.kelasId) || '-'} / {loggedInSantri.rombelNama || rombelMap.get(loggedInSantri.rombelId) || '-'}
-                                        </span>
-                                        {loggedInSantri.kamarNama && (
-                                            <span className="inline-flex items-center gap-1 rounded-lg bg-black/20 px-2.5 py-1 text-[11px] font-medium">
-                                                <i className="bi bi-house-heart-fill"></i>
-                                                Kamar: {loggedInSantri.kamarNama} {loggedInSantri.asramaNama ? `(${loggedInSantri.asramaNama})` : ''}
-                                            </span>
-                                        )}
-                                    </div>
+                                    )}
                                 </div>
                                 <button
                                     type="button"
-                                    className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/15 hover:bg-white/25 border border-white/25 rounded-xl px-3.5 py-2 transition-colors"
+                                    className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/15 hover:bg-white/25 border border-white/25 rounded-xl px-3 py-1.5 transition-colors shrink-0"
                                     onClick={() => {
                                         setLoggedInSantri(null);
                                         setNisInput('');
@@ -569,46 +664,91 @@ export const PublicPortal: React.FC = () => {
                                     <i className="bi bi-box-arrow-right"></i> Keluar
                                 </button>
                             </div>
+
+                            {/* Susunan Ke Bawah: Nama Santri, NIS, Wali, dan Tag Penempatan */}
+                            <div className="pt-3 space-y-2.5">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-12 h-12 rounded-full bg-white text-slate-900 font-extrabold text-base flex items-center justify-center shrink-0 shadow-md">
+                                        {(loggedInSantri.namaLengkap || 'SN').slice(0, 2).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <h2 className="text-lg sm:text-2xl font-extrabold leading-tight break-words">
+                                            {loggedInSantri.namaLengkap}
+                                        </h2>
+                                        <p className="text-xs text-white/90 mt-1 break-words">
+                                            NIS: <strong>{loggedInSantri.nis}</strong> • Wali: <strong>{loggedInSantri.namaWali || '-'}</strong>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Chips Data Santri disusun rapih ke bawah & fleksibel membungkus */}
+                                <div className="flex flex-wrap gap-1.5 sm:gap-2 pt-0.5">
+                                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-black/20 border border-white/10 px-2.5 py-1 text-[11px] font-medium max-w-full">
+                                        <i className="bi bi-mortarboard-fill text-amber-300 shrink-0"></i>
+                                        <span className="truncate">{loggedInSantri.jenjangNama || jenjangMap.get(loggedInSantri.jenjangId) || '-'} • {loggedInSantri.kelasNama || kelasMap.get(loggedInSantri.kelasId) || '-'} • {loggedInSantri.rombelNama || rombelMap.get(loggedInSantri.rombelId) || '-'}</span>
+                                    </span>
+                                    {loggedInSantri.kamarNama && (
+                                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-black/20 border border-white/10 px-2.5 py-1 text-[11px] font-medium max-w-full">
+                                            <i className="bi bi-house-heart-fill text-emerald-300 shrink-0"></i>
+                                            <span className="truncate">Kamar: {loggedInSantri.kamarNama} {loggedInSantri.asramaNama ? `(${loggedInSantri.asramaNama})` : ''}</span>
+                                        </span>
+                                    )}
+                                    {loggedInSantri.waliKelasNama && (
+                                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-black/20 border border-white/10 px-2.5 py-1 text-[11px] font-medium max-w-full">
+                                            <i className="bi bi-person-badge-fill text-blue-200 shrink-0"></i>
+                                            <span className="truncate">Wali Kelas: {loggedInSantri.waliKelasNama}</span>
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
                         </div>
 
                         {isLegacyGasWarning && (
                             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-[11px] text-amber-800 flex items-center gap-2">
-                                <i className="bi bi-shield-exclamation text-amber-600 text-sm"></i>
+                                <i className="bi bi-shield-exclamation text-amber-600 text-sm shrink-0"></i>
                                 <span>Info Admin: Script Google Apps Script masih menggunakan versi v1. Perbarui ke Script GAS v2 di Pengaturan Portal untuk mengaktifkan proteksi Server-Side Login.</span>
                             </div>
                         )}
 
-                        {/* RINGKASAN 4 KARTU UTAMA */}
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 shadow-xs">
-                                <p className="text-[11px] font-semibold text-slate-500 uppercase">Total Tunggakan</p>
-                                <p className={`text-base sm:text-lg font-extrabold mt-0.5 ${(loggedInSantri.totalTunggakan ?? loggedInSantri.tunggakanBulanIni) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                    {formatRupiah(loggedInSantri.totalTunggakan ?? loggedInSantri.tunggakanBulanIni)}
-                                </p>
-                                <p className="text-[10px] text-slate-500 mt-0.5">{loggedInSantri.daftarTunggakan?.length || 0} tagihan belum lunas</p>
+                        {/* RINGKASAN 4 KARTU UTAMA (2X2 DI PONSEL & TABLET) */}
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 mt-4">
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-3.5 shadow-xs min-w-0 flex flex-col justify-between">
+                                <div>
+                                    <p className="text-[11px] font-semibold text-slate-500 uppercase truncate">Total Tunggakan</p>
+                                    <p className={`text-sm sm:text-base lg:text-lg font-extrabold mt-0.5 truncate ${(loggedInSantri.totalTunggakan ?? loggedInSantri.tunggakanBulanIni) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                        {formatRupiah(loggedInSantri.totalTunggakan ?? loggedInSantri.tunggakanBulanIni)}
+                                    </p>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-1 truncate">{loggedInSantri.daftarTunggakan?.length || 0} tagihan aktif</p>
                             </div>
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 shadow-xs">
-                                <p className="text-[11px] font-semibold text-slate-500 uppercase">Saldo Tabungan</p>
-                                <p className="text-base sm:text-lg font-extrabold text-teal-700 mt-0.5">
-                                    {formatRupiah(loggedInSantri.saldoTabungan)}
-                                </p>
-                                <p className="text-[10px] text-slate-500 mt-0.5">Simpanan santri aktif</p>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-3.5 shadow-xs min-w-0 flex flex-col justify-between">
+                                <div>
+                                    <p className="text-[11px] font-semibold text-slate-500 uppercase truncate">Saldo Tabungan</p>
+                                    <p className="text-sm sm:text-base lg:text-lg font-extrabold text-teal-700 mt-0.5 truncate">
+                                        {formatRupiah(loggedInSantri.saldoTabungan)}
+                                    </p>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-1 truncate">Simpanan santri aktif</p>
                             </div>
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 shadow-xs">
-                                <p className="text-[11px] font-semibold text-slate-500 uppercase">Presensi Hari Ini</p>
-                                <p className="text-base sm:text-lg font-extrabold text-slate-800 mt-0.5">
-                                    {loggedInSantri.attendanceToday || 'Belum Absen'}
-                                </p>
-                                <p className="text-[10px] text-slate-500 mt-0.5">
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-3.5 shadow-xs min-w-0 flex flex-col justify-between">
+                                <div>
+                                    <p className="text-[11px] font-semibold text-slate-500 uppercase truncate">Presensi Hari Ini</p>
+                                    <p className="text-sm sm:text-base lg:text-lg font-extrabold text-slate-800 mt-0.5 truncate">
+                                        {loggedInSantri.attendanceToday || 'Belum Absen'}
+                                    </p>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-1 truncate">
                                     Bulan Ini: {loggedInSantri.rekapBulanIni?.hadir || 0}H / {loggedInSantri.rekapBulanIni?.izin || 0}I / {loggedInSantri.rekapBulanIni?.sakit || 0}S
                                 </p>
                             </div>
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 shadow-xs">
-                                <p className="text-[11px] font-semibold text-slate-500 uppercase">Target &amp; Tahfizh</p>
-                                <p className="text-base sm:text-lg font-extrabold text-indigo-700 mt-0.5">
-                                    {loggedInSantri.targetJuz ? `Target ${loggedInSantri.targetJuz} Juz` : (loggedInSantri.tahfizhTerakhir?.surah || '-')}
-                                </p>
-                                <p className="text-[10px] text-slate-500 mt-0.5 truncate">
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-3.5 shadow-xs min-w-0 flex flex-col justify-between">
+                                <div>
+                                    <p className="text-[11px] font-semibold text-slate-500 uppercase truncate">Target &amp; Tahfizh</p>
+                                    <p className="text-sm sm:text-base lg:text-lg font-extrabold text-indigo-700 mt-0.5 truncate">
+                                        {loggedInSantri.targetJuz ? `Target ${loggedInSantri.targetJuz} Juz` : (loggedInSantri.tahfizhTerakhir?.surah || '-')}
+                                    </p>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-1 truncate">
                                     {loggedInSantri.tahfizhTerakhir ? `Terakhir: ${loggedInSantri.tahfizhTerakhir.surah}` : 'Setoran Al-Qur\'an'}
                                 </p>
                             </div>
@@ -635,14 +775,14 @@ export const PublicPortal: React.FC = () => {
                         )}
 
                         {/* NAVIGASI TAB FITUR */}
-                        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-2">
-                            <div className="flex gap-2 overflow-x-auto pb-0.5">
+                        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 sm:p-2">
+                            <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-0.5 scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                                 {featureItems.map((item) => (
                                     <button
                                         key={item.key}
                                         type="button"
                                         onClick={() => setActiveFeature(item.key as typeof activeFeature)}
-                                        className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                        className={`shrink-0 rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2 text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1.5 ${
                                             activeFeature === item.key
                                                 ? `${theme.btnPrimary} shadow-xs`
                                                 : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
@@ -656,44 +796,60 @@ export const PublicPortal: React.FC = () => {
                         </div>
 
                         {/* ISI PANEL AKTIF */}
-                        <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
+                        <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-xs">
                             {activeFeature === 'keuangan' && (
-                                <div className="space-y-5">
-                                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                                        <div>
+                                <div className="space-y-4 sm:space-y-5">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                                        <div className="min-w-0 flex-1">
                                             <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-                                                <i className="bi bi-cash-stack text-teal-600"></i> Rincian Keuangan & Tagihan Santri
+                                                <i className="bi bi-cash-stack text-teal-600"></i> Rincian Keuangan &amp; Tagihan Santri
                                             </h3>
-                                            <p className="text-xs text-slate-500">Daftar tagihan aktif, tunggakan, dan riwayat pembayaran terakhir.</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">Daftar tagihan aktif, tunggakan, dan riwayat pembayaran terakhir.</p>
                                         </div>
-                                        {waContact && (
-                                            <a
-                                                href={`${normalizeExternalUrl(waContact.value, 'bi-whatsapp')}?text=${encodeURIComponent(`Assalamu'alaikum Admin Keuangan ${tenantSettings.namaPonpes}, saya Wali dari ${loggedInSantri.namaLengkap} (NIS: ${loggedInSantri.nis}) ingin melakukan konfirmasi pembayaran syahriyah/tagihan.`)}`}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-colors"
-                                            >
-                                                <i className="bi bi-whatsapp"></i> Konfirmasi Pembayaran via WA
-                                            </a>
-                                        )}
+                                        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto mt-0.5 sm:mt-0">
+                                            <span className={`self-start sm:self-auto rounded-full px-2.5 py-1 text-xs font-bold shrink-0 shadow-2xs ${
+                                                (loggedInSantri.totalTunggakan ?? loggedInSantri.tunggakanBulanIni) > 0
+                                                    ? 'bg-rose-100 text-rose-800'
+                                                    : 'bg-emerald-100 text-emerald-800'
+                                            }`}>
+                                                <i className={`bi mr-1 ${
+                                                    (loggedInSantri.totalTunggakan ?? loggedInSantri.tunggakanBulanIni) > 0
+                                                        ? 'bi-exclamation-circle-fill'
+                                                        : 'bi-check-circle-fill'
+                                                }`}></i>
+                                                {(loggedInSantri.totalTunggakan ?? loggedInSantri.tunggakanBulanIni) > 0
+                                                    ? `${loggedInSantri.daftarTunggakan?.length || 1} Tagihan Aktif`
+                                                    : 'Semua Lunas'}
+                                            </span>
+                                            {waContact && (
+                                                <a
+                                                    href={`${normalizeExternalUrl(waContact.value, 'bi-whatsapp')}?text=${encodeURIComponent(`Assalamu'alaikum Admin Keuangan ${tenantSettings.namaPonpes}, saya Wali dari ${loggedInSantri.namaLengkap} (NIS: ${loggedInSantri.nis}) ingin melakukan konfirmasi pembayaran syahriyah/tagihan.`)}`}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="inline-flex items-center justify-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-xs font-bold shadow-2xs transition-colors shrink-0"
+                                                >
+                                                    <i className="bi bi-whatsapp"></i> Konfirmasi WA
+                                                </a>
+                                            )}
+                                        </div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                        <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3">
-                                            <span className="text-[11px] font-bold text-rose-700 uppercase">Total Tunggakan</span>
-                                            <p className="text-lg font-extrabold text-rose-700 mt-0.5">
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                                        <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3 min-w-0">
+                                            <span className="text-[11px] font-bold text-rose-700 uppercase truncate block">Total Tunggakan</span>
+                                            <p className="text-base sm:text-lg font-extrabold text-rose-700 mt-0.5 truncate">
                                                 {formatRupiah(loggedInSantri.totalTunggakan ?? loggedInSantri.tunggakanBulanIni)}
                                             </p>
                                         </div>
-                                        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
-                                            <span className="text-[11px] font-bold text-amber-800 uppercase">Tagihan Bulan Ini</span>
-                                            <p className="text-lg font-extrabold text-amber-800 mt-0.5">
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 min-w-0">
+                                            <span className="text-[11px] font-bold text-amber-800 uppercase truncate block">Tagihan Bulan Ini</span>
+                                            <p className="text-base sm:text-lg font-extrabold text-amber-800 mt-0.5 truncate">
                                                 {formatRupiah(loggedInSantri.tunggakanBulanIni)}
                                             </p>
                                         </div>
-                                        <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3">
-                                            <span className="text-[11px] font-bold text-teal-800 uppercase">Saldo Tabungan</span>
-                                            <p className="text-lg font-extrabold text-teal-800 mt-0.5">
+                                        <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3 min-w-0">
+                                            <span className="text-[11px] font-bold text-teal-800 uppercase truncate block">Saldo Tabungan</span>
+                                            <p className="text-base sm:text-lg font-extrabold text-teal-800 mt-0.5 truncate">
                                                 {formatRupiah(loggedInSantri.saldoTabungan)}
                                             </p>
                                         </div>
@@ -706,15 +862,17 @@ export const PublicPortal: React.FC = () => {
                                         {loggedInSantri.daftarTunggakan && loggedInSantri.daftarTunggakan.length > 0 ? (
                                             <div className="space-y-2">
                                                 {loggedInSantri.daftarTunggakan.map((bill, idx) => (
-                                                    <div key={idx} className="flex items-center justify-between rounded-xl border border-rose-100 bg-rose-50/30 px-3.5 py-2.5">
-                                                        <div>
-                                                            <p className="text-xs font-bold text-slate-800">{bill.deskripsi}</p>
+                                                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3 rounded-xl border border-rose-100 bg-rose-50/30 px-3.5 py-2.5">
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-xs font-bold text-slate-800 break-words">{bill.deskripsi}</p>
                                                             <p className="text-[11px] text-slate-500">
                                                                 Periode: Bulan {bill.bulan}/{bill.tahun}
                                                                 {bill.sudahDicicil ? ` • Dicicil: ${formatRupiah(bill.sudahDicicil)}` : ''}
                                                             </p>
                                                         </div>
-                                                        <span className="text-xs font-extrabold text-rose-600">{formatRupiah(bill.nominal)}</span>
+                                                        <span className="text-xs sm:text-sm font-mono font-extrabold text-rose-600 shrink-0 self-end sm:self-auto sm:text-right">
+                                                            {formatRupiah(bill.nominal)}
+                                                        </span>
                                                     </div>
                                                 ))}
                                             </div>
@@ -733,14 +891,16 @@ export const PublicPortal: React.FC = () => {
                                             </h4>
                                             <div className="space-y-2">
                                                 {loggedInSantri.pembayaranTerakhir.map((pay, idx) => (
-                                                    <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
-                                                        <div>
-                                                            <p className="text-xs font-bold text-slate-800">{pay.catatan || 'Pembayaran Tagihan'}</p>
+                                                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-xs font-bold text-slate-800 break-words">{pay.catatan || 'Pembayaran Tagihan'}</p>
                                                             <p className="text-[11px] text-slate-500">
                                                                 {formatDateId(pay.tanggal)} {pay.metode ? `• ${pay.metode}` : ''}
                                                             </p>
                                                         </div>
-                                                        <span className="text-xs font-extrabold text-emerald-700">{formatRupiah(pay.jumlah)}</span>
+                                                        <span className="text-xs sm:text-sm font-mono font-extrabold text-emerald-700 shrink-0 self-end sm:self-auto sm:text-right">
+                                                            {formatRupiah(pay.jumlah)}
+                                                        </span>
                                                     </div>
                                                 ))}
                                             </div>
@@ -754,14 +914,14 @@ export const PublicPortal: React.FC = () => {
                                             </h4>
                                             <div className="space-y-2">
                                                 {loggedInSantri.mutasiTabungan.map((mut, idx) => (
-                                                    <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
-                                                        <div>
-                                                            <p className="text-xs font-bold text-slate-800">{mut.keterangan || mut.jenis}</p>
+                                                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-xs font-bold text-slate-800 break-words">{mut.keterangan || mut.jenis}</p>
                                                             <p className="text-[11px] text-slate-500">
                                                                 {formatDateId(mut.tanggal)} • {mut.jenis}
                                                             </p>
                                                         </div>
-                                                        <span className={`text-xs font-extrabold ${mut.jenis === 'Deposit' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                                        <span className={`text-xs sm:text-sm font-mono font-extrabold shrink-0 self-end sm:self-auto sm:text-right ${mut.jenis === 'Deposit' ? 'text-emerald-700' : 'text-amber-700'}`}>
                                                             {mut.jenis === 'Deposit' ? '+' : '-'}{formatRupiah(mut.jumlah)}
                                                         </span>
                                                     </div>
@@ -774,54 +934,63 @@ export const PublicPortal: React.FC = () => {
 
                             {activeFeature === 'akademik' && (
                                 <div className="space-y-5">
-                                    <div className="border-b border-slate-100 pb-3">
-                                        <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-                                            <i className="bi bi-mortarboard text-teal-600"></i> Informasi Akademik, Kamar Asrama & Pembinaan
-                                        </h3>
-                                        <p className="text-xs text-slate-500">Data penempatan kelas, kamar asrama, nilai rapor terakhir, dan catatan pembinaan.</p>
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+                                                <i className="bi bi-mortarboard text-teal-600"></i> Informasi Akademik, Kamar Asrama &amp; Pembinaan
+                                            </h3>
+                                            <p className="text-xs text-slate-500 mt-0.5">Data penempatan kelas, kamar asrama, nilai rapor terakhir, dan catatan pembinaan.</p>
+                                        </div>
+                                        <span className="self-start sm:self-auto rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-1 text-xs font-bold shrink-0 shadow-2xs mt-0.5 sm:mt-0">
+                                            <i className="bi bi-check-circle-fill mr-1"></i> {loggedInSantri.statusSantri || 'Santri Aktif Mukim'}
+                                        </span>
                                     </div>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                            <span className="text-[10px] font-bold text-slate-500 uppercase">Jenjang & Kelas</span>
-                                            <p className="text-xs font-bold text-slate-800 mt-1">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 min-w-0">
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase truncate block">Jenjang &amp; Kelas</span>
+                                            <p className="text-xs font-bold text-slate-800 mt-1 break-words">
                                                 {loggedInSantri.jenjangNama || jenjangMap.get(loggedInSantri.jenjangId) || '-'} • {loggedInSantri.kelasNama || kelasMap.get(loggedInSantri.kelasId) || '-'}
                                             </p>
                                         </div>
-                                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                            <span className="text-[10px] font-bold text-slate-500 uppercase">Rombongan Belajar</span>
-                                            <p className="text-xs font-bold text-slate-800 mt-1">
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 min-w-0">
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase truncate block">Rombongan Belajar</span>
+                                            <p className="text-xs font-bold text-slate-800 mt-1 break-words">
                                                 {loggedInSantri.rombelNama || rombelMap.get(loggedInSantri.rombelId) || '-'}
                                             </p>
                                         </div>
-                                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                            <span className="text-[10px] font-bold text-slate-500 uppercase">Asrama / Kamar</span>
-                                            <p className="text-xs font-bold text-slate-800 mt-1">
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 min-w-0">
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase truncate block">Asrama / Kamar</span>
+                                            <p className="text-xs font-bold text-slate-800 mt-1 break-words">
                                                 {loggedInSantri.kamarNama ? `${loggedInSantri.kamarNama}${loggedInSantri.asramaNama ? ` (${loggedInSantri.asramaNama})` : ''}` : 'Belum ditentukan'}
                                             </p>
                                         </div>
-                                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                            <span className="text-[10px] font-bold text-slate-500 uppercase">Wali Kelas &amp; Musyrif</span>
-                                            <p className="text-xs font-bold text-slate-800 mt-1">
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 min-w-0">
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase truncate block">Wali Kelas &amp; Musyrif</span>
+                                            <p className="text-xs font-bold text-slate-800 mt-1 break-words">
                                                 {loggedInSantri.waliKelasNama || '-'} / {loggedInSantri.musyrifNama || '-'}
                                             </p>
                                         </div>
                                     </div>
 
                                     {loggedInSantri.raporTerakhir && (
-                                        <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-4 space-y-3">
-                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                                <div>
-                                                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-teal-900">
-                                                        Ringkasan Rapor Terakhir ({loggedInSantri.raporTerakhir.semester} - {loggedInSantri.raporTerakhir.tahunAjaran})
+                                        <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-3.5 sm:p-4 space-y-3 shadow-2xs">
+                                            {/* Rapor Header: Rata-rata diletakkan di bawah evaluasi capaian belajar saat di HP */}
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-teal-200/60 pb-2.5">
+                                                <div className="min-w-0 flex-1">
+                                                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-teal-900 break-words flex items-center gap-1.5">
+                                                        <i className="bi bi-mortarboard text-teal-700"></i> Ringkasan Rapor Terakhir ({loggedInSantri.raporTerakhir.semester} - {loggedInSantri.raporTerakhir.tahunAjaran})
                                                     </h4>
+                                                    <p className="text-[11px] text-teal-700 font-semibold mt-0.5">
+                                                        Evaluasi capaian belajar &amp; nilai santri
+                                                    </p>
                                                     {loggedInSantri.raporTerakhir.keputusan && (
-                                                        <p className="text-[11px] text-teal-700 font-semibold mt-0.5">
+                                                        <p className="text-[10px] text-teal-600 mt-0.5">
                                                             Status: {loggedInSantri.raporTerakhir.keputusan}
                                                         </p>
                                                     )}
                                                 </div>
-                                                <span className="rounded-xl bg-teal-600 text-white px-3 py-1 text-xs font-extrabold">
+                                                <span className="self-start sm:self-auto rounded-full bg-teal-600 text-white px-2.5 py-1 text-xs font-bold shrink-0 shadow-2xs mt-0.5 sm:mt-0">
                                                     Rata-rata:{' '}
                                                     {loggedInSantri.raporTerakhir.hasNumericScores === false ||
                                                     (!loggedInSantri.raporTerakhir.rataRata &&
@@ -833,8 +1002,8 @@ export const PublicPortal: React.FC = () => {
                                             {loggedInSantri.raporTerakhir.mapel && loggedInSantri.raporTerakhir.mapel.length > 0 && (
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                                     {loggedInSantri.raporTerakhir.mapel.map((mp, idx) => (
-                                                        <div key={idx} className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-2">
-                                                            <span className="text-xs font-semibold text-slate-700 truncate pr-2">{mp.nama}</span>
+                                                        <div key={idx} className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-2 min-w-0">
+                                                            <span className="text-xs font-semibold text-slate-700 truncate pr-2 min-w-0 flex-1">{mp.nama}</span>
                                                             <span className="text-xs font-extrabold text-teal-700 shrink-0">
                                                                 {mp.nilai} {mp.predikat ? `(${mp.predikat})` : ''}
                                                             </span>
@@ -843,8 +1012,8 @@ export const PublicPortal: React.FC = () => {
                                                 </div>
                                             )}
                                             {loggedInSantri.raporTerakhir.catatanWaliKelas && (
-                                                <p className="text-xs text-slate-600 bg-white rounded-lg border border-slate-200 p-2.5 italic">
-                                                    Catatan Wali Kelas: "{loggedInSantri.raporTerakhir.catatanWaliKelas}"
+                                                <p className="text-xs text-slate-600 bg-white rounded-lg border border-slate-200 p-2.5 italic break-words">
+                                                    Catatan Wali Kelas: &ldquo;{loggedInSantri.raporTerakhir.catatanWaliKelas}&rdquo;
                                                 </p>
                                             )}
                                         </div>
@@ -857,17 +1026,17 @@ export const PublicPortal: React.FC = () => {
                                             </h4>
                                             <div className="space-y-2">
                                                 {loggedInSantri.catatanPembinaan.map((cat, idx) => (
-                                                    <div key={idx} className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
-                                                        <div>
-                                                            <div className="flex items-center gap-2">
+                                                    <div key={idx} className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex flex-wrap items-center gap-2">
                                                                 <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${cat.kategori === 'Prestasi' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
                                                                     {cat.kategori}
                                                                 </span>
                                                                 <span className="text-[11px] text-slate-400">{formatDateId(cat.tanggal)}</span>
                                                             </div>
-                                                            <p className="text-xs font-bold text-slate-800 mt-1">{cat.deskripsi}</p>
+                                                            <p className="text-xs font-bold text-slate-800 mt-1 break-words">{cat.deskripsi}</p>
                                                             {cat.tindakLanjut && (
-                                                                <p className="text-[11px] text-slate-600 mt-0.5">{cat.tindakLanjut}</p>
+                                                                <p className="text-[11px] text-slate-600 mt-0.5 break-words">{cat.tindakLanjut}</p>
                                                             )}
                                                         </div>
                                                     </div>
@@ -880,34 +1049,39 @@ export const PublicPortal: React.FC = () => {
 
                             {activeFeature === 'presensi' && (
                                 <div className="space-y-4">
-                                    <div className="border-b border-slate-100 pb-3">
-                                        <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-                                            <i className="bi bi-calendar-check text-teal-600"></i> Kehadiran &amp; Rekap Presensi Santri
-                                        </h3>
-                                        <p className="text-xs text-slate-500">Status kehadiran hari ini dan rekapitulasi bulan {loggedInSantri.rekapBulanIni?.bulanLabel || 'berjalan'}.</p>
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+                                                <i className="bi bi-calendar-check text-teal-600"></i> Kehadiran &amp; Rekap Presensi Santri
+                                            </h3>
+                                            <p className="text-xs text-slate-500 mt-0.5">Status kehadiran hari ini dan rekapitulasi bulan {loggedInSantri.rekapBulanIni?.bulanLabel || 'berjalan'}.</p>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto mt-0.5 sm:mt-0">
+                                            <span className="self-start sm:self-auto rounded-full bg-teal-600 text-white px-2.5 py-1 text-xs font-bold shrink-0 shadow-2xs">
+                                                Hari Ini: {loggedInSantri.attendanceToday || 'Belum Absen'}
+                                            </span>
+                                            <span className="self-start sm:self-auto rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-1 text-xs font-bold shrink-0 shadow-2xs">
+                                                {loggedInSantri.rekapBulanIni?.hadir || 0} Hari Hadir
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className="rounded-xl border border-teal-200 bg-teal-50/50 p-3.5 flex items-center justify-between">
-                                        <span className="text-xs font-bold text-teal-900">Status Kehadiran Hari Ini</span>
-                                        <span className="rounded-lg bg-teal-600 text-white px-3 py-1 text-xs font-extrabold">
-                                            {loggedInSantri.attendanceToday || 'Belum Absen'}
-                                        </span>
-                                    </div>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center">
-                                            <p className="text-[11px] font-bold text-emerald-700 uppercase">Hadir</p>
-                                            <p className="text-xl font-extrabold text-emerald-800 mt-1">{loggedInSantri.rekapBulanIni?.hadir || 0}</p>
+                                    {/* Strictly 2x2 di ponsel & tablet (grid-cols-2 lg:grid-cols-4) */}
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+                                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center min-w-0">
+                                            <p className="text-[11px] font-bold text-emerald-700 uppercase truncate">Hadir</p>
+                                            <p className="text-lg sm:text-xl font-extrabold text-emerald-800 mt-1 truncate">{loggedInSantri.rekapBulanIni?.hadir || 0} <span className="text-xs font-semibold text-emerald-600">Hari</span></p>
                                         </div>
-                                        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-center">
-                                            <p className="text-[11px] font-bold text-blue-700 uppercase">Izin</p>
-                                            <p className="text-xl font-extrabold text-blue-800 mt-1">{loggedInSantri.rekapBulanIni?.izin || 0}</p>
+                                        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-center min-w-0">
+                                            <p className="text-[11px] font-bold text-blue-700 uppercase truncate">Sakit</p>
+                                            <p className="text-lg sm:text-xl font-extrabold text-blue-800 mt-1 truncate">{loggedInSantri.rekapBulanIni?.sakit || 0} <span className="text-xs font-semibold text-blue-600">Hari</span></p>
                                         </div>
-                                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
-                                            <p className="text-[11px] font-bold text-amber-700 uppercase">Sakit</p>
-                                            <p className="text-xl font-extrabold text-amber-800 mt-1">{loggedInSantri.rekapBulanIni?.sakit || 0}</p>
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center min-w-0">
+                                            <p className="text-[11px] font-bold text-amber-700 uppercase truncate">Izin</p>
+                                            <p className="text-lg sm:text-xl font-extrabold text-amber-800 mt-1 truncate">{loggedInSantri.rekapBulanIni?.izin || 0} <span className="text-xs font-semibold text-amber-600">Hari</span></p>
                                         </div>
-                                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-center">
-                                            <p className="text-[11px] font-bold text-rose-700 uppercase">Alpha</p>
-                                            <p className="text-xl font-extrabold text-rose-800 mt-1">{loggedInSantri.rekapBulanIni?.alpha || 0}</p>
+                                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-center min-w-0">
+                                            <p className="text-[11px] font-bold text-rose-700 uppercase truncate">Alpha</p>
+                                            <p className="text-lg sm:text-xl font-extrabold text-rose-800 mt-1 truncate">{loggedInSantri.rekapBulanIni?.alpha || 0} <span className="text-xs font-semibold text-rose-600">Hari</span></p>
                                         </div>
                                     </div>
                                 </div>
@@ -915,40 +1089,38 @@ export const PublicPortal: React.FC = () => {
 
                             {activeFeature === 'tahfizh' && (
                                 <div className="space-y-4">
-                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                                        <div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-3">
+                                        <div className="min-w-0 flex-1">
                                             <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-                                                <i className="bi bi-book text-teal-600"></i> Perkembangan Tahfizh Al-Qur'an
+                                                <i className="bi bi-journal-bookmark text-teal-600"></i> Perkembangan Tahfizh Al-Qur'an
                                             </h3>
-                                            <p className="text-xs text-slate-500">Riwayat setoran hafalan (Ziyadah), muroja'ah, dan tasmi' santri.</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">Riwayat setoran hafalan (Ziyadah), muroja'ah, dan tasmi' santri.</p>
                                         </div>
-                                        <div className="flex flex-wrap items-center gap-2">
+                                        <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto mt-0.5 sm:mt-0">
                                             {loggedInSantri.totalJuzHafalan !== undefined && loggedInSantri.totalJuzHafalan > 0 && (
-                                                <span className="rounded-xl bg-emerald-100 text-emerald-800 px-3 py-1.5 text-xs font-extrabold">
+                                                <span className="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-1 text-xs font-bold shrink-0 shadow-2xs">
                                                     Capaian: {loggedInSantri.totalJuzHafalan} Juz
                                                 </span>
                                             )}
-                                            {loggedInSantri.targetJuz !== undefined && loggedInSantri.targetJuz > 0 && (
-                                                <span className="rounded-xl bg-teal-600 text-white px-3.5 py-1.5 text-xs font-extrabold">
-                                                    Target: {loggedInSantri.targetJuz} Juz
-                                                </span>
-                                            )}
+                                            <span className="rounded-full bg-teal-600 text-white px-2.5 py-1 text-xs font-bold shrink-0 shadow-2xs">
+                                                Target: {loggedInSantri.targetJuz || 30} Juz
+                                            </span>
                                         </div>
                                     </div>
 
                                     {loggedInSantri.riwayatTahfizh && loggedInSantri.riwayatTahfizh.length > 0 ? (
                                         <div className="space-y-2">
                                             {loggedInSantri.riwayatTahfizh.map((th, idx) => (
-                                                <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
-                                                    <div>
-                                                        <p className="text-xs font-bold text-slate-800">
+                                                <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-xs font-bold text-slate-800 break-words">
                                                             {th.surah} {th.ayat ? `(Ayat ${th.ayat})` : ''} {th.juz ? `• Juz ${th.juz}` : ''}
                                                         </p>
                                                         <p className="text-[11px] text-slate-500">
                                                             {formatDateId(th.tanggal)} {th.tipe ? `• ${th.tipe}` : ''}
                                                         </p>
                                                     </div>
-                                                    <span className="rounded-lg bg-teal-100 text-teal-800 px-2.5 py-1 text-xs font-bold">
+                                                    <span className="rounded-full bg-teal-100 text-teal-800 px-2.5 py-1 text-xs font-bold shrink-0 self-start sm:self-auto">
                                                         {th.predikat || 'Lancar'}
                                                     </span>
                                                 </div>
@@ -956,7 +1128,7 @@ export const PublicPortal: React.FC = () => {
                                         </div>
                                     ) : loggedInSantri.tahfizhTerakhir ? (
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-                                            <p className="text-xs font-bold text-slate-800">
+                                            <p className="text-xs font-bold text-slate-800 break-words">
                                                 {loggedInSantri.tahfizhTerakhir.surah} ({loggedInSantri.tahfizhTerakhir.ayat})
                                             </p>
                                             <p className="text-[11px] text-slate-500 mt-0.5">
@@ -964,39 +1136,46 @@ export const PublicPortal: React.FC = () => {
                                             </p>
                                         </div>
                                     ) : (
-                                        <p className="text-xs text-slate-500 italic py-3">Belum ada catatan setoran tahfizh.</p>
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-500 italic text-center">
+                                            Belum ada catatan setoran tahfizh.
+                                        </div>
                                     )}
                                 </div>
                             )}
 
                             {activeFeature === 'kesehatan' && (
                                 <div className="space-y-4">
-                                    <div className="border-b border-slate-100 pb-3">
-                                        <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-                                            <i className="bi bi-heart-pulse text-rose-600"></i> Rekam Kesehatan & Poskestren
-                                        </h3>
-                                        <p className="text-xs text-slate-500">Riwayat pemeriksaan kesehatan dan tindakan perawatan di Poskestren.</p>
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+                                                <i className="bi bi-heart-pulse text-rose-600"></i> Rekam Kesehatan &amp; Poskestren
+                                            </h3>
+                                            <p className="text-xs text-slate-500 mt-0.5">Riwayat pemeriksaan kesehatan dan tindakan perawatan di Poskestren.</p>
+                                        </div>
+                                        <span className="self-start sm:self-auto rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-1 text-xs font-bold shrink-0 shadow-2xs mt-0.5 sm:mt-0">
+                                            <i className="bi bi-shield-check mr-1"></i> Kondisi Sehat
+                                        </span>
                                     </div>
                                     {loggedInSantri.riwayatKesehatan && loggedInSantri.riwayatKesehatan.length > 0 ? (
                                         <div className="space-y-2">
                                             {loggedInSantri.riwayatKesehatan.map((kes, idx) => (
                                                 <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
-                                                    <div className="flex items-center justify-between gap-2">
-                                                        <p className="text-xs font-bold text-slate-800">
+                                                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-2">
+                                                        <p className="text-xs font-bold text-slate-800 break-words min-w-0 flex-1">
                                                             {kes.keluhan || kes.diagnosa || 'Pemeriksaan Kesehatan'}
                                                         </p>
-                                                        <span className="rounded-full bg-rose-100 text-rose-800 px-2.5 py-0.5 text-[10px] font-bold">
+                                                        <span className="rounded-full bg-rose-100 text-rose-800 px-2.5 py-0.5 text-[10px] font-bold shrink-0 self-start sm:self-auto">
                                                             {kes.status || 'Rawat Jalan'}
                                                         </span>
                                                     </div>
-                                                    {kes.tindakan && <p className="text-xs text-slate-600 mt-1">Tindakan: {kes.tindakan}</p>}
+                                                    {kes.tindakan && <p className="text-xs text-slate-600 mt-1 break-words">Tindakan: {kes.tindakan}</p>}
                                                     <p className="text-[10px] text-slate-400 mt-1">{formatDateId(kes.tanggal)}</p>
                                                 </div>
                                             ))}
                                         </div>
                                     ) : loggedInSantri.kesehatanTerakhir ? (
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-                                            <p className="text-xs font-bold text-slate-800">
+                                            <p className="text-xs font-bold text-slate-800 break-words">
                                                 {loggedInSantri.kesehatanTerakhir.status} {loggedInSantri.kesehatanTerakhir.diagnosa ? `- ${loggedInSantri.kesehatanTerakhir.diagnosa}` : ''}
                                             </p>
                                             <p className="text-[11px] text-slate-500 mt-0.5">{formatDateId(loggedInSantri.kesehatanTerakhir.tanggal)}</p>
@@ -1012,32 +1191,37 @@ export const PublicPortal: React.FC = () => {
 
                             {activeFeature === 'perpus' && (
                                 <div className="space-y-4">
-                                    <div className="border-b border-slate-100 pb-3">
-                                        <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-                                            <i className="bi bi-journal-bookmark text-teal-600"></i> Sirkulasi Pinjaman Perpustakaan
-                                        </h3>
-                                        <p className="text-xs text-slate-500">Daftar buku perpustakaan pondok yang sedang dipinjam oleh santri.</p>
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+                                                <i className="bi bi-book text-teal-600"></i> Sirkulasi Pinjaman Perpustakaan
+                                            </h3>
+                                            <p className="text-xs text-slate-500 mt-0.5">Daftar buku perpustakaan pondok yang sedang dipinjam oleh santri.</p>
+                                        </div>
+                                        <span className="self-start sm:self-auto rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 text-xs font-bold shrink-0 shadow-2xs mt-0.5 sm:mt-0">
+                                            <i className="bi bi-journal-check mr-1"></i> {loggedInSantri.pinjamanBukuAktif || loggedInSantri.daftarPinjamanBuku?.length || 0} Buku Dipinjam
+                                        </span>
                                     </div>
                                     {loggedInSantri.daftarPinjamanBuku && loggedInSantri.daftarPinjamanBuku.length > 0 ? (
                                         <div className="space-y-2">
                                             {loggedInSantri.daftarPinjamanBuku.map((bk, idx) => (
-                                                <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
-                                                    <div>
-                                                        <p className="text-xs font-bold text-slate-800">{bk.judul} {bk.kodeBuku ? `(${bk.kodeBuku})` : ''}</p>
+                                                <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-xs font-bold text-slate-800 break-words">{bk.judul} {bk.kodeBuku ? `(${bk.kodeBuku})` : ''}</p>
                                                         <p className="text-[11px] text-slate-500">
                                                             Pinjam: {formatDateId(bk.tanggalPinjam)} • Jatuh Tempo: <strong>{formatDateId(bk.tanggalKembaliSeharusnya)}</strong>
                                                         </p>
                                                     </div>
-                                                    <span className="rounded-lg bg-amber-100 text-amber-800 px-2.5 py-1 text-[11px] font-bold">
+                                                    <span className="rounded-full bg-amber-100 text-amber-800 px-2.5 py-1 text-[11px] font-bold shrink-0 self-start sm:self-auto">
                                                         Dipinjam
                                                     </span>
                                                 </div>
                                             ))}
                                         </div>
                                     ) : (
-                                        <p className="text-xs text-slate-500 italic py-2">
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-500 italic text-center">
                                             Tidak ada pinjaman buku aktif saat ini ({loggedInSantri.pinjamanBukuAktif || 0} buku).
-                                        </p>
+                                        </div>
                                     )}
                                 </div>
                             )}

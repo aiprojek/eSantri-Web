@@ -57,6 +57,49 @@ export const pusatSyncPanduan: PanduanSectionData = {
                             </ul>
                         </div>
                     </div>
+
+                    {/* Cakupan Data Antar-Admin */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2.5">
+                        <div className="flex items-center gap-2 text-slate-800 font-bold">
+                            <i className="bi bi-database-check text-emerald-600 text-base"></i>
+                            <span>Audit Cakupan Data: 100% Seluruh Basis Data &amp; Status Santri Disinkronkan</span>
+                        </div>
+                        <p className="text-[11px] text-gray-600 leading-relaxed">
+                            Pada seluruh opsi sinkronisasi antar-admin (baik <strong>Realtime</strong> maupun <strong>Hub &amp; Spoke</strong>), sistem menyinkronkan <strong>seluruh 41 tabel</strong> operasional tanpa ada pemotongan status santri:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-[11px]">
+                            <div className="p-2 bg-white rounded-lg border border-slate-200 space-y-0.5">
+                                <strong className="text-teal-800 font-semibold block">Data Santri &amp; Arsip Induk</strong>
+                                <span className="text-gray-600">Semua status (Aktif, Lulus/Alumni, Keluar/Pindah/DO) beserta riwayat mutasi dan biodata lengkap.</span>
+                            </div>
+                            <div className="p-2 bg-white rounded-lg border border-slate-200 space-y-0.5">
+                                <strong className="text-emerald-800 font-semibold block">Keuangan &amp; Akuntansi</strong>
+                                <span className="text-gray-600">Tagihan SPP, pembayaran, tabungan santri, mutasi saldo, buku kas, COA, payroll guru, hutang-piutang.</span>
+                            </div>
+                            <div className="p-2 bg-white rounded-lg border border-slate-200 space-y-0.5">
+                                <strong className="text-blue-800 font-semibold block">Akademik &amp; Kesiswaan</strong>
+                                <span className="text-gray-600">Rapor santri, absensi harian, jurnal mengajar, setoran tahfizh, jadwal KBM &amp; ujian, jadwal piket.</span>
+                            </div>
+                            <div className="p-2 bg-white rounded-lg border border-slate-200 space-y-0.5">
+                                <strong className="text-purple-800 font-semibold block">Layanan Penunjang</strong>
+                                <span className="text-gray-600">Perpustakaan (buku &amp; sirkulasi), UKS (obat &amp; rekam medis), BK (konseling), buku tamu &amp; paket.</span>
+                            </div>
+                            <div className="p-2 bg-white rounded-lg border border-slate-200 space-y-0.5">
+                                <strong className="text-amber-800 font-semibold block">Koperasi &amp; Logistik</strong>
+                                <span className="text-gray-600">Produk POS, riwayat transaksi kasir, stok multi-gudang, transfer stok, antrean order, supplier.</span>
+                            </div>
+                            <div className="p-2 bg-white rounded-lg border border-slate-200 space-y-0.5">
+                                <strong className="text-rose-800 font-semibold block">Sistem &amp; Administrasi</strong>
+                                <span className="text-gray-600">Pendaftar PSB baru, template/arsip surat, akun user &amp; hak akses, aset tanda tangan &amp; stempel.</span>
+                            </div>
+                        </div>
+                        <div className="p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-lg text-[11px] text-emerald-950 flex items-center gap-2">
+                            <i className="bi bi-info-circle-fill text-emerald-600 shrink-0"></i>
+                            <span>
+                                <strong>Catatan:</strong> Filter santri aktif <em>hanya</em> berlaku pada saat mengekspor data ke <strong>Portal Publik Wali Santri</strong> demi privasi dan efisiensi kuota. Pada sinkronisasi internal antar-admin, seluruh data santri masa lalu dan aktif selalu terjaga identik di semua komputer.
+                            </span>
+                        </div>
+                    </div>
                 </div>
             )
         },

@@ -918,7 +918,7 @@ export const getPendingChangesCount = async (config: CloudSyncConfig) => {
         'jurnalMengajar', 'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 
         'bukuTamu', 'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'jadwalUjian',
         'piketSchedules', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang',
-        'warehouses', 'stockTransfers', 'digitalAssets'
+        'warehouses', 'stockTransfers', 'digitalAssets', 'users', 'settings'
     ];
 
     let total = 0;

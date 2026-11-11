@@ -739,21 +739,28 @@ export const raporPanduan: PanduanSectionData = {
                         Ekosistem formulir eksternal Rapor kini terintegrasi penuh dari hulu ke hilir: mulai dari <strong>1 Link Google Apps Script (GAS) Terpadu v3.0</strong> untuk seluruh rombel &amp; template, <strong>Portal Audit Tanpa Login (.html)</strong>, hingga penarikan kembali nilai ke dalam aplikasi cukup <strong>1 klik</strong>.
                     </p>
 
-                    {/* 1. Setup 1x GAS Terpadu v3.0 */}
+                    {/* 1. Setup 1x Cloud Terpadu & Universal Architecture */}
                     <div className="p-3.5 bg-teal-50/80 border border-teal-200 rounded-xl space-y-2.5 text-xs">
                         <div className="flex items-center justify-between border-b border-teal-200/80 pb-1.5">
                             <strong className="text-teal-950 flex items-center gap-1.5 font-bold">
-                                <i className="bi bi-hdd-network-fill text-teal-600"></i> 1. Konfigurasi 1 Link GAS Terpadu v3.0 untuk Semua Rombel (Cukup Setup 1x)
+                                <i className="bi bi-hdd-network-fill text-teal-600"></i> 1. Arsitektur 1 URL Endpoint Universal Selamanya (Cukup Setup 1x)
                             </strong>
                             <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold uppercase">
-                                Auto Multi-Tab
+                                Universal Endpoint
                             </span>
                         </div>
-                        <ol className="list-decimal pl-4 space-y-1 text-gray-700 text-[11px]">
-                            <li><strong>Pasang Kode Skrip v3.0:</strong> Buat 1 Google Spreadsheet kosong &rarr; klik <em>Extensions &gt; Apps Script</em> &rarr; salin kode dari tombol <strong>Salin Kode GAS Terpadu v3.0</strong> (tersedia di tab <em>Generate Form</em> maupun di ikon pengaturan <code>⚙</code> sebelah tombol <em>Tarik Nilai GAS</em>). <em>Catatan: Jika sebelumnya memakai skrip versi lama, perbarui dan buat New Deployment agar fitur baca koreksi sel manual ikut aktif.</em></li>
-                            <li><strong>Deploy Web App:</strong> Klik <em>Deploy &gt; New deployment</em> &rarr; pilih jenis <strong>Web app</strong> &rarr; atur <em>Execute as: Me</em> dan <em>Who has access: Anyone</em> &rarr; salin <strong>Web App URL</strong> (berakhiran <code>/exec</code>).</li>
-                            <li><strong>Simpan Default Pondok:</strong> Tempel URL tersebut lalu klik <strong>Simpan Default Pondok</strong>. URL otomatis tersimpan dan dipakai bersama oleh generator <strong>Formulir Ledger Guru</strong>, generator <strong>Portal Audit</strong>, serta tombol <strong>Tarik Nilai GAS</strong> di seluruh tab Rapor.</li>
-                            <li><strong>Otomatis Buat Tab Baru per Rombel &amp; Template:</strong> Setiap kali guru mengirim nilai dari file HTML, GAS otomatis mengarahkannya ke tab (worksheet) masing-masing, misalnya <code>(25-26 Ganjil) VII-A - Rapor Diniyah</code>, dan menggabungkan kiriman beberapa guru mapel pada baris santri yang sama (<em>Smart Merge</em>).</li>
+                        <ol className="list-decimal pl-4 space-y-1.5 text-gray-700 text-[11px]">
+                            <li><strong>1 Link API Backend untuk Selamanya:</strong> Cukup pasang 1 URL Endpoint di tab <em>Generate Form</em> lalu klik <strong>Simpan Default Pondok</strong>. Link backend ini dipakai selamanya oleh seluruh Rombel, seluruh Tingkat Kelas, dan berbagai Template Rapor tanpa perlu membuat atau mendeploy link baru setiap semester.</li>
+                            <li><strong>File HTML Rapor Terkunci Spesifik per Semester &amp; Rombel:</strong> Meskipun URL API backend-nya sama selamanya, file HTML mandiri yang dibagikan ke guru wajib di-generate 1 kali per semester. File tersebut otomatis &quot;terkunci&quot; berisi nama-nama santri aktif di rombel itu dan menyematkan metadata <code>tahunAjaran</code> serta <code>semester</code> agar guru tidak tertukar mengisi nilai semester lain.</li>
+                            <li><strong>Dukungan Multi-Platform Backend:</strong>
+                                <ul className="list-disc pl-4 mt-0.5 space-y-0.5 text-gray-600">
+                                    <li><strong>Google Apps Script (GAS):</strong> Nilai masuk ke 1 Google Spreadsheet pondok, otomatis terpisah ke Tab Baru per Rombel &amp; Template.</li>
+                                    <li><strong>Cloudflare Workers + D1:</strong> Edge SQLite serverless global berkecepatan tinggi, bebas batas waktu eksekusi 6 menit.</li>
+                                    <li><strong>Supabase:</strong> REST API PostgreSQL dengan update live streaming ke layar admin.</li>
+                                    <li><strong>Cloudflare R2:</strong> S3 Object Storage berbiaya $0 egress untuk menyimpan arsip JSON nilai terenkripsi.</li>
+                                </ul>
+                            </li>
+                            <li><strong>Siklus Bersih Pasca-Bagi Rapor (Anti-Server Penuh):</strong> Begitu seluruh rapor santri selesai dicetak dan berstatus <em>Disahkan &amp; Terkunci</em>, data setoran mentah di cloud penampung sudah aman tersimpan di aplikasi eSantri. Gunakan tombol <strong>&quot;Bersihkan Antrean Data Cloud Usang / Semester Lalu&quot;</strong> di menu <em>Generate Form</em> agar kuota gratis cloud server tetap lega menjelang ujian semester berikutnya.</li>
                         </ol>
                     </div>
 

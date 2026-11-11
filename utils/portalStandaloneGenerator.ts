@@ -1,7 +1,7 @@
 import { PondokSettings, PortalConfig } from '../types';
 import { encodePortalKey, PORTAL_CIPHER_KEY } from '../services/portalGasService';
 
-const THEME_PALETTES: Record<string, { primary: string; primaryDark: string; primaryLight: string; border: string; gradientFrom: string; gradientTo: string }> = {
+export const THEME_PALETTES: Record<string, { primary: string; primaryDark: string; primaryLight: string; border: string; gradientFrom: string; gradientTo: string }> = {
     teal: { primary: '#0d9488', primaryDark: '#0f766e', primaryLight: '#f0fdfa', border: '#99f6e4', gradientFrom: '#0f766e', gradientTo: '#0e7490' },
     blue: { primary: '#2563eb', primaryDark: '#1d4ed8', primaryLight: '#eff6ff', border: '#bfdbfe', gradientFrom: '#1d4ed8', gradientTo: '#0284c7' },
     indigo: { primary: '#4f46e5', primaryDark: '#4338ca', primaryLight: '#eef2ff', border: '#c7d2fe', gradientFrom: '#4338ca', gradientTo: '#2563eb' },
@@ -124,27 +124,43 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
       color: #fff; border-radius: 18px; padding: 20px; text-align: left;
       display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px;
     }
-    .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 16px; }
-    @media (min-width: 768px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+    .kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+    @media (min-width: 768px) { .kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
     .kpi-card {
       background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px; text-align: left;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03); min-width: 0;
     }
-    .kpi-label { font-size: 11px; color: #64748b; font-weight: 600; }
-    .kpi-val { font-size: 17px; font-weight: 800; color: #0f172a; margin-top: 4px; }
+    .kpi-label { font-size: 11px; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .kpi-val { font-size: 17px; font-weight: 800; color: #0f172a; margin-top: 4px; word-break: break-word; }
     .tab-bar {
       display: flex; gap: 8px; overflow-x: auto; padding: 10px; margin-top: 16px;
       background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px;
+      scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch;
     }
+    .tab-bar::-webkit-scrollbar { display: none; }
     .tab-btn {
       flex-shrink: 0; padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 700;
       border: 1px solid #e2e8f0; background: #fff; color: #475569; cursor: pointer;
-      display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s;
+      display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; white-space: nowrap;
     }
     .tab-btn.active { background: var(--p-color); color: #fff; border-color: var(--p-color); }
     .panel-card {
       margin-top: 14px; background: #fff; border: 1px solid #e2e8f0; border-radius: 16px;
       padding: 18px; text-align: left;
+    }
+    .panel-head {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+      border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 12px;
+    }
+    @media (min-width: 640px) {
+      .panel-head { flex-direction: row; align-items: center; justify-content: space-between; }
+    }
+    .rapor-summary-head {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+      border-bottom: 1px solid var(--p-border); padding-bottom: 8px; margin-bottom: 8px;
+    }
+    @media (min-width: 640px) {
+      .rapor-summary-head { flex-direction: row; align-items: center; justify-content: space-between; }
     }
     .badge {
       display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px;
@@ -156,13 +172,33 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
     .chip-link {
       display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
       border-radius: 999px; font-size: 11px; font-weight: 600; text-decoration: none;
-      background: var(--p-light); color: var(--p-dark); border: 1px solid var(--p-border);
+      background: var(--p-light); color: var(--p-dark); border: 1px solid var(--p-border); max-width: 100%;
     }
+    .chip-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .info-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
     @media (min-width: 640px) { .info-grid { grid-template-columns: repeat(2, 1fr); } }
-    .info-item { padding: 10px 12px; border-radius: 10px; background: #f8fafc; border: 1px solid #e2e8f0; }
+    .info-item { padding: 10px 12px; border-radius: 10px; background: #f8fafc; border: 1px solid #e2e8f0; min-width: 0; }
     .info-item-label { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700; }
-    .info-item-val { font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+    .info-item-val { font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px; word-break: break-word; }
+
+    @media (max-width: 520px) {
+      body { padding: 8px; }
+      .portal-shell { padding: 20px 14px; border-radius: 18px; }
+      .portal-shell.is-dashboard { padding: 14px 10px; border-radius: 18px; }
+      .hero-banner { flex-direction: column; align-items: stretch; gap: 10px; padding: 15px 12px; border-radius: 14px; }
+      .hero-banner #btn-logout { align-self: flex-start; }
+      .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; margin-top: 10px; }
+      .kpi-card { padding: 10px 8px; border-radius: 12px; }
+      .kpi-val { font-size: 14px; }
+      .tab-bar { padding: 6px; gap: 6px; border-radius: 12px; margin-top: 10px; }
+      .tab-btn { padding: 6px 10px; font-size: 11px; }
+      .panel-card { padding: 14px 10px; border-radius: 14px; margin-top: 10px; }
+      .table-clean th, .table-clean td { padding: 7px 6px; font-size: 11px; }
+      .title { font-size: 18px; }
+      .subtitle { font-size: 12px; }
+      .form-input { padding: 9px 12px; font-size: 13px; }
+      .btn-primary { padding: 10px 14px; font-size: 13px; }
+    }
   </style>
 </head>
 <body>
@@ -170,6 +206,14 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
 
   <script>
     (function() {
+      const __PORTAL_META__ = ${JSON.stringify({
+          provider: portalConfig.provider || 'gas',
+          portalId: portalId,
+          cloudflareWorkerUrl: portalConfig.cloudflareWorkerUrl || '',
+          supabaseUrl: portalConfig.supabaseUrl || '',
+          supabaseAnonKey: portalConfig.supabaseAnonKey || '',
+          supabaseTable: portalConfig.supabaseTable || 'portal_data',
+      })};
       const __PORTAL_VAULT__ = "${encryptedVault}";
       const __KEY_BYTES__ = ${JSON.stringify(cipherKeyBytes)};
       let state = {
@@ -243,9 +287,63 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
       }
 
       async function initPortal() {
+        // 1. Cloudflare Worker
+        if (__PORTAL_META__.provider === "cloudflare" && __PORTAL_META__.cloudflareWorkerUrl) {
+          try {
+            const cfUrl = __PORTAL_META__.cloudflareWorkerUrl.replace(/\/+$/, "");
+            const res = await fetch(cfUrl + "?action=getPortalPublicInfo&portalId=" + encodeURIComponent(__PORTAL_META__.portalId));
+            if (res.ok) {
+              const json = await res.json();
+              if (json && json.settings) {
+                state.settings = json.settings;
+                state.updatedAt = json.updatedAt || "";
+                state.syncStatus = "Terhubung (Cloudflare Worker)";
+                if (state.settings.portalConfig && state.settings.portalConfig.theme) {
+                  applyTheme(state.settings.portalConfig.theme);
+                }
+                render();
+                return;
+              }
+            }
+          } catch (e) {
+            console.warn("Cloudflare init failed:", e);
+          }
+        }
+
+        // 2. Supabase
+        if (__PORTAL_META__.provider === "supabase" && __PORTAL_META__.supabaseUrl && __PORTAL_META__.supabaseAnonKey) {
+          try {
+            const sbUrl = __PORTAL_META__.supabaseUrl.replace(/\/+$/, "");
+            const tbl = __PORTAL_META__.supabaseTable || "portal_data";
+            const res = await fetch(sbUrl + "/rest/v1/" + tbl + "?portal_id=eq." + encodeURIComponent(__PORTAL_META__.portalId) + "&select=payload,updated_at", {
+              headers: {
+                "apikey": __PORTAL_META__.supabaseAnonKey,
+                "Authorization": "Bearer " + __PORTAL_META__.supabaseAnonKey
+              }
+            });
+            if (res.ok) {
+              const rows = await res.json();
+              if (Array.isArray(rows) && rows[0] && rows[0].payload) {
+                state.settings = rows[0].payload.settings || state.settings;
+                state.santriSummaryFallback = rows[0].payload.santriSummary || [];
+                state.updatedAt = rows[0].updated_at || "";
+                state.syncStatus = "Terhubung (Supabase)";
+                if (state.settings.portalConfig && state.settings.portalConfig.theme) {
+                  applyTheme(state.settings.portalConfig.theme);
+                }
+                render();
+                return;
+              }
+            }
+          } catch (e) {
+            console.warn("Supabase init failed:", e);
+          }
+        }
+
+        // 3. Google Apps Script
         const creds = unlockVault(__PORTAL_VAULT__);
         if (!creds || !creds.g) {
-          state.syncStatus = "Mode Lokal";
+          state.syncStatus = "Mode Mandiri";
           render();
           return;
         }
@@ -259,7 +357,7 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
           if (json && json.success && json.data && json.data.settings) {
             state.settings = json.data.settings;
             state.updatedAt = json.updatedAt || (json.data.metadata && json.data.metadata.updatedAt) || "";
-            state.syncStatus = "Terhubung";
+            state.syncStatus = "Terhubung (GAS)";
             if (state.settings.portalConfig && state.settings.portalConfig.theme) {
               applyTheme(state.settings.portalConfig.theme);
             }
@@ -277,7 +375,7 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
             state.settings = json1.data.settings || json1.data;
             state.santriSummaryFallback = json1.data.santriSummary || [];
             state.updatedAt = (json1.data.metadata && json1.data.metadata.updatedAt) || "";
-            state.syncStatus = "Terhubung";
+            state.syncStatus = "Terhubung (GAS)";
             if (state.settings.portalConfig && state.settings.portalConfig.theme) {
               applyTheme(state.settings.portalConfig.theme);
             }
@@ -301,8 +399,31 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
         state.loginNotice = "";
         render();
 
-        const creds = unlockVault(__PORTAL_VAULT__);
         try {
+          // 1. Cloudflare Worker Login
+          if (__PORTAL_META__.provider === "cloudflare" && __PORTAL_META__.cloudflareWorkerUrl) {
+            const cfUrl = __PORTAL_META__.cloudflareWorkerUrl.replace(/\/+$/, "");
+            const res = await fetch(cfUrl + "?action=loginSantri&portalId=" + encodeURIComponent(__PORTAL_META__.portalId) + "&nis=" + encodeURIComponent(nis) + "&dob=" + encodeURIComponent(dob));
+            if (res.ok) {
+              const json = await res.json();
+              if (json && json.success && json.data && json.data.santri) {
+                if (state.rememberNis) localStorage.setItem("esantri_saved_nis", state.nisInput);
+                state.loggedInSantri = json.data.santri;
+                state.isLoggingIn = false;
+                render();
+                return;
+              }
+              if (json && json.success === false) {
+                state.loginNotice = json.message || "NIS atau Tanggal Lahir tidak sesuai.";
+                state.isLoggingIn = false;
+                render();
+                return;
+              }
+            }
+          }
+
+          // 2. GAS Login
+          const creds = unlockVault(__PORTAL_VAULT__);
           if (creds && creds.g) {
             const url = new URL(creds.g);
             url.searchParams.set("action", "loginSantri");
@@ -328,7 +449,7 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
             }
           }
 
-          // Fallback jika GAS masih versi v1
+          // 3. Fallback jika data santri tersemat (Supabase / Standalone / GAS v1)
           const matched = (state.santriSummaryFallback || []).find(function(s) {
             const sNis = String(s.nis || "").replace(/\\s+/g, "").toLowerCase();
             const sDob = String(s.tanggalLahir || "").slice(0, 10);
@@ -374,14 +495,16 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
           const mutations = s.mutasiTabungan || [];
           const totalUnpaid = s.totalTunggakan != null ? s.totalTunggakan : (s.tunggakanBulanIni || 0);
           return '<div class="panel-card">' +
-            '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid #f1f5f9;padding-bottom:12px;">' +
+            '<div class="panel-head">' +
               '<div>' +
-                '<div style="font-size:11px;color:#64748b;font-weight:600;">Total Tagihan Belum Lunas</div>' +
-                '<div style="font-size:20px;font-weight:800;color:' + (totalUnpaid > 0 ? '#dc2626' : '#059669') + ';">' + formatRp(totalUnpaid) + '</div>' +
+                '<div style="font-size:13px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:6px;">' +
+                  '<i class="bi bi-wallet2" style="color:var(--p-color);"></i> Rincian Tagihan &amp; Keuangan' +
+                '</div>' +
+                '<div style="font-size:11px;color:#64748b;margin-top:2px;">Daftar kewajiban pembayaran dan tabungan santri</div>' +
               '</div>' +
               '<span class="badge" style="background:' + (totalUnpaid > 0 ? '#fef2f2;color:#b91c1c' : '#ecfdf5;color:#047857') + ';">' +
                 '<i class="bi ' + (totalUnpaid > 0 ? 'bi-exclamation-circle-fill' : 'bi-check-circle-fill') + '"></i> ' +
-                (totalUnpaid > 0 ? bills.length + ' Tagihan Aktif' : 'Lunas / Tidak Ada Tunggakan') +
+                (totalUnpaid > 0 ? bills.length + ' Tagihan Aktif' : 'Semua Lunas') +
               '</span>' +
             '</div>' +
             (bills.length > 0 ? (
@@ -425,7 +548,17 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
           const rapor = s.raporTerakhir || null;
           const catatan = s.catatanPembinaan || [];
           return '<div class="panel-card">' +
-            '<div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:12px;"><i class="bi bi-mortarboard-fill" style="color:var(--p-color);"></i> Informasi Akademik & Keasramaan</div>' +
+            '<div class="panel-head">' +
+              '<div>' +
+                '<div style="font-size:13px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:6px;">' +
+                  '<i class="bi bi-mortarboard-fill" style="color:var(--p-color);"></i> Informasi Akademik &amp; Keasramaan' +
+                '</div>' +
+                '<div style="font-size:11px;color:#64748b;margin-top:2px;">Data jenjang, kelas, kamar asrama, dan rapor santri</div>' +
+              '</div>' +
+              '<span class="badge" style="background:#ecfdf5;color:#047857;align-self:flex-start;">' +
+                '<i class="bi bi-check-circle-fill"></i> ' + esc(s.statusSantri || "Aktif Mukim") +
+              '</span>' +
+            '</div>' +
             '<div class="info-grid">' +
               '<div class="info-item"><div class="info-item-label">Jenjang / Marhalah</div><div class="info-item-val">' + esc(s.jenjangNama || "-") + '</div></div>' +
               '<div class="info-item"><div class="info-item-label">Kelas & Rombel</div><div class="info-item-val">' + esc((s.kelasNama || "-") + " • " + (s.rombelNama || "-")) + '</div></div>' +
@@ -436,12 +569,15 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
             '</div>' +
             (rapor ? (
               '<div style="margin-top:16px;padding:12px;border-radius:12px;background:var(--p-light);border:1px solid var(--p-border);">' +
-                '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">' +
+                '<div class="rapor-summary-head">' +
                   '<div>' +
-                    '<div style="font-size:12px;font-weight:800;color:var(--p-dark);">Ringkasan Rapor Terakhir (' + esc(rapor.semester) + ' - ' + esc(rapor.tahunAjaran) + ')</div>' +
+                    '<div style="font-size:12px;font-weight:800;color:var(--p-dark);display:flex;align-items:center;gap:6px;">' +
+                      '<i class="bi bi-mortarboard"></i> Ringkasan Rapor Terakhir (' + esc(rapor.semester) + ' - ' + esc(rapor.tahunAjaran) + ')' +
+                    '</div>' +
+                    '<div style="font-size:11px;color:#64748b;margin-top:2px;">Evaluasi capaian belajar &amp; nilai santri</div>' +
                     (rapor.keputusan ? '<div style="font-size:11px;font-weight:600;color:var(--p-dark);margin-top:2px;">Status: ' + esc(rapor.keputusan) + '</div>' : '') +
                   '</div>' +
-                  '<span class="badge" style="background:var(--p-color);color:#fff;">Rata-rata: ' + esc((rapor.hasNumericScores === false || (!rapor.rataRata && (!rapor.mapel || rapor.mapel.length === 0))) ? '-' : rapor.rataRata) + '</span>' +
+                  '<span class="badge" style="background:var(--p-color);color:#fff;align-self:flex-start;">Rata-rata: ' + esc((rapor.hasNumericScores === false || (!rapor.rataRata && (!rapor.mapel || rapor.mapel.length === 0))) ? '-' : rapor.rataRata) + '</span>' +
                 '</div>' +
                 (rapor.mapel && rapor.mapel.length > 0 ? (
                   '<div style="overflow-x:auto;background:#fff;border-radius:8px;border:1px solid #e2e8f0;"><table class="table-clean">' +
@@ -472,7 +608,17 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
         if (tab === "presensi") {
           const r = s.rekapBulanIni || { hadir: 0, sakit: 0, izin: 0, alpha: 0, bulanLabel: "Bulan Ini" };
           return '<div class="panel-card">' +
-            '<div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:12px;"><i class="bi bi-calendar-check-fill" style="color:var(--p-color);"></i> Rekap Kehadiran (' + esc(r.bulanLabel || "Bulan Berjalan") + ')</div>' +
+            '<div class="panel-head">' +
+              '<div>' +
+                '<div style="font-size:13px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:6px;">' +
+                  '<i class="bi bi-calendar-check-fill" style="color:var(--p-color);"></i> Kehadiran &amp; Rekap Presensi' +
+                '</div>' +
+                '<div style="font-size:11px;color:#64748b;margin-top:2px;">Rekapitulasi kehadiran bulan ' + esc(r.bulanLabel || "berjalan") + '</div>' +
+              '</div>' +
+              '<span class="badge" style="background:#ecfdf5;color:#047857;">' +
+                '<i class="bi bi-check-circle-fill"></i> Kehadiran Baik' +
+              '</span>' +
+            '</div>' +
             '<div class="kpi-grid" style="margin-top:0;">' +
               '<div class="kpi-card" style="background:#ecfdf5;border-color:#a7f3d0;"><div class="kpi-label" style="color:#047857;">Hadir (H)</div><div class="kpi-val" style="color:#065f46;">' + Number(r.hadir || 0) + ' Hari</div></div>' +
               '<div class="kpi-card" style="background:#eff6ff;border-color:#bfdbfe;"><div class="kpi-label" style="color:#1d4ed8;">Sakit (S)</div><div class="kpi-val" style="color:#1e40af;">' + Number(r.sakit || 0) + ' Hari</div></div>' +
@@ -485,8 +631,13 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
         if (tab === "tahfizh") {
           const list = s.riwayatTahfizh || (s.tahfizhTerakhir ? [s.tahfizhTerakhir] : []);
           return '<div class="panel-card">' +
-            '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">' +
-              '<div style="font-size:13px;font-weight:800;color:#0f172a;"><i class="bi bi-book-half" style="color:var(--p-color);"></i> Riwayat Setoran & Ujian Tahfizh Terakhir</div>' +
+            '<div class="panel-head">' +
+              '<div>' +
+                '<div style="font-size:13px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:6px;">' +
+                  '<i class="bi bi-journal-bookmark-fill" style="color:var(--p-color);"></i> Perkembangan Tahfizh Al-Qur\'an' +
+                '</div>' +
+                '<div style="font-size:11px;color:#64748b;margin-top:2px;">Riwayat setoran hafalan ziyadah &amp; muroja\'ah</div>' +
+              '</div>' +
               '<div style="display:flex;gap:6px;">' +
                 (s.totalJuzHafalan ? '<span class="badge" style="background:#ecfdf5;color:#047857;">Capaian: ' + esc(s.totalJuzHafalan) + ' Juz</span>' : '') +
                 (s.targetJuz ? '<span class="badge" style="background:var(--p-light);color:var(--p-dark);">Target: ' + esc(s.targetJuz) + ' Juz</span>' : '') +
@@ -499,14 +650,24 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
                   return '<tr><td>' + esc(t.tanggal) + '</td><td><span class="badge" style="background:#f1f5f9;color:#334155;">' + esc(t.tipe) + '</span></td><td style="font-weight:600;">' + esc(t.surah + " (" + t.ayat + ")") + '</td><td>' + esc(t.predikat || "-") + '</td></tr>';
                 }).join("") + '</tbody>' +
               '</table></div>'
-            ) : '<div style="font-size:12px;color:#64748b;">Belum ada riwayat setoran tahfizh yang tercatat.</div>') +
+            ) : '<div style="font-size:12px;color:#64748b;text-align:center;padding:12px;font-style:italic;">Belum ada riwayat setoran tahfizh yang tercatat.</div>') +
           '</div>';
         }
 
         if (tab === "kesehatan") {
           const list = s.riwayatKesehatan || (s.kesehatanTerakhir ? [s.kesehatanTerakhir] : []);
           return '<div class="panel-card">' +
-            '<div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:10px;"><i class="bi bi-heart-pulse-fill" style="color:#e11d48;"></i> Riwayat Pemeriksaan Poskestren</div>' +
+            '<div class="panel-head">' +
+              '<div>' +
+                '<div style="font-size:13px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:6px;">' +
+                  '<i class="bi bi-heart-pulse-fill" style="color:#e11d48;"></i> Rekam Kesehatan Poskestren' +
+                '</div>' +
+                '<div style="font-size:11px;color:#64748b;margin-top:2px;">Riwayat pemeriksaan dan tindakan perawatan santri</div>' +
+              '</div>' +
+              '<span class="badge" style="background:#ecfdf5;color:#047857;">' +
+                '<i class="bi bi-shield-check"></i> Kondisi Sehat' +
+              '</span>' +
+            '</div>' +
             (list.length > 0 ? (
               '<div style="overflow-x:auto;"><table class="table-clean">' +
                 '<thead><tr><th>Tanggal</th><th>Keluhan / Diagnosa</th><th>Tindakan</th><th>Status</th></tr></thead>' +
@@ -514,14 +675,24 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
                   return '<tr><td>' + esc(k.tanggal) + '</td><td style="font-weight:600;">' + esc((k.diagnosa || k.keluhan || "-")) + '</td><td>' + esc(k.tindakan || "-") + '</td><td><span class="badge" style="background:#fff1f2;color:#be123c;">' + esc(k.status) + '</span></td></tr>';
                 }).join("") + '</tbody>' +
               '</table></div>'
-            ) : '<div style="font-size:12px;color:#64748b;">Alhamdulillah, tidak ada catatan pemeriksaan sakit terbaru.</div>') +
+            ) : '<div style="font-size:12px;color:#047857;text-align:center;padding:12px;font-weight:600;">Alhamdulillah, santri dalam kondisi sehat wal afiat.</div>') +
           '</div>';
         }
 
         if (tab === "perpus") {
           const books = s.daftarPinjamanBuku || [];
           return '<div class="panel-card">' +
-            '<div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:10px;"><i class="bi bi-journal-bookmark-fill" style="color:var(--p-color);"></i> Pinjaman Buku Perpustakaan Aktif (' + Number(s.pinjamanBukuAktif || 0) + ' Buku)</div>' +
+            '<div class="panel-head">' +
+              '<div>' +
+                '<div style="font-size:13px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:6px;">' +
+                  '<i class="bi bi-book-fill" style="color:var(--p-color);"></i> Sirkulasi Pinjaman Perpustakaan' +
+                '</div>' +
+                '<div style="font-size:11px;color:#64748b;margin-top:2px;">Daftar buku dan kitab yang sedang dipinjam santri</div>' +
+              '</div>' +
+              '<span class="badge" style="background:#f1f5f9;color:#475569;">' +
+                Number(s.pinjamanBukuAktif || 0) + ' Buku Aktif' +
+              '</span>' +
+            '</div>' +
             (books.length > 0 ? (
               '<div style="overflow-x:auto;"><table class="table-clean">' +
                 '<thead><tr><th>Kode</th><th>Judul Buku / Kitab</th><th>Tgl Pinjam</th><th>Batas Kembali</th></tr></thead>' +
@@ -529,7 +700,7 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
                   return '<tr><td>' + esc(b.kodeBuku) + '</td><td style="font-weight:600;">' + esc(b.judul) + '</td><td>' + esc(b.tanggalPinjam) + '</td><td>' + esc(b.tanggalKembaliSeharusnya) + '</td></tr>';
                 }).join("") + '</tbody>' +
               '</table></div>'
-            ) : '<div style="font-size:12px;color:#64748b;">Tidak ada pinjaman buku perpustakaan yang sedang aktif.</div>') +
+            ) : '<div style="font-size:12px;color:#64748b;text-align:center;padding:12px;font-style:italic;">Tidak ada pinjaman buku perpustakaan yang sedang aktif.</div>') +
           '</div>';
         }
         return "";
@@ -605,22 +776,33 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
         if (cfg.showLibrary !== false) tabs.push({ key: "perpus", label: "Perpustakaan", icon: "bi-journal-bookmark" });
 
         root.innerHTML =
-          '<div class="hero-banner">' +
-            '<div>' +
-              '<div style="font-size:12px;opacity:0.85;font-weight:600;">Ahlan wa Sahlan, Wali dari Santri:</div>' +
-              '<div style="font-size:22px;font-weight:800;margin-top:2px;">' + esc(s.namaLengkap) + '</div>' +
-              '<div style="font-size:12px;opacity:0.9;margin-top:4px;">NIS: ' + esc(s.nis) + ' • ' + esc(s.jenjangNama || "") + ' ' + esc(s.rombelNama || "") + ' • Wali: ' + esc(s.namaWali || "-") + '</div>' +
-              (state.updatedAt ? '<div style="font-size:10px;opacity:0.75;margin-top:4px;"><i class="bi bi-clock-history"></i> Sinkronisasi Terakhir: ' + esc(new Date(state.updatedAt).toLocaleString("id-ID")) + '</div>' : '') +
+          '<div class="hero-banner" style="display:flex;flex-direction:column;gap:12px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.2);padding-bottom:10px;">' +
+              '<span class="badge" style="background:rgba(255,255,255,0.2);color:#fff;"><i class="bi bi-check-circle-fill"></i> ' + esc(s.statusSantri || "Aktif") + '</span>' +
+              '<button id="btn-logout" style="background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:6px 12px;border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;">' +
+                '<i class="bi bi-box-arrow-right"></i> Keluar' +
+              '</button>' +
             '</div>' +
-            '<button id="btn-logout" style="background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;">' +
-              '<i class="bi bi-box-arrow-right"></i> Keluar' +
-            '</button>' +
+            '<div style="display:flex;align-items:flex-start;gap:12px;">' +
+              '<div style="width:48px;height:48px;border-radius:50%;background:#fff;color:#0f172a;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,0.15);">' +
+                esc((s.namaLengkap || "SN").slice(0, 2).toUpperCase()) +
+              '</div>' +
+              '<div style="min-width:0;flex:1;">' +
+                '<div style="font-size:20px;font-weight:800;word-break:break-word;line-height:1.2;">' + esc(s.namaLengkap) + '</div>' +
+                '<div style="font-size:12px;opacity:0.9;margin-top:4px;word-break:break-word;">NIS: <strong>' + esc(s.nis) + '</strong> • Wali: <strong>' + esc(s.namaWali || "-") + '</strong></div>' +
+              '</div>' +
+            '</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:6px;padding-top:2px;">' +
+              '<span class="badge" style="background:rgba(0,0,0,0.2);color:#fff;font-weight:500;"><i class="bi bi-mortarboard-fill" style="color:#fde047;"></i> ' + esc((s.jenjangNama || "") + " • " + (s.kelasNama || "") + " (" + (s.rombelNama || "") + ")") + '</span>' +
+              (s.kamarNama ? '<span class="badge" style="background:rgba(0,0,0,0.2);color:#fff;font-weight:500;"><i class="bi bi-house-heart-fill" style="color:#6ee7b7;"></i> Kamar: ' + esc(s.kamarNama + (s.asramaNama ? " (" + s.asramaNama + ")" : "")) + '</span>' : '') +
+              (s.waliKelasNama ? '<span class="badge" style="background:rgba(0,0,0,0.2);color:#fff;font-weight:500;"><i class="bi bi-person-badge-fill" style="color:#93c5fd;"></i> Wali: ' + esc(s.waliKelasNama) + '</span>' : '') +
+            '</div>' +
           '</div>' +
           '<div class="kpi-grid">' +
             '<div class="kpi-card"><div class="kpi-label">Total Tunggakan</div><div class="kpi-val" style="color:' + (totalUnpaid > 0 ? '#dc2626' : '#059669') + ';">' + formatRp(totalUnpaid) + '</div></div>' +
             '<div class="kpi-card"><div class="kpi-label">Saldo Tabungan</div><div class="kpi-val">' + formatRp(s.saldoTabungan) + '</div></div>' +
             '<div class="kpi-card"><div class="kpi-label">Presensi Hari Ini</div><div class="kpi-val">' + esc(s.attendanceToday || "Belum Absen") + '</div></div>' +
-            '<div class="kpi-card"><div class="kpi-label">Pinjaman Buku</div><div class="kpi-val">' + Number(s.pinjamanBukuAktif || 0) + ' Buku</div></div>' +
+            '<div class="kpi-card"><div class="kpi-label">Target &amp; Tahfizh</div><div class="kpi-val" style="color:var(--p-color);">' + esc(s.targetJuz ? 'Target ' + s.targetJuz + ' Juz' : (s.totalJuzHafalan ? s.totalJuzHafalan + ' Juz' : (s.tahfizhTerakhir ? s.tahfizhTerakhir.surah : 'Tahfizh Qur\'an'))) + '</div></div>' +
           '</div>' +
           renderAnnouncements(cfg) +
           '<div class="tab-bar">' +

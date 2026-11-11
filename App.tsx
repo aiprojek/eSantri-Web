@@ -317,6 +317,13 @@ const AppContent: React.FC = () => {
                 .catch(error => {
                     console.warn('Service Worker cleanup failed in dev mode:', error);
                 });
+            if ('caches' in window) {
+                caches.keys().then(keys => {
+                    for (const key of keys) {
+                        caches.delete(key);
+                    }
+                });
+            }
             return;
         }
 

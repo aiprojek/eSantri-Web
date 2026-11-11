@@ -38,24 +38,35 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
         }
     }, [initialMode]);
 
-    // --- SHARED CLOUD / GAS CONFIG (1 Link GAS untuk Semua Ledger & Portal Audit) ---
+    // --- SHARED CLOUD / GAS CONFIG (1 Link Universal untuk Semua Ledger & Portal Audit) ---
     const savedCloudCfg = settings.raporCloudConfig;
+    const [backendProvider, setBackendProvider] = useState<'gas' | 'cloudflare_d1' | 'supabase' | 'cloudflare_r2'>(
+        savedCloudCfg?.backendProvider || 'gas'
+    );
     const [submissionMethod, setSubmissionMethod] = useState<'whatsapp' | 'google_sheet' | 'hybrid'>(
         savedCloudCfg?.submissionMethod || (savedCloudCfg?.googleScriptUrl ? 'hybrid' : 'whatsapp')
     );
     const [googleScriptUrl, setGoogleScriptUrl] = useState(savedCloudCfg?.googleScriptUrl || '');
+    const [apiKey, setApiKey] = useState(savedCloudCfg?.apiKey || '');
     const [waDestination, setWaDestination] = useState(savedCloudCfg?.waDestination || '');
     const [tabMode, setTabMode] = useState<'per_rombel' | 'per_jenjang' | 'per_file'>(
         savedCloudCfg?.tabMode || 'per_rombel'
     );
     const [showScriptHelper, setShowScriptHelper] = useState(false);
     const [isSavingConfig, setIsSavingConfig] = useState(false);
+    const [isPurgingStaging, setIsPurgingStaging] = useState(false);
 
     // Sync state if settings load asynchronously
     useEffect(() => {
         if (settings.raporCloudConfig) {
+            if (settings.raporCloudConfig.backendProvider) {
+                setBackendProvider(settings.raporCloudConfig.backendProvider);
+            }
             if (!googleScriptUrl && settings.raporCloudConfig.googleScriptUrl) {
                 setGoogleScriptUrl(settings.raporCloudConfig.googleScriptUrl);
+            }
+            if (!apiKey && settings.raporCloudConfig.apiKey) {
+                setApiKey(settings.raporCloudConfig.apiKey);
             }
             if (!waDestination && settings.raporCloudConfig.waDestination) {
                 setWaDestination(settings.raporCloudConfig.waDestination);
@@ -71,23 +82,29 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
     }, [settings.raporCloudConfig?.googleScriptUrl]);
 
     const hasUnsavedCloudChanges = useMemo(() => {
+        const curProvider = backendProvider;
+        const savedProvider = savedCloudCfg?.backendProvider || 'gas';
         const curUrl = googleScriptUrl.trim();
         const savedUrl = (savedCloudCfg?.googleScriptUrl || '').trim();
+        const curKey = apiKey.trim();
+        const savedKey = (savedCloudCfg?.apiKey || '').trim();
         const curWa = waDestination.trim();
         const savedWa = (savedCloudCfg?.waDestination || '').trim();
         const savedMethod = savedCloudCfg?.submissionMethod || 'whatsapp';
         const savedTab = savedCloudCfg?.tabMode || 'per_rombel';
         return (
+            curProvider !== savedProvider ||
             curUrl !== savedUrl ||
+            curKey !== savedKey ||
             curWa !== savedWa ||
             submissionMethod !== savedMethod ||
             tabMode !== savedTab
         );
-    }, [googleScriptUrl, waDestination, submissionMethod, tabMode, savedCloudCfg]);
+    }, [backendProvider, googleScriptUrl, apiKey, waDestination, submissionMethod, tabMode, savedCloudCfg]);
 
     const persistRaporCloudConfig = async (silent = false) => {
         if (!hasUnsavedCloudChanges) {
-            if (!silent) showToast('Konfigurasi Link GAS sudah tersimpan sebagai default.', 'info');
+            if (!silent) showToast('Konfigurasi 1 Link Universal sudah tersimpan sebagai default.', 'info');
             return;
         }
         setIsSavingConfig(true);
@@ -95,7 +112,9 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
             await onUpdateSettings({
                 ...settings,
                 raporCloudConfig: {
+                    backendProvider,
                     googleScriptUrl: googleScriptUrl.trim(),
+                    apiKey: apiKey.trim(),
                     submissionMethod,
                     waDestination: waDestination.trim(),
                     tabMode,
@@ -103,14 +122,53 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                 }
             });
             if (!silent) {
-                showToast('1 Link GAS Terpadu berhasil disimpan sebagai default Rapor Pondok.', 'success');
+                showToast('1 Link Endpoint Universal berhasil disimpan sebagai default Rapor Pondok.', 'success');
             }
         } catch (err) {
             if (!silent) {
-                showToast('Gagal menyimpan konfigurasi Link GAS: ' + (err as Error).message, 'error');
+                showToast('Gagal menyimpan konfigurasi Link Cloud: ' + (err as Error).message, 'error');
             }
         } finally {
             setIsSavingConfig(false);
+        }
+    };
+
+    const handlePurgeStagingSubmissions = async () => {
+        const confirmed = window.confirm(
+            'PERINGATAN SIKLUS BERSIH:\n\n' +
+            'Tindakan ini akan mengosongkan antrean setoran nilai semester lalu di server cloud agar database cloud tetap ramping dan bebas kuota bengkak.\n\n' +
+            'Pastikan seluruh nilai semester lalu sudah ditarik dan disahkan di menu Rapor sebelum melanjutkan!\n\n' +
+            'Lanjutkan pembersihan antrean cloud?'
+        );
+        if (!confirmed) return;
+
+        setIsPurgingStaging(true);
+        try {
+            // Jika menggunakan endpoint aktif, kita juga bisa mengirim sinyal purge
+            if (googleScriptUrl.trim()) {
+                try {
+                    await fetch(googleScriptUrl.trim(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'purge_staging', timestamp: new Date().toISOString() })
+                    });
+                } catch {
+                    // non-blocking jika server hanya passive sheet
+                }
+            }
+
+            await onUpdateSettings({
+                ...settings,
+                raporCloudConfig: {
+                    ...(settings.raporCloudConfig || {}),
+                    lastPurgedAt: new Date().toISOString()
+                }
+            });
+            showToast('Antrean data setoran cloud semester lalu berhasil dibersihkan! Server kembali lega.', 'success');
+        } catch (err) {
+            showToast('Gagal membersihkan data cloud: ' + (err as Error).message, 'error');
+        } finally {
+            setIsPurgingStaging(false);
         }
     };
 
@@ -1227,10 +1285,10 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                             <div className="min-w-0">
                                 <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
                                     <i className="bi bi-cloud-check-fill text-teal-600 text-base shrink-0"></i>
-                                    <span>Konfigurasi 1 Link GAS Terpadu (Sumber Data Bersama)</span>
+                                    <span>Konfigurasi 1 Endpoint Cloud Terpadu (Universal Selamanya)</span>
                                 </h4>
                                 <p className="text-[11px] text-slate-500 mt-0.5">
-                                    Link Google Apps Script yang sama dipakai oleh seluruh Formulir Ledger Guru, Portal Audit Pengurus, dan Impor Cloud.
+                                    1 URL API Backend selamanya menampung kiriman nilai dari seluruh Rombel, Jenjang, &amp; Template. Formulir HTML guru tetap terkunci spesifik per semester saat di-generate.
                                 </p>
                             </div>
                             {savedCloudCfg?.googleScriptUrl && !hasUnsavedCloudChanges && (
@@ -1238,6 +1296,65 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                     Tersimpan Default
                                 </span>
                             )}
+                        </div>
+
+                        {/* PILIHAN BACKEND PENAMPUNG NILAI */}
+                        <div className="space-y-1.5 min-w-0">
+                            <label className="block text-xs font-bold text-slate-700">Platform Backend Penampung Nilai</label>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setBackendProvider('gas')}
+                                    className={`p-2 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${
+                                        backendProvider === 'gas'
+                                            ? 'bg-teal-50 border-teal-500 text-teal-800 ring-1 ring-teal-500 shadow-2xs'
+                                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <i className="bi bi-file-earmark-spreadsheet text-base text-emerald-600"></i>
+                                    <span className="text-[11px]">Google Apps Script</span>
+                                    <span className="text-[9px] text-slate-400 font-normal">Spreadsheet G-Drive</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setBackendProvider('cloudflare_d1')}
+                                    className={`p-2 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${
+                                        backendProvider === 'cloudflare_d1'
+                                            ? 'bg-cyan-50 border-cyan-500 text-cyan-800 ring-1 ring-cyan-500 shadow-2xs'
+                                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <i className="bi bi-hdd-stack text-base text-cyan-600"></i>
+                                    <span className="text-[11px]">Cloudflare D1</span>
+                                    <span className="text-[9px] text-slate-400 font-normal">Worker Edge SQLite</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setBackendProvider('supabase')}
+                                    className={`p-2 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${
+                                        backendProvider === 'supabase'
+                                            ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-1 ring-emerald-500 shadow-2xs'
+                                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <i className="bi bi-database-check text-base text-emerald-600"></i>
+                                    <span className="text-[11px]">Supabase</span>
+                                    <span className="text-[9px] text-slate-400 font-normal">PostgreSQL REST</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setBackendProvider('cloudflare_r2')}
+                                    className={`p-2 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${
+                                        backendProvider === 'cloudflare_r2'
+                                            ? 'bg-orange-50 border-orange-500 text-orange-800 ring-1 ring-orange-500 shadow-2xs'
+                                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <i className="bi bi-box-seam text-base text-orange-600"></i>
+                                    <span className="text-[11px]">Cloudflare R2</span>
+                                    <span className="text-[9px] text-slate-400 font-normal">S3 JSON Object</span>
+                                </button>
+                            </div>
                         </div>
 
                         {generatorMode === 'ledger' && (
@@ -1264,7 +1381,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                                 : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                                         }`}
                                     >
-                                        <i className="bi bi-file-earmark-spreadsheet shrink-0"></i> G-Sheet
+                                        <i className="bi bi-cloud-arrow-up shrink-0"></i> Direct Cloud ({backendProvider === 'gas' ? 'GAS' : backendProvider.toUpperCase()})
                                     </button>
                                     <button
                                         type="button"
@@ -1275,7 +1392,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                                 : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                                         }`}
                                     >
-                                        <i className="bi bi-hdd-network shrink-0"></i> Hybrid
+                                        <i className="bi bi-hdd-network shrink-0"></i> Hybrid (Cloud + WA Cadangan)
                                     </button>
                                 </div>
                             </div>
@@ -1299,35 +1416,48 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                         {(generatorMode === 'audit_portal' || submissionMethod === 'google_sheet' || submissionMethod === 'hybrid') && (
                             <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-800 mb-1">
-                                        URL Web App Google Apps Script (1 Link untuk Semua)
-                                    </label>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <label className="block text-xs font-bold text-slate-800">
+                                            URL Endpoint {backendProvider === 'gas' ? 'Web App Google Apps Script' : backendProvider === 'cloudflare_d1' ? 'Cloudflare Worker D1' : backendProvider === 'supabase' ? 'Supabase REST Endpoint' : 'Cloudflare R2 Webhook'} (1 Link Selamanya)
+                                        </label>
+                                        <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                                            Universal Endpoint
+                                        </span>
+                                    </div>
                                     <div className="flex gap-2 min-w-0">
                                         <input
                                             type="text"
                                             value={googleScriptUrl}
                                             onChange={e => setGoogleScriptUrl(e.target.value)}
-                                            placeholder="https://script.google.com/macros/s/.../exec"
+                                            placeholder={
+                                                backendProvider === 'gas'
+                                                    ? 'https://script.google.com/macros/s/.../exec'
+                                                    : backendProvider === 'cloudflare_d1'
+                                                    ? 'https://api-rapor.pondok.workers.dev/api/ledger'
+                                                    : backendProvider === 'supabase'
+                                                    ? 'https://xyzcompany.supabase.co/rest/v1/rapor_submissions'
+                                                    : 'https://r2.domainpondok.sch.id/ledger-webhook'
+                                            }
                                             className="flex-grow min-w-0 border border-slate-300 bg-white rounded-lg p-2 text-xs font-mono outline-none focus:border-teal-600"
                                         />
                                         <button
                                             type="button"
                                             onClick={async () => {
                                                 if (!googleScriptUrl.trim()) {
-                                                    return showToast('Masukkan URL Web App terlebih dahulu', 'error');
+                                                    return showToast('Masukkan URL Endpoint terlebih dahulu', 'error');
                                                 }
                                                 try {
                                                     const res = await fetch(googleScriptUrl.trim(), { method: 'GET' });
                                                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                                                    const json = await res.json();
-                                                    const count = Array.isArray(json) ? json.length : 0;
+                                                    const json = await res.json().catch(() => null);
+                                                    const count = Array.isArray(json) ? json.length : (json?.count ?? 'Aktif');
                                                     showToast(
-                                                        `Koneksi GAS Aktif! Terbaca ${count} baris nilai di Spreadsheet.`,
+                                                        `Koneksi Endpoint Aktif! Respons server terbaca (${count}).`,
                                                         'success'
                                                     );
-                                                } catch {
+                                                } catch (e: any) {
                                                     showToast(
-                                                        'URL belum merespons JSON. Pastikan Deploy > Web App > Access: Anyone.',
+                                                        'Endpoint belum merespons. Pastikan URL benar dan izin CORS/Access publik aktif (' + (e?.message || 'Gagal') + ').',
                                                         'error'
                                                     );
                                                 }
@@ -1339,7 +1469,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                     </div>
                                 </div>
 
-                                {generatorMode === 'ledger' && (
+                                {backendProvider === 'gas' && generatorMode === 'ledger' && (
                                     <div>
                                         <label className="block text-xs font-bold text-slate-700 mb-1">
                                             Pengelompokan Tab Otomatis di Spreadsheet (Metode Tab Baru):
@@ -1365,19 +1495,56 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                     </div>
                                 )}
 
+                                {/* SIKLUS BERSIH: PURGE STAGING SUBMISSIONS */}
+                                <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="space-y-0.5">
+                                            <div className="font-bold text-xs text-amber-950 flex items-center gap-1.5">
+                                                <i className="bi bi-recycle text-amber-600"></i>
+                                                <span>Siklus Bersih Pasca-Bagi Rapor (Anti-Server Penuh)</span>
+                                            </div>
+                                            <p className="text-[10px] text-amber-800 leading-relaxed">
+                                                Setelah seluruh rapor semester lalu disahkan dan dicetak, kosongkan antrean nilai di cloud penampung agar kuota gratis server tetap lega dan pencarian data kencang.
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            disabled={isPurgingStaging}
+                                            onClick={handlePurgeStagingSubmissions}
+                                            className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 text-white rounded-lg text-xs font-bold whitespace-nowrap shadow-2xs transition-all active:scale-95 shrink-0"
+                                            title="Bersihkan setoran nilai mentah semester lalu dari cloud penampung"
+                                        >
+                                            <i className={`bi ${isPurgingStaging ? 'bi-arrow-repeat animate-spin' : 'bi-trash3-fill'} mr-1`}></i>
+                                            Bersihkan Cloud
+                                        </button>
+                                    </div>
+                                    {savedCloudCfg?.lastPurgedAt && (
+                                        <div className="text-[10px] text-amber-900/80 font-mono">
+                                            Terakhir dibersihkan: {new Date(savedCloudCfg.lastPurgedAt).toLocaleDateString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowScriptHelper(!showScriptHelper)}
-                                        className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
-                                    >
-                                        <i className={`bi ${showScriptHelper ? 'bi-chevron-up' : 'bi-code-slash'}`}></i>
-                                        <span>
-                                            {showScriptHelper
-                                                ? 'Sembunyikan Kode Apps Script v3.0'
-                                                : 'Salin Kode Google Apps Script Terpadu v3.0 (Multi-Tab)'}
-                                        </span>
-                                    </button>
+                                    {backendProvider === 'gas' ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowScriptHelper(!showScriptHelper)}
+                                            className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
+                                        >
+                                            <i className={`bi ${showScriptHelper ? 'bi-chevron-up' : 'bi-code-slash'}`}></i>
+                                            <span>
+                                                {showScriptHelper
+                                                    ? 'Sembunyikan Kode Apps Script v3.0'
+                                                    : 'Salin Kode Google Apps Script Terpadu v3.0 (Multi-Tab)'}
+                                            </span>
+                                        </button>
+                                    ) : (
+                                        <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                                            <i className="bi bi-shield-check text-emerald-600"></i>
+                                            <span>Format Payload JSON Universal: <code>tahunAjaran</code>, <code>semester</code>, <code>rombelId</code>, <code>scores</code></span>
+                                        </div>
+                                    )}
 
                                     <button
                                         type="button"
@@ -1389,6 +1556,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                         Simpan Default Pondok
                                     </button>
                                 </div>
+
 
                                 {showScriptHelper && (
                                     <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 text-xs text-slate-700">

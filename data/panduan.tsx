@@ -1440,52 +1440,275 @@ export const panduanData: PanduanSectionData[] = [
                 )
             },
             {
-                title: '3. Langkah Deploy / Update Google Apps Script (GAS v2.0)',
+                title: '3. Lima (5) Pilihan Arsitektur Backend & Panduan Setup Lengkap dari Nol (0)',
                 color: 'green',
                 content: (
-                    <div className="space-y-3 text-sm text-gray-700">
+                    <div className="space-y-4 text-sm text-gray-700">
                         <p className="leading-relaxed">
-                            Ikuti langkah berikut untuk memasang jembatan data baru atau memperbarui script lama Anda ke <strong>GAS v2.0</strong>:
+                            eSantri kini mendukung <strong>5 alternatif infrastruktur backend</strong> untuk Portal Wali Santri. Di bawah ini adalah rincian arsitektur beserta <strong>panduan langkah-demi-langkah dari nol (0) langsung di dashboard web masing-masing layanan</strong>:
                         </p>
-                        <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-700 bg-gray-50 p-3.5 rounded-xl border border-gray-200">
-                            <li>Buka menu <strong>Portal Wali</strong> di sidebar aplikasi eSantri.</li>
-                            <li>Pastikan <strong>ID Portal Unik</strong> sudah terisi (contoh: <code>ponpes-al-ikhlas</code>).</li>
-                            <li>Pada bagian <em>Jembatan Data Google Sheets (GAS)</em>, klik tombol <strong>&quot;Lihat Kode Script GAS v2.0&quot;</strong> lalu klik <strong>&quot;Salin Kode Script v2.0&quot;</strong>.</li>
-                            <li>Buka <strong>Google Spreadsheet</strong> khusus Portal Wali di akun Google pondok Anda, lalu klik menu <strong>Ekstensi (Extensions) &gt; Apps Script</strong>.</li>
-                            <li>Hapus seluruh kode lama di editor <code>Code.gs</code>, tempelkan (<em>Paste</em>) kode Script GAS v2.0 yang baru disalin, lalu klik ikon <strong>Simpan (Save)</strong>.</li>
-                            <li>
-                                Klik tombol biru <strong>Deploy &gt; Deployment Baru (New Deployment)</strong> (atau <em>Kelola Deployment &gt; Edit &gt; Versi Baru</em>):
-                                <ul className="list-disc pl-5 mt-1 space-y-0.5 text-[11px] text-gray-600">
-                                    <li><strong>Jenis (Select type):</strong> Aplikasi Web (<em>Web App</em>).</li>
-                                    <li><strong>Jalankan sebagai (Execute as):</strong> Saya (<em>Me</em>).</li>
-                                    <li><strong>Siapa yang memiliki akses (Who has access):</strong> Wajib pilih <strong>Siapa Saja (Anyone)</strong>.</li>
-                                </ul>
-                            </li>
-                            <li>Salin <strong>URL Web App</strong> yang berakhiran <code>/exec</code>, lalu tempelkan ke kolom <strong>URL Web App GAS</strong> di eSantri.</li>
-                            <li>Klik tombol <strong>&quot;Simpan Pengaturan Portal&quot;</strong>, lalu klik tombol <strong>&quot;Sinkronkan Sekarang ke Portal&quot;</strong> di kartu atas.</li>
-                            <li>Klik tombol <strong>&quot;Uji Koneksi &amp; Cek Keamanan GAS&quot;</strong> untuk memastikan status menampilkan lencana hijau <strong>Terproteksi Server-Side Login (GAS v2.0)</strong>.</li>
-                        </ol>
+
+                        <div className="space-y-4 text-xs">
+                            {/* Provider 1: GAS */}
+                            <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2.5">
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200 pb-2">
+                                    <strong className="text-emerald-950 font-bold flex items-center gap-1.5 text-sm">
+                                        <i className="bi bi-google text-emerald-600 text-base"></i> 1. Google Apps Script v2.0 (Google Sheets DB)
+                                    </strong>
+                                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-200 text-emerald-900 text-[10px] font-extrabold uppercase">
+                                        100% Gratis &amp; Tanpa Server
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Solusi paling populer bagi pondok pesantren karena tidak memerlukan kartu kredit, sewa server, atau biaya bulanan. Data santri, tagihan, tabungan, presensi, rapor, dan tahfizh disimpan rapi di dalam Google Spreadsheet milik pondok.
+                                </p>
+                                <div className="p-3 bg-white rounded-lg border border-emerald-100 text-[11px] text-gray-700 space-y-2">
+                                    <div className="font-bold text-emerald-900 flex items-center gap-1.5">
+                                        <i className="bi bi-check2-circle text-emerald-600"></i> Panduan Setup dari 0 di Google Drive / Spreadsheet:
+                                    </div>
+                                    <ol className="list-decimal pl-4 space-y-1.5 leading-relaxed">
+                                        <li>
+                                            <strong>Buat Google Spreadsheet Baru:</strong> Buka <a href="https://sheets.new" target="_blank" rel="noreferrer" className="text-emerald-700 underline font-semibold">sheets.new</a> dengan akun Google resmi pondok. Beri nama file, misalnya <code>Database Portal Wali Santri eSantri</code>.
+                                        </li>
+                                        <li>
+                                            <strong>Buka Editor Apps Script:</strong> Pada menu atas Google Sheets, klik <strong>Ekstensi &gt; Apps Script</strong>. Jendela editor skrip akan terbuka di tab baru.
+                                        </li>
+                                        <li>
+                                            <strong>Salin Kode Skrip v2.0:</strong> Buka menu <em>Portal Wali</em> di eSantri &gt; pilih opsi <em>Google Apps Script</em> &gt; klik tombol <strong>&quot;Lihat &amp; Salin Script GAS v2.0&quot;</strong> &gt; klik tombol <em>Salin Seluruh Script</em>.
+                                        </li>
+                                        <li>
+                                            <strong>Tempel Kode:</strong> Hapus seluruh kode default <code>function myFunction() &#123;&#125;</code> di editor Apps Script, tempelkan skrip yang baru disalin, lalu klik ikon <strong>Simpan (Ctrl+S)</strong>.
+                                        </li>
+                                        <li>
+                                            <strong>Terapkan sebagai Web App:</strong> Klik tombol biru <strong>Terapkan (Deploy) &gt; Penerapan baru (New deployment)</strong> di pojok kanan atas.
+                                        </li>
+                                        <li>
+                                            <strong>Atur Konfigurasi Akses:</strong>
+                                            <ul className="list-disc pl-4 mt-0.5 space-y-0.5 text-gray-600">
+                                                <li>Pilih jenis (ikon roda gigi): <strong>Aplikasi web (Web app)</strong>.</li>
+                                                <li>Deskripsi: <code>Portal Wali eSantri v2.0</code>.</li>
+                                                <li>Jalankan sebagai (Execute as): <strong>Saya / Me (email pondok)</strong>.</li>
+                                                <li>Yang memiliki akses (Who has access): <strong>Siapa saja / Anyone</strong> (Wajib pilih <em>Anyone</em> agar browser HP wali santri dapat melakukan verifikasi login tanpa login akun Google).</li>
+                                            </ul>
+                                        </li>
+                                        <li>
+                                            <strong>Beri Izin Google (Authorize):</strong> Klik <strong>Terapkan</strong> &gt; klik <em>Izinkan akses</em> &gt; pilih akun Google Anda &gt; klik <em>Lanjutan (Advanced)</em> &gt; klik <em>Buka Skrip Portal (tidak aman)</em> &gt; klik <strong>Izinkan</strong>.
+                                        </li>
+                                        <li>
+                                            <strong>Hubungkan ke eSantri:</strong> Salin <strong>URL Aplikasi Web</strong> yang berakhiran <code>/exec</code>, tempelkan ke kolom <em>URL Web App Google Apps Script</em> di eSantri, lalu klik tombol <strong>&quot;Sinkronkan Sekarang&quot;</strong>.
+                                        </li>
+                                    </ol>
+                                </div>
+                            </div>
+
+                            {/* Provider 2: Cloudflare Worker */}
+                            <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2.5">
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-2">
+                                    <strong className="text-amber-950 font-bold flex items-center gap-1.5 text-sm">
+                                        <i className="bi bi-lightning-charge-fill text-amber-600 text-base"></i> 2. Cloudflare Worker &amp; Pages (Edge Global)
+                                    </strong>
+                                    <span className="px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-extrabold uppercase">
+                                        Performa Tertinggi (&lt;50ms)
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Dijalankan pada 300+ data center edge Cloudflare di seluruh dunia. Membuka portal wali santri secepat kilat tanpa limit kuota spreadsheet harian dan sudah terlindungi dari serangan DDoS otomatis.
+                                </p>
+                                <div className="p-3 bg-white rounded-lg border border-amber-100 text-[11px] text-gray-700 space-y-2">
+                                    <div className="font-bold text-amber-900 flex items-center gap-1.5">
+                                        <i className="bi bi-check2-circle text-amber-600"></i> Panduan Setup dari 0 di Cloudflare Dashboard:
+                                    </div>
+                                    <ol className="list-decimal pl-4 space-y-1.5 leading-relaxed">
+                                        <li>
+                                            <strong>Buka Cloudflare Dashboard:</strong> Masuk ke <a href="https://dash.cloudflare.com" target="_blank" rel="noreferrer" className="text-amber-700 underline font-semibold">dash.cloudflare.com</a> (daftar akun gratis jika belum memiliki).
+                                        </li>
+                                        <li>
+                                            <strong>Buat Worker Baru:</strong> Pada menu navigasi sebelah kiri, klik <strong>Workers &amp; Pages</strong> &gt; klik tombol <strong>Create application</strong> &gt; pilih tab <strong>Workers</strong> &gt; beri nama (misal: <code>portal-wali-pesantren</code>) &gt; klik <strong>Deploy</strong>.
+                                        </li>
+                                        <li>
+                                            <strong>Buka Editor Worker:</strong> Setelah halaman sukses muncul, klik tombol <strong>Edit code</strong> (Quick Edit di browser).
+                                        </li>
+                                        <li>
+                                            <strong>Salin &amp; Tempel Script Worker:</strong> Di eSantri &gt; menu Portal Wali &gt; pilih tab <em>Cloudflare Worker</em> &gt; klik tombol <strong>&quot;Lihat Kode Worker Script (JS)&quot;</strong> &gt; salin seluruh kode. Hapus kode bawaan di editor Cloudflare lalu tempel script tadi &gt; klik <strong>Save and deploy</strong>.
+                                        </li>
+                                        <li>
+                                            <strong>Hubungkan Endpoint ke eSantri:</strong> Salin URL worker yang tertera di bagian atas (contoh: <code>https://portal-wali-pesantren.namasubdomain.workers.dev</code>), tempelkan ke kolom <em>URL Cloudflare Worker</em> di eSantri.
+                                        </li>
+                                        <li>
+                                            <strong>Keamanan Bearer Token:</strong> Isi kolom <em>Worker Secret Token</em> di eSantri dengan password unik (misal: <code>token_rahasia_pondok_2026</code>) agar hanya aplikasi admin yang dapat memperbarui data portal.
+                                        </li>
+                                        <li>
+                                            <strong>Sinkronkan Data:</strong> Klik tombol <strong>&quot;Sinkronkan Sekarang&quot;</strong>. Data santri dan pengumuman seketika aktif di edge network Cloudflare.
+                                        </li>
+                                        <li>
+                                            <em>(Opsional Custom Domain Pondok):</em> Di Cloudflare Worker &gt; menu <strong>Settings &gt; Triggers &gt; Custom Domains</strong> &gt; klik <strong>Add Custom Domain</strong> &gt; masukkan domain pondok (contoh: <code>wali.pesantren.sch.id</code>).
+                                        </li>
+                                    </ol>
+                                </div>
+                            </div>
+
+                            {/* Provider 3: Supabase */}
+                            <div className="p-4 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2.5">
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal-200 pb-2">
+                                    <strong className="text-teal-950 font-bold flex items-center gap-1.5 text-sm">
+                                        <i className="bi bi-database-fill-check text-emerald-700 text-base"></i> 3. Supabase PostgreSQL REST (Enterprise Scale)
+                                    </strong>
+                                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-200 text-emerald-950 text-[10px] font-extrabold uppercase">
+                                        Database SQL Andal
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Memanfaatkan database relasional PostgreSQL cloud gratis dari Supabase dengan REST API bawaan dan Row-Level Security (RLS) tingkat tinggi. Sangat stabil untuk ribuan wali santri mengakses serentak pada saat pembagian rapor.
+                                </p>
+                                <div className="p-3 bg-white rounded-lg border border-teal-100 text-[11px] text-gray-700 space-y-2">
+                                    <div className="font-bold text-teal-900 flex items-center gap-1.5">
+                                        <i className="bi bi-check2-circle text-teal-600"></i> Panduan Setup dari 0 di Supabase Dashboard:
+                                    </div>
+                                    <ol className="list-decimal pl-4 space-y-1.5 leading-relaxed">
+                                        <li>
+                                            <strong>Daftar Proyek Supabase:</strong> Masuk ke <a href="https://supabase.com" target="_blank" rel="noreferrer" className="text-teal-700 underline font-semibold">supabase.com</a> &gt; klik <strong>New Project</strong> &gt; beri nama (misal: <code>esantri-portal</code>) &gt; atur Password Database &gt; pilih Region terdekat (Singapore <code>ap-southeast-1</code>) &gt; klik <strong>Create new project</strong> (tunggu sekitar 1–2 menit hingga database aktif).
+                                        </li>
+                                        <li>
+                                            <strong>Jalankan Skema SQL di SQL Editor:</strong> Di menu navigasi samping kiri dashboard Supabase, klik ikon <strong>SQL Editor</strong> &gt; klik <strong>New query</strong>.
+                                        </li>
+                                        <li>
+                                            <strong>Salin Skema dari eSantri:</strong> Di tab <em>Supabase</em> di menu Portal Wali eSantri, klik tombol <strong>&quot;Lihat Skema SQL &amp; RLS Supabase&quot;</strong> &gt; salin seluruh skrip SQL.
+                                        </li>
+                                        <li>
+                                            <strong>Eksekusi Skrip:</strong> Tempelkan script tadi ke dalam SQL Editor Supabase &gt; klik tombol hijau <strong>Run</strong> (atau tekan <code>Ctrl + Enter</code>). Tabel <code>portal_wali_data</code>, fungsi RPC <code>login_santri_portal</code>, dan aturan keamanan RLS akan dibuat secara otomatis.
+                                        </li>
+                                        <li>
+                                            <strong>Ambil Kredensial API:</strong> Buka menu <strong>Project Settings (ikon roda gigi di pojok kiri bawah) &gt; API</strong>:
+                                            <ul className="list-disc pl-4 mt-0.5 space-y-0.5 text-gray-600">
+                                                <li>Salin <strong>Project URL</strong> (contoh: <code>https://abcdefghijkl.supabase.co</code>).</li>
+                                                <li>Salin <strong>Project API Keys &gt; anon public</strong> (token panjang diawali <code>eyJhbGciOi...</code>).</li>
+                                            </ul>
+                                        </li>
+                                        <li>
+                                            <strong>Hubungkan &amp; Sinkronkan:</strong> Tempelkan Project URL dan Anon Key ke form Supabase di eSantri, lalu klik tombol <strong>&quot;Sinkronkan Sekarang&quot;</strong>.
+                                        </li>
+                                    </ol>
+                                </div>
+                            </div>
+
+                            {/* Provider 4: Firebase */}
+                            <div className="p-4 bg-orange-50/70 border border-orange-200 rounded-xl space-y-2.5">
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-orange-200 pb-2">
+                                    <strong className="text-orange-950 font-bold flex items-center gap-1.5 text-sm">
+                                        <i className="bi bi-fire text-orange-600 text-base"></i> 4. Firebase Firestore Cloud (Google Cloud Native)
+                                    </strong>
+                                    <span className="px-2.5 py-0.5 rounded-full bg-orange-200 text-orange-900 text-[10px] font-extrabold uppercase">
+                                        Sinkronisasi Real-Time
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Menggunakan Google Cloud Firestore NoSQL yang terintegrasi langsung dengan ekosistem eSantri. Begitu tombol sinkronisasi diklik, dokumen portal santri langsung aktif seketika tanpa perlu deploy script atau setup database terpisah.
+                                </p>
+                                <div className="p-3 bg-white rounded-lg border border-orange-100 text-[11px] text-gray-700 space-y-2">
+                                    <div className="font-bold text-orange-900 flex items-center gap-1.5">
+                                        <i className="bi bi-check2-circle text-orange-600"></i> Panduan Setup dari 0 di Firebase Console:
+                                    </div>
+                                    <ol className="list-decimal pl-4 space-y-1.5 leading-relaxed">
+                                        <li>
+                                            <strong>Buka Firebase Console:</strong> Masuk ke <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="text-orange-700 underline font-semibold">console.firebase.google.com</a> dan buka proyek eSantri pondok Anda.
+                                        </li>
+                                        <li>
+                                            <strong>Aktifkan Firestore:</strong> Di menu navigasi kiri pilih <strong>Build &gt; Firestore Database</strong>. Jika belum aktif, klik <strong>Create Database</strong> &gt; pilih lokasi (misal: <code>asia-southeast2</code> Jakarta) &gt; pilih mode produksi &gt; klik <strong>Enable</strong>.
+                                        </li>
+                                        <li>
+                                            <strong>Aturan Keamanan (Rules):</strong> Di tab <strong>Rules</strong>, pastikan dokumen koleksi <code>publicPortals</code> diizinkan dibaca oleh publik namun hanya dapat ditulis oleh Admin yang login. (Aturan ini sudah terpasang otomatis dalam file keamanan <code>firestore.rules</code> eSantri).
+                                        </li>
+                                        <li>
+                                            <strong>Sinkronkan:</strong> Buka eSantri &gt; pilih opsi <strong>Firebase Firestore</strong> &gt; klik tombol <strong>&quot;Sinkronkan Sekarang&quot;</strong>. Dokumen publik langsung dibuat di Firestore dan siap diakses wali santri.
+                                        </li>
+                                    </ol>
+                                </div>
+                            </div>
+
+                            {/* Provider 5: Standalone HTML */}
+                            <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-xl space-y-2.5">
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-200 pb-2">
+                                    <strong className="text-purple-950 font-bold flex items-center gap-1.5 text-sm">
+                                        <i className="bi bi-filetype-html text-purple-600 text-base"></i> 5. File HTML Mandiri &amp; Hosting Netlify Drop / Cloudflare Pages
+                                    </strong>
+                                    <span className="px-2.5 py-0.5 rounded-full bg-purple-200 text-purple-900 text-[10px] font-extrabold uppercase">
+                                        Bebas Domain &amp; Hosting Gratis
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Fitur unggulan eSantri: Anda dapat mengemas seluruh portal wali menjadi <strong>satu file HTML tunggal (<code>index.html</code>)</strong> yang ringan, responsif, dan siap diunggah ke layanan hosting statis gratis mana pun.
+                                </p>
+                                <div className="p-3 bg-white rounded-lg border border-purple-100 text-[11px] text-gray-700 space-y-2.5">
+                                    <div className="font-bold text-purple-900 flex items-center gap-1.5">
+                                        <i className="bi bi-check2-circle text-purple-600"></i> Panduan Cara Hosting File HTML Mandiri (2 Pilihan Cepat):
+                                    </div>
+
+                                    <div className="p-2.5 bg-purple-50/50 rounded-lg border border-purple-100 space-y-1.5">
+                                        <strong className="text-purple-950 font-bold block">
+                                            🚀 Pilihan A: Netlify Drop (Instan 10 Detik, Tanpa Registrasi Rumit)
+                                        </strong>
+                                        <ol className="list-decimal pl-4 space-y-1 text-gray-600">
+                                            <li>Di menu Portal Wali eSantri, klik tombol <strong>&quot;Download File index.html Mandiri&quot;</strong>. Simpan file <code>index.html</code> di laptop Anda.</li>
+                                            <li>Buat sebuah folder baru di komputer, beri nama <code>portal-santri</code>, lalu masukkan file <code>index.html</code> ke dalam folder tersebut.</li>
+                                            <li>Buka browser dan kunjungi <a href="https://app.netlify.com/drop" target="_blank" rel="noreferrer" className="text-purple-700 underline font-semibold">app.netlify.com/drop</a>.</li>
+                                            <li>Tarik (drag &amp; drop) folder <code>portal-santri</code> tadi ke area drop di layar.</li>
+                                            <li>Dalam 5 detik Netlify akan menerbitkan situs dengan alamat domain gratis (contoh: <code>https://portal-santri-alittiba.netlify.app</code>).</li>
+                                        </ol>
+                                    </div>
+
+                                    <div className="p-2.5 bg-teal-50/50 rounded-lg border border-teal-100 space-y-1.5">
+                                        <strong className="text-teal-950 font-bold block">
+                                            🌐 Pilihan B: Cloudflare Pages (Rekomendasi untuk Pondok dengan Domain Sendiri)
+                                        </strong>
+                                        <ol className="list-decimal pl-4 space-y-1 text-gray-600">
+                                            <li>Masuk ke <a href="https://dash.cloudflare.com" target="_blank" rel="noreferrer" className="text-teal-700 underline font-semibold">dash.cloudflare.com</a> &gt; klik <strong>Workers &amp; Pages</strong> &gt; klik <strong>Create application</strong> &gt; pilih tab <strong>Pages</strong> &gt; klik <strong>Upload assets</strong>.</li>
+                                            <li>Beri nama proyek (contoh: <code>portal-wali-alittiba</code>) &gt; klik <strong>Create project</strong>.</li>
+                                            <li>Tarik (drag &amp; drop) file <code>index.html</code> atau foldernya &gt; klik <strong>Deploy site</strong>.</li>
+                                            <li>Situs portal langsung aktif dengan URL <code>https://portal-wali-alittiba.pages.dev</code>.</li>
+                                            <li><em>(Kustom Subdomain):</em> Klik menu <strong>Custom domains</strong> di proyek Pages &gt; klik <em>Set up a custom domain</em> &gt; masukkan <code>wali.pesantren.sch.id</code> untuk domain resmi pondok!</li>
+                                        </ol>
+                                    </div>
+
+                                    <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-950 text-[11px] space-y-1">
+                                        <div className="font-bold">Langkah Terakhir (Hubungkan ke eSantri):</div>
+                                        <p className="leading-relaxed">
+                                            Salin tautan domain hosting (contoh: <code>https://wali.pesantren.sch.id</code> atau <code>https://portal-wali.pages.dev</code>), tempelkan ke kolom <strong>&quot;URL Hosting Mandiri / Domain Publik&quot;</strong> di halaman Portal Wali, centang opsi <em>&quot;Gunakan URL Hosting Mandiri sebagai Link Utama &amp; QR Code&quot;</em>, lalu klik <strong>Simpan Pengaturan</strong>. Jika menggunakan backend GAS / Cloudflare / Supabase / Firebase, Anda <strong>cukup upload file HTML 1 kali seumur hidup</strong>, pembaruan data selanjutnya cukup klik tombol <em>Sinkronkan Sekarang</em>!
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )
             },
             {
-                title: '4. Hosting Mandiri Gratis (Cloudflare Pages / Netlify) dengan File HTML Mandiri (Rekomendasi Utama)',
+                title: '4. Arsitektur 1 Link Selamanya & Filter Santri Aktif Saja (Anti-Server Bengkak)',
                 color: 'indigo',
                 content: (
                     <div className="space-y-3 text-sm text-gray-700">
                         <div className="bg-indigo-50 p-3.5 rounded-xl border border-indigo-200 text-xs text-indigo-950 space-y-1.5">
                             <strong className="font-bold flex items-center gap-1.5 text-indigo-900 text-sm">
-                                <i className="bi bi-cloud-check-fill text-indigo-600"></i>
-                                Solusi Link Portal Pendek, Elegan &amp; 100% Gratis (Seperti Fitur PSB):
+                                <i className="bi bi-link-45deg text-indigo-600 text-base"></i>
+                                Mengapa 1 Link untuk Selamanya Jauh Lebih Unggul bagi Wali Santri?
                             </strong>
                             <p className="leading-relaxed text-gray-700">
-                                Agar wali santri mendapatkan alamat portal yang pendek dan profesional (misalnya <code>https://wali-alikhlas.pages.dev</code> atau <code>https://wali.pondokanda.com</code>) <strong>tanpa parameter URL panjang sama sekali</strong>, gunakan fitur <strong>Generator File HTML Mandiri</strong>. Kunci koneksi GAS sudah ditanam secara terenkripsi di dalam file <code>index.html</code> tersebut!
+                                Wali santri menyekolahkan anaknya selama 3 hingga 6 tahun. Link portal (misal <code>wali.pesantren.sch.id</code> atau <code>wali-pesantren.pages.dev</code>) biasanya <strong>disimpan di bookmark browser, dipin di chat WhatsApp, atau dipasang sebagai ikon aplikasi di layar utama HP (PWA/Home Screen)</strong>. Jika link berganti setiap tahun, wali santri akan bingung dan membanjiri panitia dengan keluhan. Pergantian Tahun Ajaran dan Semester cukup diatur secara otomatis di sistem, bukan dengan mengganti alamat link.
+                            </p>
+                        </div>
+
+                        <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200 text-xs text-emerald-950 space-y-1.5">
+                            <strong className="font-bold flex items-center gap-1.5 text-emerald-900 text-sm">
+                                <i className="bi bi-funnel-fill text-emerald-600 text-base"></i>
+                                Filter Ketat: Hanya Santri Aktif yang Diunggah ke Cloud Publik
+                            </strong>
+                            <p className="leading-relaxed text-gray-700">
+                                Saat Admin mengeklik tombol <strong>&quot;Sinkronkan Sekarang ke Portal&quot;</strong>, sistem menerapkan filter ketat <code>s.status === 'Aktif'</code>. Data alumni yang sudah lulus, santri mutasi, maupun tagihan lama santri non-aktif <strong>otomatis disaring keluar</strong> dan tidak diunggah ke server cloud publik. Dengan demikian, ukuran payload cloud publik selalu ramping, pencarian data di HP wali tetap instan, dan kuota gratis server tidak pernah penuh.
                             </p>
                         </div>
 
                         <div className="bg-white p-3.5 rounded-xl border border-gray-200 space-y-2 text-xs">
                             <h6 className="font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
-                                <i className="bi bi-rocket-takeoff-fill text-teal-600"></i> 3 Langkah Mudah Hosting di Cloudflare Pages / Netlify (Cukup 1 Kali Seumur Hidup):
+                                <i className="bi bi-rocket-takeoff-fill text-teal-600"></i> 3 Langkah Hosting Mandiri Gratis (Cloudflare Pages / Netlify):
                             </h6>
                             <ol className="list-decimal pl-5 space-y-1.5 text-gray-700 text-[11px] leading-relaxed">
                                 <li>
@@ -1495,15 +1718,15 @@ export const panduanData: PanduanSectionData[] = [
                                     <strong>Unggah ke Hosting Gratis:</strong>
                                     <ul className="list-disc pl-4 mt-1 space-y-0.5 text-gray-600">
                                         <li>Buka <a href="https://dash.cloudflare.com" target="_blank" rel="noreferrer" className="text-teal-700 underline font-semibold">Cloudflare Dashboard</a> &gt; menu <strong>Workers &amp; Pages &gt; Create &gt; Pages &gt; Upload Assets</strong> (atau gunakan <a href="https://app.netlify.com/drop" target="_blank" rel="noreferrer" className="text-teal-700 underline font-semibold">Netlify Drop</a>).</li>
-                                        <li>Beri nama proyek (misal: <code>wali-pesantren</code>), lalu tarik (<em>drag &amp; drop</em>) file <code>index.html</code> tadi (atau masukkan ke dalam 1 folder lalu upload) dan klik <strong>Deploy Site</strong>.</li>
+                                        <li>Beri nama proyek (misal: <code>wali-pesantren</code>), lalu tarik (<em>drag &amp; drop</em>) file <code>index.html</code> tadi dan klik <strong>Deploy Site</strong>.</li>
                                     </ul>
                                 </li>
                                 <li>
-                                    <strong>Pasang URL pendek di eSantri:</strong> Salin alamat domain pendek yang diberikan Cloudflare (misal: <code>https://wali-pesantren.pages.dev</code>), tempelkan ke kolom <strong>&quot;URL Hosting Mandiri&quot;</strong> di pengaturan Portal Wali eSantri, centang <em>&quot;Gunakan URL Hosting Mandiri sebagai Link Utama &amp; QR Code&quot;</em>, lalu klik <strong>Simpan</strong>.
+                                    <strong>Pasang URL di eSantri:</strong> Salin alamat domain pendek (misal: <code>https://wali-pesantren.pages.dev</code>), tempelkan ke kolom <strong>&quot;URL Hosting Mandiri&quot;</strong> di pengaturan Portal Wali, centang <em>&quot;Gunakan URL Hosting Mandiri sebagai Link Utama &amp; QR Code&quot;</em>, lalu klik <strong>Simpan</strong>.
                                 </li>
                             </ol>
                             <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-950 font-medium">
-                                💡 <strong>Tidak Perlu Upload Ulang Saat Update Data:</strong> Anda cukup meng-upload file <code>index.html</code> ini <strong>SATU KALI SAJA</strong>. Untuk pembaruan data tagihan, absensi, nilai rapor, atau pengumuman harian selanjutnya, Anda cukup menekan tombol <strong>&quot;Sinkronkan Sekarang ke Portal&quot;</strong> dari dalam aplikasi eSantri.
+                                💡 <strong>Cukup Upload 1 Kali Seumur Hidup:</strong> Anda tidak perlu meng-upload ulang file <code>index.html</code> setiap pergantian semester. Cukup klik tombol <strong>&quot;Sinkronkan Sekarang ke Portal&quot;</strong> di aplikasi eSantri.
                             </div>
                         </div>
                     </div>
@@ -1589,6 +1812,43 @@ export const panduanData: PanduanSectionData[] = [
                                 <strong>Kontak Penting &amp; Tautan Eksternal:</strong> Tambahkan nomor WhatsApp Bendahara, Kantor Pengasuhan, atau link brosur/website resmi pondok agar wali santri dapat menghubungi pihak pondok dengan satu klik.
                             </li>
                         </ul>
+                    </div>
+                )
+            },
+            {
+                title: '7. Live Preview Simulator Interaktif (Mobile, Tablet & Desktop)',
+                color: 'teal',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Admin pondok kini dapat melihat dan menguji langsung tampilan Portal Wali secara interaktif tanpa perlu membuka HP atau menunggu proses sinkronisasi:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                            <div className="p-3 bg-white rounded-xl border border-teal-200 shadow-2xs space-y-1">
+                                <strong className="text-teal-900 font-bold flex items-center gap-1.5">
+                                    <i className="bi bi-phone text-teal-600"></i> 1. Tiga Viewport Responsif
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Beralih cepat antara simulasi <strong>Mobile Phone Frame (375px)</strong>, <strong>Tablet (720px)</strong>, dan <strong>Desktop Penuh</strong> untuk memastikan tata letak selalu rapi di semua ukuran layar gawai wali santri.
+                                </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-xl border border-teal-200 shadow-2xs space-y-1">
+                                <strong className="text-blue-900 font-bold flex items-center gap-1.5">
+                                    <i className="bi bi-box-arrow-in-right text-blue-600"></i> 2. Pratinjau Beranda Login
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Melihat langsung logo pondok, tema warna aktif, banner pengumuman sorotan, daftar pos berita, tombol WhatsApp layanan, serta kartu nomor rekening pondok.
+                                </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-xl border border-teal-200 shadow-2xs space-y-1">
+                                <strong className="text-emerald-900 font-bold flex items-center gap-1.5">
+                                    <i className="bi bi-speedometer2 text-emerald-600"></i> 3. Simulasi Dasbor Santri Real
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Pilih salah satu santri aktif pondok untuk menguji bagaimana rincian SPP, mutasi tabungan, nilai rapor, capaian juz tahfizh, rekam medis poskestren, dan buku perpustakaan santri tersebut tampil di HP wali.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 )
             }
@@ -3394,12 +3654,34 @@ export const panduanData: PanduanSectionData[] = [
                 )
             },
             {
-                title: '1. Desain Formulir Online & Pembuatan File HTML Mandiri',
+                title: '1. Desain Formulir Online, 1 Link Utama Selamanya & Siklus Tutup Gelombang',
                 content: (
                     <div className="space-y-3 text-sm text-gray-700">
-                        <p>
-                            Menu <strong>PSB &gt; Desain Formulir Online</strong> memungkinkan panitia menyusun formulir pendaftaran interaktif yang dapat dibagikan kepada calon wali santri:
-                        </p>
+                        <div className="bg-teal-50 p-3.5 rounded-xl border border-teal-200 text-xs text-teal-950 space-y-1.5">
+                            <strong className="font-bold flex items-center gap-1.5 text-teal-900 text-sm">
+                                <i className="bi bi-link-45deg text-teal-700 text-base"></i>
+                                Arsitektur 1 Link Utama Selamanya untuk Promosi, Brosur &amp; Medsos
+                            </strong>
+                            <p className="leading-relaxed text-gray-700">
+                                Panitia cukup mencetak <strong>1 Link Utama Selamanya</strong> (misalnya <code>namapondok.sch.id/psb</code> atau tautan <code>?psb=true</code>) pada spanduk jalan, brosur cetak, baliho, pamflet, dan bio Instagram pondok. Sistem otomatis mengarahkan pendaftar ke <strong>Tahun Ajaran &amp; Gelombang yang Sedang Buka</strong>. Ketika periode pendaftaran telah berakhir, link tersebut tidak rusak/404, melainkan otomatis menampilkan pemberitahuan bahwa gelombang pendaftaran telah ditutup beserta jadwal gelombang berikutnya.
+                            </p>
+                        </div>
+
+                        <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200 text-xs text-amber-950 space-y-1.5">
+                            <strong className="font-bold flex items-center gap-1.5 text-amber-900 text-sm">
+                                <i className="bi bi-recycle text-amber-700 text-base"></i>
+                                Siklus Tutup Gelombang: Ekspor Arsip &amp; Kosongkan Data Cloud Usang
+                            </strong>
+                            <p className="leading-relaxed text-gray-700">
+                                Data pendaftar lama (calon santri, scan KK/Akta, bukti transfer) tidak boleh menumpuk bertahun-tahun di cloud gratis. Setelah sidang kelulusan selesai:
+                            </p>
+                            <ol className="list-decimal pl-4 space-y-1 text-gray-700 text-[11px]">
+                                <li>Calon santri yang <strong>Diterima</strong> dikonversi langsung menjadi santri resmi di Buku Induk (menu <em>Konversi ke Santri</em>).</li>
+                                <li>Panitia mengunduh seluruh berkas dan rekap pendaftar ke file Excel &amp; ZIP cadangan di laptop TU via tombol <strong>&quot;Arsip ZIP&quot;</strong>.</li>
+                                <li>Tabel penampung di cloud dapat dikosongkan (reset) sehingga kapasitas server cloud kembali 0 MB dan siap menyambut pendaftar tahun ajaran baru dengan kencang.</li>
+                            </ol>
+                        </div>
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                             <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-2">
                                 <strong className="text-gray-800 flex items-center gap-1.5 font-bold">
@@ -3408,7 +3690,7 @@ export const panduanData: PanduanSectionData[] = [
                                 <ul className="list-disc pl-4 space-y-1 text-gray-600 text-[11px]">
                                     <li>Pilih kolom aktif (Biodata Santri, NISN, NIK, Tempat/Tanggal Lahir, Alamat).</li>
                                     <li>Pilih identitas orang tua/wali dan nomor WhatsApp untuk notifikasi.</li>
-                                    <li><strong>Petunjuk Isian (Field Hints):</strong> Tentukan teks petunjuk di bawah setiap pertanyaan (contoh: <em>"10 digit angka NISN resmi"</em>, <em>"Nomor WhatsApp aktif wali untuk konfirmasi berkas"</em>) agar format isian wali santri seragam.</li>
+                                    <li><strong>Petunjuk Isian (Field Hints):</strong> Tentukan teks petunjuk di bawah setiap pertanyaan agar format isian wali santri seragam.</li>
                                     <li>Atur dokumen yang wajib diunggah (Kartu Keluarga, Akta Kelahiran, Pas Foto 3x4, Ijazah, KIP/PKH).</li>
                                     <li>Gunakan <strong>Template Formulir</strong> berbeda per jenjang pendidikan (misal: Form MTs vs Form MA).</li>
                                 </ul>

@@ -744,12 +744,25 @@ export interface PortalAnnouncementPost {
     isPublished: boolean;
 }
 
+export type PortalProvider = 'gas' | 'cloudflare' | 'firebase' | 'supabase' | 'standalone';
+
 export interface PortalConfig {
     enabled: boolean;
-    provider?: 'gas';
+    provider?: PortalProvider;
     portalId?: string;
+    // Google Apps Script (GAS)
     gasEndpoint?: string;
     gasApiKey?: string;
+    // Cloudflare Pages / Worker (D1/KV)
+    cloudflareWorkerUrl?: string;
+    cloudflareApiKey?: string;
+    // Firebase Firestore
+    firebaseCollection?: string;
+    // Supabase (PostgreSQL REST)
+    supabaseUrl?: string;
+    supabaseAnonKey?: string;
+    supabaseTable?: string;
+    // Tema & Modul
     theme: 'teal' | 'blue' | 'indigo' | 'slate' | 'rose' | 'emerald' | 'cyan';
     showFinance: boolean;
     showAcademic: boolean;
@@ -803,13 +816,17 @@ export interface DigitalAsset {
 }
 
 export interface RaporCloudConfig {
+    backendProvider?: 'gas' | 'cloudflare_d1' | 'supabase' | 'cloudflare_r2';
     googleScriptUrl?: string;
+    customEndpoint?: string;
+    apiKey?: string;
     submissionMethod?: 'whatsapp' | 'google_sheet' | 'hybrid';
     waDestination?: string;
     tabMode?: 'per_rombel' | 'per_jenjang' | 'per_file';
     updatedAt?: string;
     lastSyncedAt?: string;
     lastSyncedStudents?: number;
+    lastPurgedAt?: string;
 }
 
 export interface PondokCustomInfoField {
@@ -827,6 +844,9 @@ export interface PondokSettings {
     npsn: string;
     showNsppInKop?: boolean;
     showNpsnInKop?: boolean;
+    showTeleponInKop?: boolean;
+    showWebsiteInKop?: boolean;
+    showEmailInKop?: boolean;
     customInfoFields?: PondokCustomInfoField[];
     alamat: string;
     telepon: string;

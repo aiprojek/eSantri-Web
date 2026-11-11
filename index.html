@@ -14,6 +14,20 @@
     <meta property="og:title" content="eSantri Web - Manajemen Data Santri" />
     <meta property="og:description" content="eSantri Web adalah aplikasi modern untuk manajemen data santri di Pondok Pesantren. Fitur lengkap, offline-first, dan mudah digunakan untuk mengelola administrasi pesantren." />
     <title>eSantri Web - Manajemen Data Santri</title>
+    <script>
+      // Prevent Dexie dual-version conflict when cached chunks or HMR re-evaluates
+      (function() {
+        try {
+          var sym = Symbol.for("Dexie");
+          Object.defineProperty(window, sym, {
+            configurable: true,
+            enumerable: false,
+            get: function() { return undefined; },
+            set: function() {}
+          });
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

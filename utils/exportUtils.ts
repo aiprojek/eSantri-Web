@@ -676,42 +676,98 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
         throw new Error('Elemen pratinjau laporan tidak ditemukan.');
     }
 
-    const detectAutoOrientation = (): 'p' | 'l' => {
-        // Cek eksplisit class .print-landscape atau .print-portrait
-        const hasLandscapeClass = element.classList.contains('print-landscape') || element.querySelector('.print-landscape') !== null;
-        const hasPortraitClass = element.classList.contains('print-portrait') || element.querySelector('.print-portrait') !== null;
-
-        if (hasLandscapeClass && !hasPortraitClass) return 'l';
-        if (hasPortraitClass && !hasLandscapeClass) return 'p';
-
-        const pages = element.querySelectorAll('.print-portrait, .print-landscape, .page-break-after');
-        let maxEstimatedWidth = 0;
-
-        pages.forEach((pageContainer) => {
-            const tables = Array.from(pageContainer.querySelectorAll('table')).filter(t => !t.classList.contains('print-meta')) as HTMLTableElement[];
-            tables.forEach((table) => {
-                const headers = Array.from(table.querySelectorAll('thead th'));
-                if (headers.length === 0) return;
-
-                const columnCount = headers.length;
-                let textFactor = 0;
-                headers.forEach((th) => {
-                    const len = (th.textContent || '').replace(/\s+/g, ' ').trim().length;
-                    textFactor += Math.min(len, 20);
-                });
-
-                // Estimasi sederhana lebar tabel:
-                // - basis lebar per kolom
-                // - ditambah bobot panjang header
-                const estimatedWidth = (columnCount * 22) + (textFactor * 1.2);
-                if (estimatedWidth > maxEstimatedWidth) {
-                    maxEstimatedWidth = estimatedWidth;
+    // Helper: ekstrak base64 dari image element atau muat via canvas
+    const extractImageBase64 = async (imgEl: HTMLImageElement | null): Promise<string | null> => {
+        if (!imgEl) return null;
+        try {
+            const src = imgEl.src;
+            if (!src) return null;
+            if (src.startsWith('data:image/')) return src;
+            if (imgEl.complete && imgEl.naturalWidth > 0) {
+                const canvas = document.createElement('canvas');
+                canvas.width = imgEl.naturalWidth;
+                canvas.height = imgEl.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(imgEl, 0, 0);
+                    return canvas.toDataURL('image/png');
                 }
+            }
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    try {
+                        const c = document.createElement('canvas');
+                        c.width = img.width;
+                        c.height = img.height;
+                        const cx = c.getContext('2d');
+                        if (cx) {
+                            cx.drawImage(img, 0, 0);
+                            resolve(c.toDataURL('image/png'));
+                        } else {
+                            resolve(null);
+                        }
+                    } catch {
+                        resolve(null);
+                    }
+                };
+                img.onerror = () => resolve(null);
+                img.src = src;
             });
-        });
+        } catch {
+            return null;
+        }
+    };
 
-        // Ambang ini membuat tabel sempit tetap portrait, tabel lebar otomatis landscape.
-        return maxEstimatedWidth > 165 ? 'l' : 'p';
+    // Helper: tentukan orientasi spesifik per lembar halaman
+    const resolvePageOrientation = (pageEl: Element): 'l' | 'p' => {
+        if (pageEl.classList.contains('print-landscape')) return 'l';
+        if (pageEl.classList.contains('print-portrait')) return 'p';
+        if (pageEl.querySelector('.print-landscape')) return 'l';
+        if (pageEl.querySelector('.print-portrait')) return 'p';
+
+        // Deteksi dari jumlah kolom tabel utama
+        const tables = Array.from(pageEl.querySelectorAll('table')).filter(t => !t.classList.contains('print-meta'));
+        for (const t of tables) {
+            const ths = t.querySelectorAll('thead th, tr:first-child th, tr:first-child td');
+            if (ths.length > 5) return 'l';
+        }
+        return 'p';
+    };
+
+    // Helper: parse blok tanda tangan resmi
+    interface SignatureBlock {
+        leftHeader: string;
+        leftTitle: string;
+        leftName: string;
+        rightHeader: string;
+        rightTitle: string;
+        rightName: string;
+    }
+
+    const parseSignatures = (container: Element): SignatureBlock | null => {
+        const allDivs = Array.from(container.querySelectorAll('div'));
+        for (const div of allDivs) {
+            const text = div.textContent || '';
+            if (text.includes('Mengetahui') && (text.includes('Wali') || text.includes('Mudir') || text.includes('Kepala') || text.includes('Pondok Pesantren') || text.includes('Pengasuh') || text.includes('Pimpinan'))) {
+                const columns = Array.from(div.children).filter(c => c.children.length >= 2 || c.querySelectorAll('p').length >= 2);
+                if (columns.length >= 2) {
+                    const leftPs = Array.from(columns[0].querySelectorAll('p')).map(p => p.textContent?.trim() || '').filter(Boolean);
+                    const rightPs = Array.from(columns[1].querySelectorAll('p')).map(p => p.textContent?.trim() || '').filter(Boolean);
+
+                    return {
+                        leftHeader: leftPs[0] || 'Mengetahui,',
+                        leftTitle: leftPs[1] || 'Wali Kelas',
+                        leftName: leftPs[leftPs.length - 1] || '',
+                        rightHeader: rightPs[0] || 'Pondok Pesantren',
+                        rightTitle: rightPs[1] || 'Kepala Madrasah / Mudir',
+                        rightName: rightPs[rightPs.length - 1] || ''
+                    };
+                }
+            }
+        }
+        return null;
     };
 
     const [{ jsPDF }, autoTableModule] = await Promise.all([
@@ -720,27 +776,31 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
     ]);
     const autoTable = autoTableModule.default;
 
-    const orientation = detectAutoOrientation();
-    const doc = new jsPDF(orientation, 'mm', 'a4');
-    const pageWidth = doc.internal.pageSize.getWidth();
-    
-    // Find all visual pages (including the last page without page-break-after)
-    const pages = element.querySelectorAll('.print-portrait, .print-landscape, .page-break-after');
-    
+    // Cari seluruh halaman visual laporan
+    let pages = Array.from(element.querySelectorAll('.print-portrait, .print-landscape, .page-break-after'));
+    if (pages.length === 0) {
+        const wrapperChildren = element.querySelectorAll('.printable-content-wrapper > div');
+        if (wrapperChildren.length > 0) {
+            pages = Array.from(wrapperChildren);
+        } else {
+            pages = [element];
+        }
+    }
+
     if (pages.length === 0) {
         throw new Error('Tidak ditemukan halaman laporan yang bisa diproses.');
     }
 
-    let isFirstPage = true;
+    const firstOrientation = resolvePageOrientation(pages[0]);
+    const doc = new jsPDF(firstOrientation, 'mm', 'a4');
 
-    pages.forEach((pageContainer, pageIndex) => {
-        const titles = pageContainer.querySelectorAll('h1, h2, h3, h4');
-        const metaContainers = pageContainer.querySelectorAll('.print-meta');
-        const schoolNameFromH2 = pageContainer.querySelector('h2')?.textContent?.replace(/\s+/g, ' ').trim() || '';
-        const addressFromParagraph = pageContainer.querySelector('p')?.textContent?.replace(/\s+/g, ' ').trim() || '';
-        const reportTitleFromSubtitle = pageContainer.querySelector('.print-header-subtitle')?.textContent?.replace(/\s+/g, ' ').trim() || '';
-        
-        // Find tables in this specific page, excluding meta tables
+    let processedPageCount = 0;
+
+    for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+        const pageContainer = pages[pageIndex];
+        const pageOrientation = resolvePageOrientation(pageContainer);
+
+        // Cari tabel data pada halaman ini (kecuali tabel meta)
         const allPageTables = pageContainer.querySelectorAll('table');
         const tables: HTMLTableElement[] = [];
         allPageTables.forEach(t => {
@@ -749,67 +809,169 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
             }
         });
 
+        const titles = pageContainer.querySelectorAll('h1, h2, h3, h4');
+        const metaContainers = pageContainer.querySelectorAll('.print-meta');
+
         if (tables.length === 0 && metaContainers.length === 0 && titles.length === 0) {
-            return; // Skip completely empty containers
+            continue; // Lewati container kosong
         }
 
-        if (!isFirstPage) {
-            doc.addPage();
+        if (processedPageCount > 0) {
+            doc.addPage('a4', pageOrientation);
         }
-        isFirstPage = false;
-        
-        let yPos = 15;
-        let reportTitle = '';
-        let schoolName = '';
-        let address = '';
+        processedPageCount++;
 
-        const titleTexts = Array.from(titles)
-            .map((title) => title.textContent?.replace(/\s+/g, ' ').trim() || '')
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const marginX = 10;
+        let yPos = 12;
+
+        // --- 1. DETEKSI & MUAT LOGO ---
+        const kopImgs = Array.from(pageContainer.querySelectorAll('img')) as HTMLImageElement[];
+        let leftLogoImg: HTMLImageElement | null = null;
+        let rightLogoImg: HTMLImageElement | null = null;
+
+        if (kopImgs.length === 1) {
+            leftLogoImg = kopImgs[0];
+        } else if (kopImgs.length >= 2) {
+            const yayasanImg = kopImgs.find(img => img.alt?.toLowerCase().includes('yayasan'));
+            const ponpesImg = kopImgs.find(img => img.alt?.toLowerCase().includes('ponpes'));
+            leftLogoImg = yayasanImg || kopImgs[0];
+            rightLogoImg = ponpesImg || kopImgs[kopImgs.length - 1];
+            if (leftLogoImg === rightLogoImg && kopImgs.length > 1) {
+                rightLogoImg = kopImgs[1];
+            }
+        }
+
+        const [leftLogoBase64, rightLogoBase64] = await Promise.all([
+            extractImageBase64(leftLogoImg),
+            extractImageBase64(rightLogoImg)
+        ]);
+
+        // --- 2. DETEKSI INFORMASI KOP & JUDUL LAPORAN ---
+        const schoolNameFromH2 = pageContainer.querySelector('h2')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+        const reportTitleFromSubtitle = pageContainer.querySelector('.print-header-subtitle')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+
+        const allParagraphs = Array.from(pageContainer.querySelectorAll('p'))
+            .map(p => p.textContent?.replace(/\s+/g, ' ').trim() || '')
             .filter(Boolean);
 
-        if (titleTexts.length > 0) {
-            schoolName = titleTexts[0];
-            reportTitle = titleTexts.length > 1 ? titleTexts[titleTexts.length - 1] : '';
-        }
-        if (schoolNameFromH2) schoolName = schoolName || schoolNameFromH2;
-        if (addressFromParagraph) address = addressFromParagraph;
-        if (reportTitleFromSubtitle) reportTitle = reportTitleFromSubtitle;
+        const yayasanCandidate = allParagraphs.find(p => p.toLowerCase().includes('yayasan')) || '';
+        const identityLine = allParagraphs.find(p => p.includes('NSPP') || p.includes('NPSN')) || '';
+        const contactLine = allParagraphs.find(p => p.toLowerCase().includes('telp') || p.toLowerCase().includes('email') || p.toLowerCase().includes('website')) || '';
+        const addressLine = allParagraphs.find(p => {
+            const l = p.toLowerCase();
+            return !l.includes('yayasan') &&
+                !p.includes('NSPP') &&
+                !p.includes('NPSN') &&
+                !l.startsWith('telp') &&
+                !l.startsWith('email') &&
+                !l.startsWith('website') &&
+                !l.startsWith('catatan') &&
+                !l.startsWith('mengetahui') &&
+                !l.startsWith('dibuat dengan') &&
+                p.length > 8;
+        }) || '';
 
-        // KOP rapi: nama pondok -> alamat -> garis -> judul
+        let schoolName = schoolNameFromH2;
+        if (!schoolName && titles.length > 0) {
+            schoolName = titles[0].textContent?.replace(/\s+/g, ' ').trim() || '';
+        }
+        let reportTitle = reportTitleFromSubtitle;
+        if (!reportTitle && titles.length > 1) {
+            reportTitle = titles[titles.length - 1].textContent?.replace(/\s+/g, ' ').trim() || '';
+        }
+
+        // --- 3. CETAK KOP RESMI ---
+        const kopStartY = yPos;
+        const logoSize = 17; // mm
+        const kopTextCenterX = pageWidth / 2;
+
+        if (yayasanCandidate) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8.5);
+            doc.setTextColor(50, 50, 50);
+            doc.text(yayasanCandidate.toUpperCase(), kopTextCenterX, yPos, { align: 'center' });
+            yPos += 4.5;
+        }
+
         if (schoolName) {
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(14);
-            doc.text(schoolName, pageWidth / 2, yPos, { align: 'center' });
-            yPos += 6;
+            doc.setFontSize(13.5);
+            doc.setTextColor(15, 23, 42);
+            doc.text(schoolName.toUpperCase(), kopTextCenterX, yPos, { align: 'center' });
+            yPos += 5.5;
         }
-        if (address) {
+
+        if (identityLine) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.setTextColor(60, 60, 60);
+            doc.text(identityLine, kopTextCenterX, yPos, { align: 'center' });
+            yPos += 4;
+        }
+
+        if (addressLine) {
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
-            doc.text(address, pageWidth / 2, yPos, { align: 'center' });
-            yPos += 5;
+            doc.setFontSize(8);
+            doc.setTextColor(50, 50, 50);
+            doc.text(addressLine, kopTextCenterX, yPos, { align: 'center' });
+            yPos += 4;
         }
 
-        doc.setDrawColor(80, 80, 80);
-        doc.setLineWidth(0.3);
-        doc.line(10, yPos, pageWidth - 10, yPos);
-        yPos += 8;
+        if (contactLine) {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setTextColor(80, 80, 80);
+            doc.text(contactLine, kopTextCenterX, yPos, { align: 'center' });
+            yPos += 4;
+        }
 
+        // Cetak Logo jika ada
+        if (leftLogoBase64) {
+            try {
+                doc.addImage(leftLogoBase64, 'PNG', marginX + 2, kopStartY, logoSize, logoSize);
+            } catch (err) {
+                console.warn('Gagal menyisipkan logo kiri:', err);
+            }
+        }
+        if (rightLogoBase64 && rightLogoBase64 !== leftLogoBase64) {
+            try {
+                doc.addImage(rightLogoBase64, 'PNG', pageWidth - marginX - logoSize - 2, kopStartY, logoSize, logoSize);
+            } catch (err) {
+                console.warn('Gagal menyisipkan logo kanan:', err);
+            }
+        }
+
+        yPos = Math.max(yPos, kopStartY + logoSize) + 2;
+
+        // Garis Ganda KOP Resmi Pondok
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.6);
+        doc.line(marginX, yPos, pageWidth - marginX, yPos);
+        doc.setLineWidth(0.2);
+        doc.line(marginX, yPos + 0.8, pageWidth - marginX, yPos + 0.8);
+        yPos += 6;
+
+        // --- 4. JUDUL LAPORAN ---
         if (reportTitle) {
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(12);
-            doc.text(reportTitle, pageWidth / 2, yPos, { align: 'center' });
-            yPos += 7;
+            doc.setFontSize(11.5);
+            doc.setTextColor(0, 0, 0);
+            doc.text(reportTitle.toUpperCase(), pageWidth / 2, yPos, { align: 'center' });
+            yPos += 5.5;
         }
 
-        // Print Meta
+        // --- 5. PRINT META (Jenjang, Kelas/Rombel, Tahun Ajaran, Semester, Wali Kelas) ---
         if (metaContainers.length > 0) {
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
-            let allMetaLines: string[] = [];
-            
+            doc.setFontSize(8);
+            doc.setTextColor(30, 41, 59);
+            const allMetaLines: string[] = [];
+
             metaContainers.forEach(metaContainer => {
                 if (metaContainer.classList.contains('print-header-subtitle') || metaContainer.classList.contains('report-signature-footer')) return;
-                
+
                 let metaText = '';
                 if (metaContainer.classList.contains('grid')) {
                     Array.from(metaContainer.children).forEach((child) => {
@@ -832,21 +994,66 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
                     if (metaText && !metaText.toLowerCase().includes('dibuat dengan aplikasi esantri web')) allMetaLines.push(metaText);
                 }
             });
-            
+
             allMetaLines.forEach(line => {
-                const wrappedLines = doc.splitTextToSize(line, pageWidth - 30);
+                const wrappedLines = doc.splitTextToSize(line, pageWidth - (marginX * 2) - 10);
                 wrappedLines.forEach((wrapped: string) => {
                     doc.text(wrapped, pageWidth / 2, yPos, { align: 'center' });
-                    yPos += 4.5;
+                    yPos += 4;
                 });
-                yPos += 1.5;
+                yPos += 1;
             });
-            yPos += 3;
+            yPos += 2;
         }
 
-        // Print Tables for this page
-        tables.forEach((table, index) => {
-            if (index > 0) yPos += 10;
+        // --- 6. TABEL DATA AUTOTABLE CERDAS ---
+        tables.forEach((table, tableIndex) => {
+            if (tableIndex > 0) yPos += 8;
+
+            const thList = Array.from(table.querySelectorAll('thead th, tr:first-child th, tr:first-child td'));
+            const colCount = thList.length || 8;
+            const isLandscape = pageOrientation === 'l';
+
+            // Skala font & padding adaptif sesuai orientasi dan kepadatan kolom
+            let tableFontSize = 8;
+            let tableCellPadding = 2;
+
+            if (isLandscape) {
+                if (colCount >= 14) { tableFontSize = 6; tableCellPadding = 1; }
+                else if (colCount >= 11) { tableFontSize = 6.8; tableCellPadding = 1.2; }
+                else if (colCount >= 8) { tableFontSize = 7.5; tableCellPadding = 1.5; }
+                else { tableFontSize = 8.5; tableCellPadding = 2; }
+            } else {
+                if (colCount >= 12) { tableFontSize = 5.5; tableCellPadding = 0.8; }
+                else if (colCount >= 9) { tableFontSize = 6.5; tableCellPadding = 1.1; }
+                else if (colCount >= 7) { tableFontSize = 7.2; tableCellPadding = 1.4; }
+                else { tableFontSize = 8; tableCellPadding = 1.8; }
+            }
+
+            // Tentukan columnStyles cerdas agar nomor/kode (NIS, NIK, Telepon) tidak patah baris canggung
+            const columnStyles: Record<number, any> = {};
+            thList.forEach((th, colIdx) => {
+                const text = (th.textContent || '').trim().toLowerCase();
+                if (text === 'no' || text === '#') {
+                    columnStyles[colIdx] = { halign: 'center', cellWidth: 9 };
+                } else if (text === 'nis' || text === 'nisn') {
+                    columnStyles[colIdx] = { halign: 'center', minCellWidth: 22 };
+                } else if (text === 'nik' || text.includes('nik ')) {
+                    columnStyles[colIdx] = { halign: 'center', minCellWidth: 28 };
+                } else if (text === 'l/p' || text === 'lp' || text === 'jk') {
+                    columnStyles[colIdx] = { halign: 'center', cellWidth: 10 };
+                } else if (text.includes('telepon') || text.includes('hp') || text.includes('kontak') || text.includes('no. telp')) {
+                    columnStyles[colIdx] = { halign: 'center', minCellWidth: 25 };
+                } else if (text.includes('nama lengkap') || text === 'nama santri' || text === 'nama') {
+                    columnStyles[colIdx] = { halign: 'left', fontStyle: 'bold' };
+                } else if (text.includes('tempat') || text.includes('ttl') || text.includes('lahir')) {
+                    columnStyles[colIdx] = { halign: 'left' };
+                } else if (text.includes('wali') || text.includes('ayah') || text.includes('ibu')) {
+                    columnStyles[colIdx] = { halign: 'left' };
+                } else if (text.includes('alamat')) {
+                    columnStyles[colIdx] = { halign: 'left' };
+                }
+            });
 
             // @ts-ignore
             doc.autoTable({
@@ -854,34 +1061,114 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
                 startY: yPos,
                 theme: 'grid',
                 styles: {
-                    fontSize: 8,
-                    cellPadding: 2
+                    fontSize: tableFontSize,
+                    cellPadding: tableCellPadding,
+                    overflow: 'linebreak',
+                    valign: 'middle',
+                    lineColor: [200, 205, 215],
+                    lineWidth: 0.15
                 },
-                headStyles: { fillColor: [45, 120, 110], textColor: 255 },
-                margin: { left: 10, right: 10 },
+                headStyles: {
+                    fillColor: [45, 120, 110], // Deep Teal
+                    textColor: 255,
+                    fontStyle: 'bold',
+                    halign: 'center',
+                    valign: 'middle'
+                },
+                alternateRowStyles: {
+                    fillColor: [250, 252, 252]
+                },
+                columnStyles,
+                margin: { left: marginX, right: marginX },
+                didParseCell: (data: any) => {
+                    // Cegah pembungkusan canggung pada digit/kode berjarak (NIS: 4625 02 0271, Telp: 0838 2243 4375)
+                    if (data.section === 'body') {
+                        const colHeader = (thList[data.column.index]?.textContent || '').trim().toLowerCase();
+                        const isCodeCol = colHeader === 'nis' || colHeader === 'nisn' || colHeader === 'nik' || colHeader.includes('telepon') || colHeader.includes('hp');
+                        if (isCodeCol) {
+                            if (Array.isArray(data.cell.text)) {
+                                data.cell.text = data.cell.text.map((t: string) => t.replace(/\s+/g, '\u00A0'));
+                            } else if (typeof data.cell.text === 'string') {
+                                data.cell.text = data.cell.text.replace(/\s+/g, '\u00A0');
+                            }
+                        }
+                    }
+                },
                 didDrawPage: (data: any) => {
                     yPos = data.cursor?.y || yPos;
                 }
             });
-            
+
             // @ts-ignore
-            yPos = (doc as any).lastAutoTable.finalY + 5;
+            yPos = (doc as any).lastAutoTable.finalY + 6;
         });
 
-        // Footer tetap di bawah halaman
-        const pageHeight = doc.internal.pageSize.getHeight();
+        // --- 7. TANDA TANGAN RESMI PONDOK (JIKA ADA) ---
+        const signatures = parseSignatures(pageContainer);
+        if (signatures) {
+            let sigY = yPos + 6;
+            const sigHeight = 28;
+
+            // Jika ruang halaman tidak mencukupi, pindah ke halaman baru
+            if (sigY + sigHeight > pageHeight - 16) {
+                doc.addPage('a4', pageOrientation);
+                sigY = 20;
+            }
+
+            const leftCenterX = marginX + 35;
+            const rightCenterX = pageWidth - marginX - 35;
+
+            doc.setFontSize(8.5);
+            doc.setTextColor(40, 40, 40);
+
+            // Tanda tangan Kiri (Wali Kelas)
+            doc.setFont('helvetica', 'normal');
+            doc.text(signatures.leftHeader, leftCenterX, sigY, { align: 'center' });
+            doc.text(signatures.leftTitle, leftCenterX, sigY + 4.5, { align: 'center' });
+
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 23, 42);
+            doc.text(signatures.leftName, leftCenterX, sigY + 20, { align: 'center' });
+            const leftNameWidth = doc.getTextWidth(signatures.leftName);
+            if (leftNameWidth > 5) {
+                doc.setLineWidth(0.2);
+                doc.line(leftCenterX - leftNameWidth / 2, sigY + 21, leftCenterX + leftNameWidth / 2, sigY + 21);
+            }
+
+            // Tanda tangan Kanan (Mudir / Kepala Madrasah)
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(40, 40, 40);
+            doc.text(signatures.rightHeader, rightCenterX, sigY, { align: 'center' });
+            doc.text(signatures.rightTitle, rightCenterX, sigY + 4.5, { align: 'center' });
+
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 23, 42);
+            doc.text(signatures.rightName, rightCenterX, sigY + 20, { align: 'center' });
+            const rightNameWidth = doc.getTextWidth(signatures.rightName);
+            if (rightNameWidth > 5) {
+                doc.setLineWidth(0.2);
+                doc.line(rightCenterX - rightNameWidth / 2, sigY + 21, rightCenterX + rightNameWidth / 2, sigY + 21);
+            }
+
+            yPos = sigY + 24;
+        }
+
+        // --- 8. FOOTER HALAMAN DENGAN BRANDING & NOMOR HALAMAN ---
         const footerLineY = pageHeight - 9;
         const footerTextY = pageHeight - 5;
-        doc.setDrawColor(170, 170, 170);
+        doc.setDrawColor(180, 185, 195);
         doc.setLineWidth(0.15);
-        doc.line(10, footerLineY, pageWidth - 10, footerLineY);
-        doc.setFontSize(8);
-        doc.setTextColor(120, 120, 120);
-        doc.text('dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id', pageWidth / 2, footerTextY, { align: 'center' });
-        doc.setTextColor(0, 0, 0);
-    });
+        doc.line(marginX, footerLineY, pageWidth - marginX, footerLineY);
 
-    if (isFirstPage) {
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(120, 120, 120);
+        doc.text('dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id', marginX, footerTextY);
+        doc.text(`Halaman ${pageIndex + 1} dari ${pages.length}`, pageWidth - marginX, footerTextY, { align: 'right' });
+        doc.setTextColor(0, 0, 0);
+    }
+
+    if (processedPageCount === 0) {
         throw new Error('Tidak ditemukan tabel data untuk AutoTable. Gunakan PDF (Asli) untuk laporan visual.');
     }
 

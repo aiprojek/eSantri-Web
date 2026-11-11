@@ -32,9 +32,9 @@ export const getKopIdentityLines = (settings: PondokSettings): string[] => {
 export const PrintHeader: React.FC<{ settings: PondokSettings; title?: string; compact?: boolean }> = ({ settings, title, compact = false }) => {
     const kopIdentityItems = getKopIdentityLines(settings);
     const contactItems = [
-        settings.telepon?.trim() ? `Telp: ${settings.telepon.trim()}` : '',
-        settings.email?.trim() ? `Email: ${settings.email.trim()}` : '',
-        settings.website?.trim() ? `Website: ${settings.website.trim()}` : '',
+        settings.telepon?.trim() && settings.showTeleponInKop !== false ? `Telp: ${settings.telepon.trim()}` : '',
+        settings.email?.trim() && settings.showEmailInKop !== false ? `Email: ${settings.email.trim()}` : '',
+        settings.website?.trim() && settings.showWebsiteInKop !== false ? `Website: ${settings.website.trim()}` : '',
     ].filter(Boolean);
 
     return (

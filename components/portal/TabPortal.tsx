@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { PondokSettings, PortalConfig, PortalContact, PortalAnnouncementPost } from '../../types';
+import { PondokSettings, PortalConfig, PortalContact, PortalAnnouncementPost, PortalProvider } from '../../types';
 import { useAppContext } from '../../AppContext';
 import { SectionCard } from '../common/SectionCard';
 import {
     encodePortalKey,
     getPortalGasScriptV2,
+    getPortalCloudflareWorkerScript,
+    getPortalSupabaseSchemaSql,
+    getPortalFirebaseGuide,
+    syncPortalData,
     syncPortalBridgeToGas,
 } from '../../services/portalGasService';
 import { downloadStandalonePortalHtml } from '../../utils/portalStandaloneGenerator';
@@ -14,6 +18,7 @@ interface TabPortalProps {
     setLocalSettings: React.Dispatch<React.SetStateAction<PondokSettings>>;
     onSaveSettings?: (newSettings: PondokSettings) => Promise<void>;
     canWrite?: boolean;
+    onSwitchToPreview?: () => void;
 }
 
 const DEFAULT_PORTAL_CONFIG: PortalConfig = {
@@ -43,6 +48,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({
     setLocalSettings,
     onSaveSettings,
     canWrite: canWriteProp,
+    onSwitchToPreview,
 }) => {
     const { showToast, settings, currentUser } = useAppContext();
     const canWrite =
@@ -51,6 +57,9 @@ export const TabPortal: React.FC<TabPortalProps> = ({
             currentUser?.permissions?.portalwali === 'write' ||
             currentUser?.permissions?.pengaturan === 'write');
     const [showGasScriptModal, setShowGasScriptModal] = useState(false);
+    const [showCloudflareModal, setShowCloudflareModal] = useState(false);
+    const [showSupabaseModal, setShowSupabaseModal] = useState(false);
+    const [showFirebaseModal, setShowFirebaseModal] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [showApiKey, setShowApiKey] = useState(false);
@@ -104,12 +113,21 @@ export const TabPortal: React.FC<TabPortalProps> = ({
     const handleDownloadStandalone = () => {
         if (!canWrite) return;
         try {
-            if (!portalConfig.gasEndpoint?.trim()) {
-                showToast('Isi URL Web App Google Apps Script terlebih dahulu.', 'error');
+            const provider = portalConfig.provider || 'gas';
+            if (provider === 'gas' && !portalConfig.gasEndpoint?.trim()) {
+                showToast('Isi URL Web App Google Apps Script di form pengaturan terlebih dahulu.', 'error');
+                return;
+            }
+            if (provider === 'cloudflare' && !portalConfig.cloudflareWorkerUrl?.trim()) {
+                showToast('Isi URL Cloudflare Worker di form pengaturan terlebih dahulu.', 'error');
+                return;
+            }
+            if (provider === 'supabase' && (!portalConfig.supabaseUrl?.trim() || !portalConfig.supabaseAnonKey?.trim())) {
+                showToast('Isi URL Supabase dan Public Anon Key di form pengaturan terlebih dahulu.', 'error');
                 return;
             }
             downloadStandalonePortalHtml(localSettings);
-            showToast('File index.html Portal Wali (Terenkripsi) berhasil diunduh!', 'success');
+            showToast('File index.html Portal Wali Mandiri berhasil diunduh!', 'success');
         } catch (err) {
             showToast((err as Error)?.message || 'Gagal membuat file HTML mandiri.', 'error');
         }
@@ -117,13 +135,22 @@ export const TabPortal: React.FC<TabPortalProps> = ({
 
     const handleSyncNow = async () => {
         if (!canWrite) return;
-        if (!portalConfig.gasEndpoint?.trim()) {
-            showToast('Isi URL Web App GAS terlebih dahulu.', 'error');
+        const provider = portalConfig.provider || 'gas';
+        if (provider === 'gas' && !portalConfig.gasEndpoint?.trim()) {
+            showToast('Isi URL Web App Google Apps Script (GAS) terlebih dahulu.', 'error');
+            return;
+        }
+        if (provider === 'cloudflare' && !portalConfig.cloudflareWorkerUrl?.trim()) {
+            showToast('Isi URL Cloudflare Worker terlebih dahulu.', 'error');
+            return;
+        }
+        if (provider === 'supabase' && (!portalConfig.supabaseUrl?.trim() || !portalConfig.supabaseAnonKey?.trim())) {
+            showToast('Isi URL Supabase dan Public Anon Key terlebih dahulu.', 'error');
             return;
         }
         setIsSyncing(true);
         try {
-            const res = await syncPortalBridgeToGas(localSettings);
+            const res = await syncPortalData(localSettings);
             const updatedPortal: any = {
                 ...portalConfig,
                 lastSyncedAt: res.syncedAt,
@@ -148,9 +175,9 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                 }
                 await onSaveSettings(dataToSave);
             }
-            showToast(`Berhasil sinkronisasi ${res.santriCount} data santri ke Portal Wali!`, 'success');
+            showToast(`Berhasil sinkronisasi ${res.santriCount} data santri ke ${res.providerName}!`, 'success');
         } catch (err) {
-            showToast((err as Error)?.message || 'Gagal sinkronisasi ke GAS.', 'error');
+            showToast((err as Error)?.message || 'Gagal sinkronisasi ke provider portal.', 'error');
         } finally {
             setIsSyncing(false);
         }
@@ -269,12 +296,114 @@ export const TabPortal: React.FC<TabPortalProps> = ({
 
     const gasScriptV2 = getPortalGasScriptV2(portalConfig.portalId || 'ponpes-alikhlas');
 
+    const getStandaloneCardInfo = () => {
+        const p = portalConfig.provider || 'gas';
+        switch (p) {
+            case 'cloudflare':
+                return {
+                    title: 'Opsi 1 (Rekomendasi): File HTML Mandiri (Cloudflare Edge)',
+                    badge: 'Cloudflare Worker',
+                    desc: (
+                        <>
+                            Unduh file <code>index.html</code> mandiri yang sudah terkonfigurasi dengan endpoint Cloudflare Worker resmi pondok. Cukup upload 1 kali ke <strong>Cloudflare Pages</strong> atau <strong>Netlify Drop</strong> gratis untuk mendapatkan domain resmi pondok (contoh: <code>wali.pesantren.sch.id</code>).
+                        </>
+                    ),
+                    btnText: 'Download HTML Mandiri (Cloudflare)',
+                };
+            case 'supabase':
+                return {
+                    title: 'Opsi 1 (Rekomendasi): File HTML Mandiri (Supabase REST)',
+                    badge: 'Supabase PostgreSQL',
+                    desc: (
+                        <>
+                            Unduh file <code>index.html</code> mandiri yang siap terhubung langsung ke REST API Supabase pondok dengan proteksi Row-Level Security. Cukup unggah 1 kali ke <strong>Cloudflare Pages</strong> atau <strong>Netlify Drop</strong> gratis.
+                        </>
+                    ),
+                    btnText: 'Download HTML Mandiri (Supabase)',
+                };
+            case 'firebase':
+                return {
+                    title: 'Opsi 1: File HTML Mandiri (Firebase Firestore)',
+                    badge: 'Firebase Cloud',
+                    desc: (
+                        <>
+                            Unduh file <code>index.html</code> mandiri yang terhubung dengan dokumen Firestore publik pondok. Dapat dihosting di <strong>Firebase Hosting</strong>, <strong>Cloudflare Pages</strong>, atau <strong>Netlify</strong>.
+                        </>
+                    ),
+                    btnText: 'Download HTML Mandiri (Firebase)',
+                };
+            case 'standalone':
+                return {
+                    title: 'Opsi 1: File HTML Mandiri (Zero-Cloud Bundle)',
+                    badge: 'Zero Backend',
+                    desc: (
+                        <>
+                            Unduh file <code>index.html</code> mandiri yang memuat seluruh snapshot data santri terenkripsi di dalamnya. Cukup drag &amp; drop ke hosting statis apa pun (<strong>Netlify Drop</strong>, <strong>GitHub Pages</strong>, atau <strong>Vercel</strong>) tanpa database cloud.
+                        </>
+                    ),
+                    btnText: 'Download HTML Mandiri (Zero-Cloud)',
+                };
+            case 'gas':
+            default:
+                return {
+                    title: 'Opsi 1 (Rekomendasi): File HTML Mandiri (Cloudflare / Netlify)',
+                    badge: 'GAS v2.0 Terenkripsi',
+                    desc: (
+                        <>
+                            Unduh file <code>index.html</code> yang sudah berisi kode aplikasi Portal Wali + endpoint Google Apps Script yang dienkripsi (XOR Cipher + Base64). Upload 1 kali ke <strong>Cloudflare Pages</strong> atau <strong>Netlify Drop</strong> gratis untuk domain pendek resmi pondok.
+                        </>
+                    ),
+                    btnText: 'Download File index.html Mandiri',
+                };
+        }
+    };
+
+    const getDirectLinkInfo = () => {
+        const p = portalConfig.provider || 'gas';
+        switch (p) {
+            case 'cloudflare':
+                return {
+                    title: 'Opsi 2: Tautan Langsung Portal (Cloudflare Worker)',
+                    badge: 'Cloudflare Edge',
+                    desc: 'Tautan web portal eSantri yang membaca data dari endpoint Cloudflare Worker pondok:',
+                };
+            case 'supabase':
+                return {
+                    title: 'Opsi 2: Tautan Langsung Portal (Supabase)',
+                    badge: 'Supabase PostgreSQL',
+                    desc: 'Tautan web portal eSantri yang membaca data dari Supabase PostgreSQL REST API pondok:',
+                };
+            case 'firebase':
+                return {
+                    title: 'Opsi 2: Tautan Langsung Portal (Firebase Firestore)',
+                    badge: 'Firestore Live',
+                    desc: 'Tautan web portal eSantri yang terhubung ke dokumen Firestore publik pondok:',
+                };
+            case 'standalone':
+                return {
+                    title: 'Opsi 2: Tautan Portal Terpasang (Standalone)',
+                    badge: 'Static Hosting',
+                    desc: 'Tautan web portal eSantri atau domain mandiri tempat file index.html di-host:',
+                };
+            case 'gas':
+            default:
+                return {
+                    title: 'Opsi 2: Tautan Portal Terenkripsi (Parameter ?k=ep2_...)',
+                    badge: 'Tanpa Hosting Tambahan',
+                    desc: 'Tautan langsung yang menyamarkan URL GAS menjadi parameter pendek ?k=ep2_...:',
+                };
+        }
+    };
+
+    const standaloneInfo = getStandaloneCardInfo();
+    const directInfo = getDirectLinkInfo();
+
     return (
         <div className="space-y-6">
-            {/* 1. Koneksi Jembatan Google Apps Script (GAS v2.0) & Keamanan Link */}
+            {/* 1. Pemilihan Provider Cloud & Keamanan Tautan */}
             <SectionCard
-                title="Koneksi Jembatan Cloud (Google Apps Script v2.0) & Keamanan Tautan"
-                description="Hubungkan eSantri dengan Google Spreadsheet menggunakan skrip v2.0 (Server-Side Auth) agar URL GAS tidak dapat diintip dan data seluruh santri terlindungi."
+                title="Pilihan Provider Backend Cloud & Keamanan Portal"
+                description="Pilih infrastruktur backend untuk Portal Wali Santri: Google Apps Script (Gratis), Cloudflare Worker/Pages, Firebase Firestore, Supabase PostgreSQL, atau File HTML Mandiri."
                 contentClassName="p-6 space-y-6"
             >
                 <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-teal-200 bg-teal-50/70 p-4">
@@ -295,112 +424,409 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                         </div>
                     </label>
 
-                    {canWrite && (
-                        <button
-                            type="button"
-                            onClick={() => setShowGasScriptModal(true)}
-                            className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-xs font-bold text-white hover:bg-teal-800 transition-colors shadow-2xs"
+                    <div className="flex flex-wrap items-center gap-2">
+                        {onSwitchToPreview && (
+                            <button
+                                type="button"
+                                onClick={onSwitchToPreview}
+                                className="inline-flex items-center gap-2 rounded-xl bg-teal-700 hover:bg-teal-800 px-4 py-2 text-xs font-bold text-white transition-colors shadow-2xs"
+                            >
+                                <i className="bi bi-phone"></i>
+                                Buka Simulator Live (Pratinjau)
+                            </button>
+                        )}
+                        <a
+                            href="/?portal=true&preview=true"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-teal-600 bg-white px-3.5 py-2 text-xs font-bold text-teal-800 hover:bg-teal-50 transition-colors"
                         >
-                            <i className="bi bi-file-earmark-code"></i>
-                            Lihat &amp; Salin Kode Script GAS v2.0 (Aman)
-                        </button>
-                    )}
+                            <i className="bi bi-box-arrow-up-right"></i>
+                            Buka di Tab Baru
+                        </a>
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Portal ID Unik Pondok
-                        </label>
-                        <input
-                            type="text"
-                            value={portalConfig.portalId || ''}
-                            onChange={(e) => handlePortalConfigChange('portalId', e.target.value)}
-                            placeholder="Contoh: ponpes-alikhlas"
-                            className="app-input block w-full p-2.5 text-sm font-mono"
-                        />
-                        <p className="text-[11px] text-slate-500 mt-1">
-                            Samakan dengan <code>PORTAL_ID_DEFAULT</code> di kode Google Apps Script.
-                        </p>
-                    </div>
-
-                    <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                            URL Web App Google Apps Script (Endpoint <code>/exec</code>)
-                        </label>
-                        <input
-                            type="url"
-                            value={portalConfig.gasEndpoint || ''}
-                            onChange={(e) => handlePortalConfigChange('gasEndpoint', e.target.value)}
-                            placeholder="https://script.google.com/macros/s/AKfycb.../exec"
-                            className="app-input block w-full p-2.5 text-sm font-mono"
-                        />
-                        <p className="text-[11px] text-slate-500 mt-1">
-                            URL ini akan dienkripsi otomatis (Vault Key <code>ep2_...</code>) sehingga tidak terekspos di tautan wali santri.
-                        </p>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Token Rahasia API GAS (Opsional)
-                        </label>
-                        <div className="relative">
-                            <input
-                                type={canWrite && showApiKey ? 'text' : 'password'}
-                                value={portalConfig.gasApiKey || ''}
-                                readOnly={!canWrite}
-                                onChange={(e) => handlePortalConfigChange('gasApiKey', e.target.value)}
-                                placeholder="Kosongkan jika tidak memakai token"
-                                className="app-input block w-full p-2.5 pr-9 text-sm font-mono"
-                            />
-                            {canWrite && (
+                {/* Pemilihan Arsitektur / Provider Backend */}
+                <div>
+                    <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2.5">
+                        Pilih Provider Backend Portal Wali:
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                        {[
+                            {
+                                id: 'gas' as const,
+                                name: 'Google Apps Script (GAS)',
+                                badge: 'Gratis 100%',
+                                badgeColor: 'bg-emerald-100 text-emerald-800',
+                                desc: 'Menggunakan Google Spreadsheet & Apps Script v2.0 sebagai database tanpa perlu sewa server.',
+                                icon: 'bi-google text-emerald-600',
+                            },
+                            {
+                                id: 'cloudflare' as const,
+                                name: 'Cloudflare Pages & Worker',
+                                badge: 'Ultra Cepat',
+                                badgeColor: 'bg-amber-100 text-amber-800',
+                                desc: 'Edge serverless global dengan latensi rendah (<50ms) dan dukungan custom domain gratis.',
+                                icon: 'bi-lightning-charge-fill text-amber-600',
+                            },
+                            {
+                                id: 'firebase' as const,
+                                name: 'Firebase Firestore',
+                                badge: 'Real-Time Sync',
+                                badgeColor: 'bg-orange-100 text-orange-800',
+                                desc: 'Database NoSQL real-time Google Cloud terintegrasi langsung untuk live update instan.',
+                                icon: 'bi-fire text-orange-600',
+                            },
+                            {
+                                id: 'supabase' as const,
+                                name: 'Supabase Cloud',
+                                badge: 'PostgreSQL REST',
+                                badgeColor: 'bg-emerald-100 text-emerald-900',
+                                desc: 'Database relasional PostgreSQL dengan REST API aman dan Row-Level Security (RLS).',
+                                icon: 'bi-database-fill-check text-emerald-700',
+                            },
+                            {
+                                id: 'standalone' as const,
+                                name: 'HTML Mandiri Terenkripsi',
+                                badge: 'Zero Cloud',
+                                badgeColor: 'bg-purple-100 text-purple-800',
+                                desc: 'Satu file HTML statis berisi aplikasi portal + data terenkripsi untuk Netlify Drop/GitHub Pages.',
+                                icon: 'bi-filetype-html text-purple-600',
+                            },
+                        ].map((prov) => {
+                            const isSelected = (portalConfig.provider || 'gas') === prov.id;
+                            return (
                                 <button
+                                    key={prov.id}
                                     type="button"
-                                    onClick={() => setShowApiKey((prev) => !prev)}
-                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                    onClick={() => handlePortalConfigChange('provider', prov.id)}
+                                    className={`text-left p-3.5 rounded-xl border transition-all flex flex-col justify-between space-y-2 ${
+                                        isSelected
+                                            ? 'border-teal-500 bg-teal-50/70 shadow-sm ring-2 ring-teal-500/20'
+                                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50'
+                                    }`}
                                 >
-                                    <i className={`bi ${showApiKey ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                                    <div>
+                                        <div className="flex items-center justify-between gap-1 mb-1.5">
+                                            <i className={`bi ${prov.icon} text-base`}></i>
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${prov.badgeColor}`}>
+                                                {prov.badge}
+                                            </span>
+                                        </div>
+                                        <div className="text-xs font-bold text-slate-800">{prov.name}</div>
+                                        <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{prov.desc}</p>
+                                    </div>
+                                    <div className="pt-2 border-t border-slate-100 flex items-center text-[11px] font-semibold text-teal-700">
+                                        {isSelected ? (
+                                            <span className="flex items-center gap-1">
+                                                <i className="bi bi-check-circle-fill text-teal-600"></i> Aktif
+                                            </span>
+                                        ) : (
+                                            <span className="text-slate-400">Pilih Opsi Ini</span>
+                                        )}
+                                    </div>
                                 </button>
-                            )}
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Form Spesifik Provider */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
+                    {/* Common Field: Portal ID & Tema Warna */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                                Portal ID Unik Pondok
+                            </label>
+                            <input
+                                type="text"
+                                value={portalConfig.portalId || ''}
+                                onChange={(e) => handlePortalConfigChange('portalId', e.target.value)}
+                                placeholder="Contoh: ponpes-alikhlas"
+                                className="app-input block w-full p-2.5 text-sm font-mono"
+                            />
+                            <p className="text-[11px] text-slate-500 mt-1">
+                                Pengenal unik pondok Anda di cloud backend.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                                URL Publik Mandiri (Custom Domain / Cloudflare Pages)
+                            </label>
+                            <input
+                                type="url"
+                                value={(portalConfig as any).standalonePublicUrl || ''}
+                                onChange={(e) =>
+                                    handlePortalConfigChange('standalonePublicUrl' as any, e.target.value as any)
+                                }
+                                placeholder="Contoh: https://wali.ponpes-alikhlas.sch.id"
+                                className="app-input block w-full p-2.5 text-sm"
+                            />
+                            <p className="text-[11px] text-slate-500 mt-1">
+                                Domain publik santun untuk disebarkan via WhatsApp.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                                Tema Warna Portal Wali
+                            </label>
+                            <select
+                                value={portalConfig.theme || 'teal'}
+                                onChange={(e) => handlePortalConfigChange('theme', e.target.value as any)}
+                                className="app-select block w-full p-2.5 text-sm"
+                            >
+                                <option value="teal">Teal Emerald (Khas Pesantren)</option>
+                                <option value="emerald">Hijau Zamrud</option>
+                                <option value="blue">Biru Akademik</option>
+                                <option value="indigo">Indigo Modern</option>
+                                <option value="cyan">Cyan Segar</option>
+                                <option value="slate">Slate Formal</option>
+                                <option value="rose">Maroon / Rose</option>
+                            </select>
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                            URL Publik Mandiri (Cloudflare Pages / Custom Domain)
-                        </label>
-                        <input
-                            type="url"
-                            value={(portalConfig as any).standalonePublicUrl || ''}
-                            onChange={(e) =>
-                                handlePortalConfigChange('standalonePublicUrl' as any, e.target.value as any)
-                            }
-                            placeholder="Contoh: https://wali.ponpes-alikhlas.pages.dev"
-                            className="app-input block w-full p-2.5 text-sm"
-                        />
-                        <p className="text-[11px] text-slate-500 mt-1">
-                            Jika diisi, tombol Salin Link &amp; WA akan memprioritaskan domain pendek ini.
-                        </p>
-                    </div>
+                    {/* Conditional: GAS v2.0 */}
+                    {(!portalConfig.provider || portalConfig.provider === 'gas') && (
+                        <div className="space-y-3 pt-2 border-t border-slate-200">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                    <i className="bi bi-google text-emerald-600"></i>
+                                    Konfigurasi Google Apps Script (GAS v2.0)
+                                </span>
+                                {canWrite && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowGasScriptModal(true)}
+                                        className="inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-800 transition-colors"
+                                    >
+                                        <i className="bi bi-file-earmark-code"></i>
+                                        Lihat &amp; Salin Script GAS v2.0
+                                    </button>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                                        URL Web App Google Apps Script (Endpoint <code>/exec</code>)
+                                    </label>
+                                    <input
+                                        type="url"
+                                        value={portalConfig.gasEndpoint || ''}
+                                        onChange={(e) => handlePortalConfigChange('gasEndpoint', e.target.value)}
+                                        placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+                                        className="app-input block w-full p-2.5 text-sm font-mono"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                                        Token Rahasia API GAS (Opsional)
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type={canWrite && showApiKey ? 'text' : 'password'}
+                                            value={portalConfig.gasApiKey || ''}
+                                            readOnly={!canWrite}
+                                            onChange={(e) => handlePortalConfigChange('gasApiKey', e.target.value)}
+                                            placeholder="Kosongkan jika tidak memakai token"
+                                            className="app-input block w-full p-2.5 pr-9 text-sm font-mono"
+                                        />
+                                        {canWrite && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowApiKey((prev) => !prev)}
+                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                            >
+                                                <i className={`bi ${showApiKey ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Tema Warna Portal Wali
-                        </label>
-                        <select
-                            value={portalConfig.theme || 'teal'}
-                            onChange={(e) => handlePortalConfigChange('theme', e.target.value as any)}
-                            className="app-select block w-full p-2.5 text-sm"
-                        >
-                            <option value="teal">Teal Emerald (Khas Pesantren)</option>
-                            <option value="emerald">Hijau Zamrud</option>
-                            <option value="blue">Biru Akademik</option>
-                            <option value="indigo">Indigo Modern</option>
-                            <option value="cyan">Cyan Segar</option>
-                            <option value="slate">Slate Formal</option>
-                            <option value="rose">Maroon / Rose</option>
-                        </select>
-                    </div>
+                    {/* Conditional: Cloudflare Worker */}
+                    {portalConfig.provider === 'cloudflare' && (
+                        <div className="space-y-3 pt-2 border-t border-slate-200">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                    <i className="bi bi-lightning-charge-fill text-amber-600"></i>
+                                    Konfigurasi Cloudflare Pages &amp; Worker
+                                </span>
+                                {canWrite && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCloudflareModal(true)}
+                                        className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition-colors"
+                                    >
+                                        <i className="bi bi-file-code"></i>
+                                        Lihat Kode Worker Script (JS)
+                                    </button>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                                        URL Cloudflare Worker
+                                    </label>
+                                    <input
+                                        type="url"
+                                        value={portalConfig.cloudflareWorkerUrl || ''}
+                                        onChange={(e) => handlePortalConfigChange('cloudflareWorkerUrl', e.target.value)}
+                                        placeholder="https://portal-wali.username.workers.dev"
+                                        className="app-input block w-full p-2.5 text-sm font-mono"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                                        API Key Worker (Opsional)
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={portalConfig.cloudflareApiKey || ''}
+                                        onChange={(e) => handlePortalConfigChange('cloudflareApiKey', e.target.value)}
+                                        placeholder="Kunci rahasia X-API-Key"
+                                        className="app-input block w-full p-2.5 text-sm font-mono"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Conditional: Firebase Firestore */}
+                    {portalConfig.provider === 'firebase' && (
+                        <div className="space-y-3 pt-2 border-t border-slate-200">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                    <i className="bi bi-fire text-orange-600"></i>
+                                    Konfigurasi Firebase Firestore Cloud
+                                </span>
+                                {canWrite && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowFirebaseModal(true)}
+                                        className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-orange-700 transition-colors"
+                                    >
+                                        <i className="bi bi-book"></i>
+                                        Panduan Firestore &amp; Security Rules
+                                    </button>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                                        Koleksi Firestore Publik
+                                    </label>
+                                    <input
+                                        type="text"
+                                        readOnly
+                                        value="publicPortals/{portalId}"
+                                        className="app-input block w-full p-2.5 text-sm font-mono bg-slate-100"
+                                    />
+                                    <p className="text-[11px] text-slate-500 mt-1">
+                                        Data portal akan disimpan langsung di dokumen <code>publicPortals/{portalConfig.portalId || 'default-portal'}</code>.
+                                    </p>
+                                </div>
+                                <div className="flex items-center">
+                                    <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-xs text-orange-950">
+                                        <i className="bi bi-check-circle-fill text-orange-600 mr-1.5"></i>
+                                        Terkoneksi otomatis dengan project Firebase terkonfigurasi. Tidak memerlukan script perantara eksternal.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Conditional: Supabase */}
+                    {portalConfig.provider === 'supabase' && (
+                        <div className="space-y-3 pt-2 border-t border-slate-200">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                    <i className="bi bi-database-fill-check text-emerald-700"></i>
+                                    Konfigurasi Supabase PostgreSQL REST
+                                </span>
+                                {canWrite && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSupabaseModal(true)}
+                                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800 transition-colors"
+                                    >
+                                        <i className="bi bi-file-earmark-spreadsheet"></i>
+                                        Lihat Skema SQL &amp; RLS Supabase
+                                    </button>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                                        Supabase Project URL
+                                    </label>
+                                    <input
+                                        type="url"
+                                        value={portalConfig.supabaseUrl || ''}
+                                        onChange={(e) => handlePortalConfigChange('supabaseUrl', e.target.value)}
+                                        placeholder="https://xyzproject.supabase.co"
+                                        className="app-input block w-full p-2.5 text-sm font-mono"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                                        Anon Public Key (API Key)
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={portalConfig.supabaseAnonKey || ''}
+                                        onChange={(e) => handlePortalConfigChange('supabaseAnonKey', e.target.value)}
+                                        placeholder="eyJhbGciOiJIUzI1NiIsIn..."
+                                        className="app-input block w-full p-2.5 text-sm font-mono"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                                        Nama Tabel Database
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={portalConfig.supabaseTable || 'portal_data'}
+                                        onChange={(e) => handlePortalConfigChange('supabaseTable', e.target.value)}
+                                        placeholder="portal_data"
+                                        className="app-input block w-full p-2.5 text-sm font-mono"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Conditional: Standalone */}
+                    {portalConfig.provider === 'standalone' && (
+                        <div className="space-y-3 pt-2 border-t border-slate-200">
+                            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <i className="bi bi-filetype-html text-purple-600"></i>
+                                Paket HTML Mandiri Terenkripsi (Zero-Cloud)
+                            </span>
+                            <div className="rounded-xl border border-purple-200 bg-purple-50/70 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-xs text-purple-950 font-semibold leading-relaxed">
+                                        Unduh file <code>index.html</code> mandiri lengkap dengan data terenkripsi. Cukup letakkan di Netlify Drop, GitHub Pages, Vercel, atau hosting web statis apa pun milik pondok.
+                                    </p>
+                                </div>
+                                {canWrite && (
+                                    <button
+                                        type="button"
+                                        onClick={handleDownloadStandalone}
+                                        className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 text-xs font-bold transition-colors shadow-2xs"
+                                    >
+                                        <i className="bi bi-download"></i> Unduh File index.html
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Opsi Distribusi Portal: File HTML Mandiri (Cloudflare) vs Tautan Terenkripsi */}
@@ -410,14 +836,14 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                             <div className="flex items-center justify-between">
                                 <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-emerald-800">
                                     <i className="bi bi-cloud-check-fill text-emerald-600"></i>
-                                    Opsi 1 (Rekomendasi): File HTML Mandiri (Cloudflare / Netlify)
+                                    {standaloneInfo.title}
                                 </span>
                                 <span className="rounded-full bg-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-950">
-                                    Paling Aman &amp; Pendek
+                                    {standaloneInfo.badge}
                                 </span>
                             </div>
                             <p className="text-xs text-emerald-900 mt-1.5 leading-relaxed">
-                                Unduh file <code>index.html</code> yang sudah berisi kode aplikasi Portal Wali + kredensial GAS yang dienkripsi (XOR Cipher + Base64). Upload 1 kali ke <strong>Cloudflare Pages</strong> atau <strong>Netlify Drop</strong> gratis untuk mendapatkan domain pendek resmi pondok.
+                                {standaloneInfo.desc}
                             </p>
                         </div>
                         {canWrite && (
@@ -428,7 +854,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                                     className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 text-xs font-bold transition-colors shadow-2xs"
                                 >
                                     <i className="bi bi-download"></i>
-                                    Download File index.html Mandiri
+                                    {standaloneInfo.btnText}
                                 </button>
                             </div>
                         )}
@@ -439,14 +865,14 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                             <div className="flex items-center justify-between">
                                 <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-700">
                                     <i className="bi bi-link-45deg text-teal-600 text-base"></i>
-                                    Opsi 2: Tautan Portal Terenkripsi (Parameter ?k=ep2_...)
+                                    {directInfo.title}
                                 </span>
                                 <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">
-                                    Tanpa Hosting Tambahan
+                                    {directInfo.badge}
                                 </span>
                             </div>
                             <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                                Tautan langsung yang menyamarkan URL GAS menjadi parameter pendek <code>?k=ep2_...</code>:
+                                {directInfo.desc}
                             </p>
                             <div className="mt-2 flex items-center gap-2">
                                 <input
@@ -788,27 +1214,41 @@ export const TabPortal: React.FC<TabPortalProps> = ({
 
                 {/* Action Bar Simpan & Sinkron */}
                 {canWrite && (
-                    <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4">
-                        {onSaveSettings && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+                        <div className="flex items-center gap-2">
+                            {onSwitchToPreview && (
+                                <button
+                                    type="button"
+                                    onClick={onSwitchToPreview}
+                                    className="rounded-xl border border-teal-600 bg-teal-50 px-4 py-2.5 text-xs font-bold text-teal-800 hover:bg-teal-100 transition-colors"
+                                >
+                                    <i className="bi bi-display mr-1.5"></i>
+                                    Buka Live Simulator
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {onSaveSettings && (
+                                <button
+                                    type="button"
+                                    onClick={handleSaveConfiguration}
+                                    disabled={isSaving}
+                                    className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                >
+                                    <i className="bi bi-save mr-1.5"></i>
+                                    {isSaving ? 'Menyimpan...' : 'Simpan Pengaturan'}
+                                </button>
+                            )}
                             <button
                                 type="button"
-                                onClick={handleSaveConfiguration}
-                                disabled={isSaving}
-                                className="rounded-xl border border-teal-600 bg-white px-5 py-2.5 text-xs font-bold text-teal-800 hover:bg-teal-50 disabled:opacity-50"
+                                onClick={handleSyncNow}
+                                disabled={isSyncing}
+                                className="app-button-primary px-5 py-2.5 text-xs font-bold disabled:opacity-50"
                             >
-                                <i className="bi bi-save mr-1.5"></i>
-                                {isSaving ? 'Menyimpan...' : 'Simpan Pengaturan Portal'}
+                                <i className={`bi ${isSyncing ? 'bi-arrow-repeat animate-spin' : 'bi-cloud-arrow-up-fill'} mr-1.5`}></i>
+                                {isSyncing ? 'Menyinkronkan...' : `Simpan & Sinkronkan (${(portalConfig.provider || 'gas').toUpperCase()})`}
                             </button>
-                        )}
-                        <button
-                            type="button"
-                            onClick={handleSyncNow}
-                            disabled={isSyncing}
-                            className="app-button-primary px-5 py-2.5 text-xs font-bold disabled:opacity-50"
-                        >
-                            <i className={`bi ${isSyncing ? 'bi-arrow-repeat animate-spin' : 'bi-cloud-arrow-up-fill'} mr-1.5`}></i>
-                            {isSyncing ? 'Menyinkronkan...' : 'Simpan & Sinkronkan ke GAS Sekarang'}
-                        </button>
+                        </div>
                     </div>
                 )}
             </SectionCard>
@@ -863,6 +1303,145 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setShowGasScriptModal(false)}
+                                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                            >
+                                Tutup
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Kode Cloudflare Worker Script */}
+            {showCloudflareModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+                    <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+                        <div className="flex items-center justify-between border-b bg-slate-50 px-6 py-4">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                    <i className="bi bi-lightning-charge-fill text-amber-600"></i>
+                                    Kode Cloudflare Worker Script (Edge Serverless)
+                                </h3>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Tempelkan kode ini ke dashboard <strong>Cloudflare &gt; Workers &amp; Pages &gt; Create Worker</strong>. Worker ini otomatis bertindak sebagai penyimpan data dan autentikator login aman bagi wali santri.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowCloudflareModal(false)}
+                                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                            >
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                            <pre className="max-h-96 overflow-auto rounded-xl bg-slate-900 p-4 text-xs text-amber-300 font-mono leading-relaxed">
+                                {getPortalCloudflareWorkerScript(portalConfig.portalId || 'ponpes-alikhlas')}
+                            </pre>
+                        </div>
+                        <div className="flex items-center justify-end gap-3 border-t bg-slate-50 px-6 py-3.5">
+                            <button
+                                type="button"
+                                onClick={() => handleCopyText(getPortalCloudflareWorkerScript(portalConfig.portalId || 'ponpes-alikhlas'), 'Script Cloudflare Worker')}
+                                className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 text-xs font-bold"
+                            >
+                                <i className="bi bi-clipboard-check mr-1.5"></i>
+                                Salin Script Worker
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowCloudflareModal(false)}
+                                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                            >
+                                Tutup
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Supabase SQL */}
+            {showSupabaseModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+                    <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+                        <div className="flex items-center justify-between border-b bg-slate-50 px-6 py-4">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                    <i className="bi bi-database-fill-check text-emerald-700"></i>
+                                    Skema Tabel &amp; RLS Supabase PostgreSQL
+                                </h3>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Jalankan skrip SQL ini di <strong>Supabase &gt; SQL Editor</strong> pada project Supabase Anda untuk membuat tabel <code>portal_data</code> dengan keamanan akses publik.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowSupabaseModal(false)}
+                                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                            >
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                            <pre className="max-h-96 overflow-auto rounded-xl bg-slate-900 p-4 text-xs text-emerald-300 font-mono leading-relaxed">
+                                {getPortalSupabaseSchemaSql()}
+                            </pre>
+                        </div>
+                        <div className="flex items-center justify-end gap-3 border-t bg-slate-50 px-6 py-3.5">
+                            <button
+                                type="button"
+                                onClick={() => handleCopyText(getPortalSupabaseSchemaSql(), 'Skema SQL Supabase')}
+                                className="app-button-primary px-4 py-2 text-xs font-bold"
+                            >
+                                <i className="bi bi-clipboard-check mr-1.5"></i>
+                                Salin Perintah SQL
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowSupabaseModal(false)}
+                                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                            >
+                                Tutup
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Firebase Guide */}
+            {showFirebaseModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+                    <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+                        <div className="flex items-center justify-between border-b bg-slate-50 px-6 py-4">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                    <i className="bi bi-fire text-orange-600"></i>
+                                    Panduan Firebase Firestore Cloud
+                                </h3>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Konfigurasi aturan keamanan Firestore untuk koleksi <code>publicPortals</code>.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowFirebaseModal(false)}
+                                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                            >
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs text-slate-700 leading-relaxed">
+                            <p>
+                                Saat Anda memilih Firebase Firestore, eSantri langsung menyinkronkan dokumen portal ke koleksi <code>publicPortals/{'{portalId}'}</code>.
+                            </p>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-[11px]">
+                                {getPortalFirebaseGuide()}
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-3 border-t bg-slate-50 px-6 py-3.5">
+                            <button
+                                type="button"
+                                onClick={() => setShowFirebaseModal(false)}
                                 className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                             >
                                 Tutup

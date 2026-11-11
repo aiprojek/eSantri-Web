@@ -683,16 +683,49 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                         <input type="text" value={localSettings.npsn} onChange={(e) => handleInputChange('npsn', e.target.value)} className="app-input block w-full p-2.5 text-sm" placeholder="cth: 69900001" />
                     </div>
                     <div>
-                        <label className="mb-1 block text-sm font-medium text-slate-700">Telepon</label>
-                        <input type="tel" value={localSettings.telepon} onChange={(e) => handleInputChange('telepon', e.target.value)} className="app-input block w-full p-2.5 text-sm" />
+                        <div className="mb-1 flex items-center justify-between">
+                            <label className="block text-sm font-medium text-slate-700">Telepon</label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-slate-600 hover:text-teal-700 select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={localSettings.showTeleponInKop !== false}
+                                    onChange={(e) => handleInputChange('showTeleponInKop', e.target.checked)}
+                                    className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                <span>Tampil di Kop</span>
+                            </label>
+                        </div>
+                        <input type="tel" value={localSettings.telepon} onChange={(e) => handleInputChange('telepon', e.target.value)} className="app-input block w-full p-2.5 text-sm" placeholder="cth: 081234567890 / (0281) 123456" />
                     </div>
-                     <div>
-                        <label className="mb-1 block text-sm font-medium text-slate-700">Website</label>
-                        <input type="url" value={localSettings.website} onChange={(e) => handleInputChange('website', e.target.value)} className="app-input block w-full p-2.5 text-sm" />
+                    <div>
+                        <div className="mb-1 flex items-center justify-between">
+                            <label className="block text-sm font-medium text-slate-700">Website</label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-slate-600 hover:text-teal-700 select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={localSettings.showWebsiteInKop !== false}
+                                    onChange={(e) => handleInputChange('showWebsiteInKop', e.target.checked)}
+                                    className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                <span>Tampil di Kop</span>
+                            </label>
+                        </div>
+                        <input type="url" value={localSettings.website} onChange={(e) => handleInputChange('website', e.target.value)} className="app-input block w-full p-2.5 text-sm" placeholder="cth: https://ponpes-alittiba.sch.id" />
                     </div>
-                     <div>
-                        <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
-                        <input type="email" value={localSettings.email} onChange={(e) => handleInputChange('email', e.target.value)} className="app-input block w-full p-2.5 text-sm" />
+                    <div>
+                        <div className="mb-1 flex items-center justify-between">
+                            <label className="block text-sm font-medium text-slate-700">Email</label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-slate-600 hover:text-teal-700 select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={localSettings.showEmailInKop !== false}
+                                    onChange={(e) => handleInputChange('showEmailInKop', e.target.checked)}
+                                    className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                <span>Tampil di Kop</span>
+                            </label>
+                        </div>
+                        <input type="email" value={localSettings.email} onChange={(e) => handleInputChange('email', e.target.value)} className="app-input block w-full p-2.5 text-sm" placeholder="cth: info@ponpes-alittiba.sch.id" />
                     </div>
                     <div className="md:col-span-2">
                         <label className="mb-1 block text-sm font-medium text-slate-700">Alamat</label>
@@ -944,9 +977,9 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                                         </p>
                                         <p className="text-[10px] text-slate-500 leading-snug">
                                             {[
-                                                localSettings.telepon?.trim() ? `Telp: ${localSettings.telepon.trim()}` : '',
-                                                localSettings.email?.trim() ? `Email: ${localSettings.email.trim()}` : '',
-                                                localSettings.website?.trim() ? `Website: ${localSettings.website.trim()}` : '',
+                                                localSettings.telepon?.trim() && localSettings.showTeleponInKop !== false ? `Telp: ${localSettings.telepon.trim()}` : '',
+                                                localSettings.email?.trim() && localSettings.showEmailInKop !== false ? `Email: ${localSettings.email.trim()}` : '',
+                                                localSettings.website?.trim() && localSettings.showWebsiteInKop !== false ? `Website: ${localSettings.website.trim()}` : '',
                                             ].filter(Boolean).join(' | ')}
                                         </p>
                                     </div>

@@ -488,8 +488,8 @@ export const syncPresensiFromDb = async (
         records = all.filter(r => r.tanggal >= startDate && r.tanggal <= endDate);
     }
 
-    // Filter to target santri
-    const filtered = records.filter(r => santriIdSet.has(r.santriId));
+    // Filter to target santri (abaikan record yang sudah di-soft-delete)
+    const filtered = records.filter(r => !r.deleted && santriIdSet.has(r.santriId));
 
     const aggregates: Record<number, SantriPresensiAggregate> = {};
     santriIds.forEach(id => {

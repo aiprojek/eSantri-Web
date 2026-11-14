@@ -229,14 +229,40 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
         return settings.jenjang.find(j => j.id === currentKelas.jenjangId) || null;
     }, [currentKelas, settings.jenjang]);
 
-    // Load active non-deleted students in selected rombel
+    const currentYear = filterTahun || availableYears[0] || defaultAcademicYear;
+    const livePeriodRecords = useLiveQuery(
+        async () => {
+            if (!currentYear || !filterSemester) return [];
+            const recs = await db.raporRecords
+                .where('[tahunAjaran+semester]')
+                .equals([currentYear, filterSemester])
+                .toArray();
+            return recs.filter(r => !r.deleted);
+        },
+        [currentYear, filterSemester]
+    );
+    const isLoading = Boolean(selectedRombelId) && livePeriodRecords === undefined;
+
+    // Load active non-deleted students in selected rombel, including historical/Lulus santri linked to period records
     const rombelStudents = useMemo(() => {
         if (!selectedRombelId) return [];
         const rId = parseInt(selectedRombelId);
+        const isActiveYear = !defaultAcademicYear || currentYear === defaultAcademicYear;
+        const recSantriIdsInRombel = new Set<number>();
+        (livePeriodRecords || []).forEach(r => {
+            if (r.rombelId === rId) recSantriIdsInRombel.add(r.santriId);
+        });
+
         return santriList
-            .filter(s => !s.deleted && s.rombelId === rId && s.status === 'Aktif')
+            .filter(s => {
+                if (s.deleted) return false;
+                if (!isActiveYear) {
+                    return recSantriIdsInRombel.has(s.id);
+                }
+                return (s.rombelId === rId && s.status === 'Aktif') || (s.status !== 'Aktif' && recSantriIdsInRombel.has(s.id));
+            })
             .sort((a, b) => a.namaLengkap.localeCompare(b.namaLengkap));
-    }, [selectedRombelId, santriList]);
+    }, [selectedRombelId, santriList, livePeriodRecords, currentYear, defaultAcademicYear]);
 
     // Reactive Template & Records for this Rombel & Period
     const template = useMemo<RaporTemplate | null>(() => {
@@ -247,31 +273,21 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
         return availableTemplates.length > 0 ? availableTemplates[0] : null;
     }, [selectedTemplateId, availableTemplates]);
 
-    const currentYear = filterTahun || availableYears[0] || defaultAcademicYear;
-    const liveRecords = useLiveQuery(
-        async () => {
-            if (!selectedRombelId || !currentYear || !filterSemester) return [];
-            const rId = parseInt(selectedRombelId);
-            const studentIdSet = new Set(rombelStudents.map(s => s.id));
-            const recs = await db.raporRecords
-                .where('[tahunAjaran+semester]')
-                .equals([currentYear, filterSemester])
-                .toArray();
-            const bySantri = new Map<number, RaporRecord>();
-            recs.forEach(r => {
-                if (r.deleted) return;
-                if (!studentIdSet.has(r.santriId) && r.rombelId !== rId) return;
-                const prev = bySantri.get(r.santriId);
-                if (!prev || (r.lastModified || 0) >= (prev.lastModified || 0)) {
-                    bySantri.set(r.santriId, r);
-                }
-            });
-            return Array.from(bySantri.values());
-        },
-        [selectedRombelId, currentYear, filterSemester, rombelStudents]
-    );
-    const isLoading = Boolean(selectedRombelId) && liveRecords === undefined;
-    const records = liveRecords || [];
+    const records = useMemo(() => {
+        if (!selectedRombelId || !livePeriodRecords) return [];
+        const rId = parseInt(selectedRombelId);
+        const studentIdSet = new Set(rombelStudents.map(s => s.id));
+        const bySantri = new Map<number, RaporRecord>();
+        livePeriodRecords.forEach(r => {
+            if (r.deleted) return;
+            if (!studentIdSet.has(r.santriId) && r.rombelId !== rId) return;
+            const prev = bySantri.get(r.santriId);
+            if (!prev || (r.lastModified || 0) >= (prev.lastModified || 0)) {
+                bySantri.set(r.santriId, r);
+            }
+        });
+        return Array.from(bySantri.values());
+    }, [selectedRombelId, livePeriodRecords, rombelStudents]);
 
     // Build consolidated Leger Data with full calculations
     const legerData = useMemo(() => {

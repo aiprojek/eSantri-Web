@@ -10,6 +10,13 @@ import {
     RaporSyncConflictItem
 } from '../../services/academicService';
 import { RAPOR_UNIFIED_GAS_SCRIPT_V3 } from '../../utils/raporAuditPortalGenerator';
+import {
+    RaporCloudProvider,
+    RAPOR_CLOUDFLARE_D1_WORKER_SCRIPT,
+    RAPOR_CLOUDFLARE_R2_WORKER_SCRIPT,
+    RAPOR_SUPABASE_SQL_SETUP,
+    getRaporCloudProviderMeta
+} from '../../services/raporCloudService';
 import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
 
 export interface RaporWaCloudImportModalProps {
@@ -55,9 +62,14 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
         return settings.raporCloudConfig?.googleScriptUrl ? 'cloud' : 'wa';
     });
     const [waInput, setWaInput] = useState('');
+    const [backendProvider, setBackendProvider] = useState<RaporCloudProvider>(
+        settings.raporCloudConfig?.backendProvider || 'gas'
+    );
     const [cloudScriptUrl, setCloudScriptUrl] = useState(
         settings.raporCloudConfig?.googleScriptUrl || ''
     );
+    const [cloudApiKey, setCloudApiKey] = useState(settings.raporCloudConfig?.apiKey || '');
+    const providerMeta = useMemo(() => getRaporCloudProviderMeta(backendProvider), [backendProvider]);
     const [filterPeriodOnly, setFilterPeriodOnly] = useState<boolean>(
         Boolean(defaultTahunAjaran || defaultSemester)
     );
@@ -88,8 +100,14 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
         } else if (settings.raporCloudConfig?.googleScriptUrl) {
             setImportSource('cloud');
         }
+        if (settings.raporCloudConfig?.backendProvider) {
+            setBackendProvider(settings.raporCloudConfig.backendProvider);
+        }
         if (settings.raporCloudConfig?.googleScriptUrl) {
             setCloudScriptUrl(settings.raporCloudConfig.googleScriptUrl);
+        }
+        if (settings.raporCloudConfig?.apiKey !== undefined) {
+            setCloudApiKey(settings.raporCloudConfig.apiKey || '');
         }
         if (defaultTahunAjaran) setTargetTahun(defaultTahunAjaran);
         if (defaultSemester) setTargetSemester(defaultSemester);
@@ -100,7 +118,9 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
     }, [
         isOpen,
         initialSource,
+        settings.raporCloudConfig?.backendProvider,
         settings.raporCloudConfig?.googleScriptUrl,
+        settings.raporCloudConfig?.apiKey,
         defaultTahunAjaran,
         defaultSemester,
         defaultRombelId,
@@ -116,6 +136,13 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
         if (!waInput.trim()) return 0;
         return Array.from(waInput.matchAll(/RAPOR_V2_START([\s\S]*?)RAPOR_V2_END/g)).length;
     }, [waInput]);
+
+    const activeSetupCode = useMemo(() => {
+        if (backendProvider === 'cloudflare_d1') return RAPOR_CLOUDFLARE_D1_WORKER_SCRIPT;
+        if (backendProvider === 'supabase') return RAPOR_SUPABASE_SQL_SETUP;
+        if (backendProvider === 'cloudflare_r2') return RAPOR_CLOUDFLARE_R2_WORKER_SCRIPT;
+        return RAPOR_UNIFIED_GAS_SCRIPT_V3;
+    }, [backendProvider]);
 
     if (!isOpen) return null;
 
@@ -153,19 +180,22 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                       ...(targetRombelId > 0 ? { rombelId: targetRombelId } : {}),
                       ...(targetTemplateId ? { templateId: targetTemplateId } : {})
                   };
-            const rows = await fetchRaporFromCloud(cleanUrl, filterOpts);
+            const rows = await fetchRaporFromCloud(cleanUrl, filterOpts, {
+                backendProvider,
+                apiKey: cloudApiKey.trim()
+            });
             const summary = inspectRaporCloudSummary(rows, settings);
             setCloudPreview(summary);
             if (summary.totalRows === 0) {
-                showToast('Terhubung ke GAS, tetapi belum ada baris nilai pada filter tersebut.', 'info');
+                showToast(`Terhubung ke ${providerMeta.name}, tetapi belum ada baris nilai pada filter tersebut.`, 'info');
             } else {
                 showToast(
-                    `Terdeteksi ${summary.uniqueStudents} santri di ${summary.tabs.length} tab Google Sheet.`,
+                    `Terdeteksi ${summary.uniqueStudents} santri di ${providerMeta.name} (${summary.tabs.length} grup/tab).`,
                     'success'
                 );
             }
         } catch (err) {
-            showAlert('Gagal Membaca Google Sheet', (err as Error).message);
+            showAlert(`Gagal Membaca ${providerMeta.name}`, (err as Error).message);
         } finally {
             setIsInspecting(false);
         }
@@ -173,8 +203,8 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
 
     const handleCopyGasScript = async () => {
         try {
-            await navigator.clipboard.writeText(RAPOR_UNIFIED_GAS_SCRIPT_V3);
-            showToast('Kode Google Apps Script Terpadu v3.0 berhasil disalin ke Clipboard.', 'success');
+            await navigator.clipboard.writeText(activeSetupCode);
+            showToast(`Kode setup ${providerMeta.name} berhasil disalin ke Clipboard.`, 'success');
         } catch {
             showToast('Gagal menyalin otomatis. Silakan salin manual dari kotak kode.', 'error');
         }
@@ -211,12 +241,19 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                 const cleanUrl = cloudScriptUrl.trim();
                 const cloudData =
                     cachedPayload?.cloudData ||
-                    (await fetchRaporFromCloud(cleanUrl, {
-                        ...(filterOpts.tahunAjaran ? { tahunAjaran: filterOpts.tahunAjaran } : {}),
-                        ...(filterOpts.semester ? { semester: filterOpts.semester } : {}),
-                        ...(filterOpts.rombelId ? { rombelId: filterOpts.rombelId } : {}),
-                        ...(filterOpts.templateId ? { templateId: filterOpts.templateId } : {})
-                    }));
+                    (await fetchRaporFromCloud(
+                        cleanUrl,
+                        {
+                            ...(filterOpts.tahunAjaran ? { tahunAjaran: filterOpts.tahunAjaran } : {}),
+                            ...(filterOpts.semester ? { semester: filterOpts.semester } : {}),
+                            ...(filterOpts.rombelId ? { rombelId: filterOpts.rombelId } : {}),
+                            ...(filterOpts.templateId ? { templateId: filterOpts.templateId } : {})
+                        },
+                        {
+                            backendProvider,
+                            apiKey: cloudApiKey.trim()
+                        }
+                    ));
                 const result = await syncRaporStructuredData(cloudData, settings, filterOpts);
                 totalSuccess = result.successCount;
                 totalErrors = result.errors;
@@ -228,13 +265,13 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                             ...settings,
                             raporCloudConfig: {
                                 ...(settings.raporCloudConfig || {}),
+                                backendProvider,
                                 googleScriptUrl: cleanUrl,
+                                apiKey: cloudApiKey.trim(),
                                 submissionMethod:
                                     settings.raporCloudConfig?.submissionMethod || 'hybrid',
                                 tabMode: settings.raporCloudConfig?.tabMode || 'per_rombel',
-                                updatedAt:
-                                    settings.raporCloudConfig?.updatedAt ||
-                                    new Date().toISOString(),
+                                updatedAt: new Date().toISOString(),
                                 lastSyncedAt: new Date().toISOString(),
                                 lastSyncedStudents: totalSuccess
                             }
@@ -250,7 +287,7 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
             if (totalSuccess > 0) {
                 const tabSuffix =
                     importSource === 'cloud' && tabsCount > 0
-                        ? ` dari ${tabsCount} tab Google Sheet`
+                        ? ` dari ${providerMeta.shortName} (${tabsCount} grup/tab)`
                         : '';
                 const modeNote =
                     mode === 'fill_empty_only' ? ' (hanya mengisi sel kosong)' : '';
@@ -348,7 +385,10 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                     ...(dryOpts.templateId ? { templateId: dryOpts.templateId } : {})
                 };
 
-                const cloudData = await fetchRaporFromCloud(cleanUrl, cloudQueryOpts);
+                const cloudData = await fetchRaporFromCloud(cleanUrl, cloudQueryOpts, {
+                    backendProvider,
+                    apiKey: cloudApiKey.trim()
+                });
                 const dryRes = await syncRaporStructuredData(cloudData, settings, dryOpts);
 
                 if (dryRes.stats.conflicts.length > 0) {
@@ -381,7 +421,7 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                             Sinkronisasi &amp; Impor Nilai Rapor
                         </div>
                         <h3 className="text-lg font-bold text-slate-900 truncate">
-                            Tarik Nilai dari Cloud GAS &amp; WhatsApp
+                            Tarik Nilai dari Cloud ({providerMeta.shortName}) &amp; WhatsApp
                         </h3>
                     </div>
                     <button
@@ -467,7 +507,7 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                             }`}
                         >
                             <i className="bi bi-cloud-arrow-down-fill text-blue-600"></i>
-                            <span>Tarik Google Sheet (1-Link GAS)</span>
+                            <span>Tarik Cloud ({providerMeta.shortName})</span>
                         </button>
                         <button
                             type="button"
@@ -497,9 +537,8 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                         <div className="space-y-4">
                             <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-xs text-slate-700 leading-relaxed flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div>
-                                    Menarik nilai dari seluruh tab Rombel &amp; Template pada{' '}
-                                    <strong className="text-slate-900">1 Link Google Apps Script Terpadu</strong>,
-                                    termasuk koreksi manual di sel Google Sheets, lalu menggabungkannya per santri tanpa menimpa mapel lain yang sudah terisi.
+                                    Menarik nilai dari backend <strong className="text-slate-900">{providerMeta.name}</strong>{' '}
+                                    dan menggabungkannya secara cerdas (Smart Merge) per santri tanpa menimpa mapel lain yang sudah terisi.
                                 </div>
                                 <button
                                     type="button"
@@ -507,15 +546,44 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                                     className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold text-xs whitespace-nowrap shrink-0 transition-colors"
                                 >
                                     <i className="bi bi-code-slash mr-1.5 text-teal-600"></i>
-                                    {showGasScriptHelper ? 'Tutup Kode GAS' : 'Lihat Script GAS'}
+                                    {showGasScriptHelper ? 'Tutup Kode' : `Lihat Kode ${providerMeta.shortName}`}
                                 </button>
                             </div>
+
+                            {isAdminOrGlobalWrite && (
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-slate-700 block">Backend Cloud Penampung</label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                                        {(['gas', 'cloudflare_d1', 'supabase', 'cloudflare_r2'] as RaporCloudProvider[]).map(pv => {
+                                            const pm = getRaporCloudProviderMeta(pv);
+                                            const active = backendProvider === pv;
+                                            return (
+                                                <button
+                                                    key={pv}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setBackendProvider(pv);
+                                                        setCloudPreview(null);
+                                                    }}
+                                                    className={`px-2.5 py-2 rounded-xl border text-xs font-bold transition-all ${
+                                                        active
+                                                            ? 'bg-teal-50 border-teal-500 text-teal-800 ring-1 ring-teal-500'
+                                                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    {pm.shortName}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
 
                             {showGasScriptHelper && (
                                 <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-900 text-slate-100 space-y-2">
                                     <div className="flex items-center justify-between gap-2">
                                         <span className="text-xs font-semibold text-teal-300">
-                                            Google Apps Script Terpadu v3.0 (Multi-Tab + Smart Merge)
+                                            {providerMeta.scriptModalTitle}
                                         </span>
                                         <button
                                             type="button"
@@ -523,23 +591,29 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                                             className="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors"
                                         >
                                             <i className="bi bi-clipboard-check"></i>
-                                            <span>Salin Script</span>
+                                            <span>Salin Kode</span>
                                         </button>
                                     </div>
-                                    <pre className="max-h-36 overflow-y-auto text-[11px] font-mono text-slate-300 bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
-                                        {RAPOR_UNIFIED_GAS_SCRIPT_V3}
-                                    </pre>
-                                    <p className="text-[11px] text-slate-400">
-                                        Pasang di Google Sheets &rarr; Extensions &rarr; Apps Script &rarr; Deploy as Web App (Execute as: Me, Who has access: Anyone).
+                                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                                        {backendProvider === 'cloudflare_d1'
+                                            ? 'Setup cepat: Jalankan SQL pembuatan tabel rapor_submissions di D1 Console, tempel kode ke Worker, lalu tambahkan D1 Binding bernama DB (dan opsional Secret API_KEY).'
+                                            : backendProvider === 'supabase'
+                                            ? 'Setup cepat: Jalankan SQL di Supabase > SQL Editor (otomatis membuat tabel + Smart Merge trigger + RLS policy), lalu tempel Project URL dan Anon Public Key.'
+                                            : backendProvider === 'cloudflare_r2'
+                                            ? 'Setup cepat: Buat R2 Bucket di Cloudflare, tempel kode ke Worker, lalu tambahkan R2 Bucket Binding bernama R2_BUCKET (dan opsional Secret API_KEY).'
+                                            : 'Setup cepat: Tempel di Extensions > Apps Script Google Spreadsheet Rapor > Deploy sebagai Web App (Execute as: Me, Access: Anyone).'}
                                     </p>
+                                    <pre className="max-h-36 overflow-y-auto text-[11px] font-mono text-slate-300 bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
+                                        {activeSetupCode}
+                                    </pre>
                                 </div>
                             )}
 
-                            {/* URL Input + Cek Isi Sheet */}
-                            <div className="space-y-1.5">
+                            {/* URL Input + Cek Isi Cloud */}
+                            <div className="space-y-2">
                                 <div className="flex items-center justify-between gap-2">
                                     <label className="text-xs font-bold text-slate-700">
-                                        URL Web App Google Apps Script
+                                        {providerMeta.endpointLabel}
                                     </label>
                                     <div className="flex items-center gap-2 text-[11px] text-slate-500 tabular-nums">
                                         {settings.raporCloudConfig?.googleScriptUrl &&
@@ -573,7 +647,7 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                                         value={cloudScriptUrl}
                                         onChange={e => setCloudScriptUrl(e.target.value)}
                                         readOnly={!isAdminOrGlobalWrite && Boolean(settings.raporCloudConfig?.googleScriptUrl)}
-                                        placeholder="https://script.google.com/macros/s/.../exec"
+                                        placeholder={providerMeta.endpointPlaceholder}
                                         className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-mono bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
                                     />
                                     <button
@@ -590,11 +664,27 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                                         ) : (
                                             <>
                                                 <i className="bi bi-search text-blue-600"></i>
-                                                <span>Cek Isi Sheet</span>
+                                                <span>Cek Data {providerMeta.shortName}</span>
                                             </>
                                         )}
                                     </button>
                                 </div>
+
+                                {providerMeta.supportsApiKey && (
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                                            {providerMeta.apiKeyLabel}
+                                        </label>
+                                        <input
+                                            type="password"
+                                            value={cloudApiKey}
+                                            onChange={e => setCloudApiKey(e.target.value)}
+                                            readOnly={!isAdminOrGlobalWrite && Boolean(settings.raporCloudConfig?.apiKey)}
+                                            placeholder={providerMeta.apiKeyPlaceholder}
+                                            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             {/* Live Cloud Inspection Preview */}
@@ -602,7 +692,7 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                                 <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/50 space-y-2.5 text-xs">
                                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 pb-2">
                                         <span className="font-bold text-slate-800">
-                                            Ringkasan Data di Google Sheet
+                                            Ringkasan Data di {providerMeta.name}
                                         </span>
                                         <div className="flex items-center gap-2 text-slate-600 tabular-nums font-medium">
                                             <span>{cloudPreview.tabs.length} Tab</span>
@@ -842,7 +932,7 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                                         ></i>
                                         <span>
                                             {importSource === 'cloud'
-                                                ? 'Tarik & Simpan Nilai GAS'
+                                                ? 'Tarik & Simpan Nilai dari Cloud'
                                                 : 'Proses & Simpan Kode WA'}
                                         </span>
                                     </>
@@ -912,6 +1002,9 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
     if (!canImport) return null;
 
     const savedScriptUrl = (settings.raporCloudConfig?.googleScriptUrl || '').trim();
+    const savedProvider: RaporCloudProvider = settings.raporCloudConfig?.backendProvider || 'gas';
+    const savedApiKey = (settings.raporCloudConfig?.apiKey || '').trim();
+    const providerMeta = getRaporCloudProviderMeta(savedProvider);
 
     const commitQuickPullData = async (
         cloudData: any[],
@@ -932,7 +1025,9 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
                         ...settings,
                         raporCloudConfig: {
                             ...(settings.raporCloudConfig || {}),
+                            backendProvider: savedProvider,
                             googleScriptUrl: savedScriptUrl,
+                            apiKey: savedApiKey,
                             lastSyncedAt: new Date().toISOString(),
                             lastSyncedStudents: result.successCount
                         }
@@ -949,8 +1044,8 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
                 const modeNote =
                     conflictMode === 'fill_empty_only' ? ' (hanya sel kosong)' : '';
                 showToast(
-                    `Berhasil menarik & menggabungkan nilai ${result.successCount} santri${
-                        tabCount > 0 ? ` dari ${tabCount} tab Sheet` : ''
+                    `Berhasil menarik & menggabungkan nilai ${result.successCount} santri dari ${providerMeta.shortName}${
+                        tabCount > 0 ? ` (${tabCount} grup/tab)` : ''
                     }${modeNote}.`,
                     'success'
                 );
@@ -960,8 +1055,8 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
                     conflictMode === 'fill_empty_only'
                         ? 'Tidak ada sel kosong baru yang diisi (nilai lokal yang sudah ada dipertahankan).'
                         : defaultTahunAjaran
-                        ? `Belum ada kiriman nilai baru di Google Sheet untuk periode ${defaultTahunAjaran} (${defaultSemester || ''}). Klik ikon pengaturan (⚙) jika ingin menarik semua periode.`
-                        : 'Belum ada baris nilai baru di Google Sheet.',
+                        ? `Belum ada kiriman nilai baru di ${providerMeta.name} untuk periode ${defaultTahunAjaran} (${defaultSemester || ''}). Klik ikon pengaturan (⚙) jika ingin menarik semua periode.`
+                        : `Belum ada baris nilai baru di ${providerMeta.name}.`,
                     'info'
                 );
             }
@@ -971,7 +1066,7 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
             }
         } catch (err) {
             showAlert(
-                'Gagal Menyimpan Nilai dari GAS',
+                `Gagal Menyimpan Nilai dari ${providerMeta.shortName}`,
                 (err as Error).message
             );
         } finally {
@@ -1001,10 +1096,17 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
                 filterOpts.allowedRombelIds = myWaliRombels.map(r => r.id);
             }
 
-            const cloudData = await fetchRaporFromCloud(savedScriptUrl, {
-                ...(filterOpts.tahunAjaran ? { tahunAjaran: filterOpts.tahunAjaran } : {}),
-                ...(filterOpts.semester ? { semester: filterOpts.semester } : {})
-            });
+            const cloudData = await fetchRaporFromCloud(
+                savedScriptUrl,
+                {
+                    ...(filterOpts.tahunAjaran ? { tahunAjaran: filterOpts.tahunAjaran } : {}),
+                    ...(filterOpts.semester ? { semester: filterOpts.semester } : {})
+                },
+                {
+                    backendProvider: savedProvider,
+                    apiKey: savedApiKey
+                }
+            );
 
             const dryResult = await syncRaporStructuredData(cloudData, settings, {
                 ...filterOpts,
@@ -1026,8 +1128,8 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
             await commitQuickPullData(cloudData, filterOpts, 'overwrite');
         } catch (err) {
             showAlert(
-                'Gagal Menarik Nilai dari GAS',
-                `${(err as Error).message}\n\nKlik tombol pengaturan (⚙) di sebelah tombol Tarik GAS untuk memeriksa URL Google Apps Script.`
+                `Gagal Menarik Nilai dari ${providerMeta.shortName}`,
+                `${(err as Error).message}\n\nKlik tombol pengaturan (⚙) di sebelah tombol Tarik untuk memeriksa Endpoint ${providerMeta.name}.`
             );
             setIsQuickPulling(false);
         }
@@ -1037,11 +1139,11 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
         if (hasUnsavedChanges) {
             showConfirmation(
                 'Ketikan Lokal Belum Disimpan',
-                'Anda memiliki ketikan nilai yang belum disimpan di halaman ini. Menarik nilai dari Cloud GAS akan memuat ulang data terbaru dari database. Lanjutkan?',
+                `Anda memiliki ketikan nilai yang belum disimpan di halaman ini. Menarik nilai dari ${providerMeta.name} akan memuat ulang data terbaru dari database. Lanjutkan?`,
                 () => {
                     executeQuickPull();
                 },
-                { confirmColor: 'amber', confirmText: 'Ya, Tarik dari GAS' }
+                { confirmColor: 'amber', confirmText: `Ya, Tarik dari ${providerMeta.shortName}` }
             );
             return;
         }
@@ -1075,24 +1177,24 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
                         disabled={isQuickPulling}
                         title={
                             savedScriptUrl
-                                ? `Tarik & gabungkan nilai terbaru dari Google Sheet${
+                                ? `Tarik & gabungkan nilai terbaru dari ${providerMeta.name}${
                                       defaultTahunAjaran
                                           ? ` (${defaultTahunAjaran} ${defaultSemester || ''})`
                                           : ''
                                   }`
-                                : 'Hubungkan Link Google Apps Script untuk menarik nilai otomatis'
+                                : `Hubungkan Endpoint ${providerMeta.name} untuk menarik nilai otomatis`
                         }
                         className={`${padClass} font-bold text-blue-800 hover:bg-blue-100/80 transition-colors flex items-center gap-1.5 whitespace-nowrap disabled:opacity-60`}
                     >
                         {isQuickPulling ? (
                             <>
                                 <span className="animate-spin h-3.5 w-3.5 border-2 border-blue-700 rounded-full border-t-transparent"></span>
-                                <span>Menarik GAS...</span>
+                                <span>Menarik dari Cloud...</span>
                             </>
                         ) : (
                             <>
                                 <i className="bi bi-cloud-arrow-down-fill text-blue-600 text-sm"></i>
-                                <span>Tarik Nilai GAS</span>
+                                <span>Tarik Nilai dari Cloud</span>
                             </>
                         )}
                     </button>
@@ -1100,8 +1202,8 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
                         type="button"
                         onClick={() => openModalWithGuard('cloud')}
                         disabled={isQuickPulling}
-                        title="Pengaturan Link GAS, Cek Isi Sheet, Filter Rombel & Impor Kode WA"
-                        aria-label="Pengaturan Tarik Nilai GAS dan Impor WA"
+                        title="Pengaturan Endpoint Cloud, Cek Data, Filter Rombel & Impor Kode WA"
+                        aria-label="Pengaturan Tarik Nilai Cloud dan Impor WA"
                         className="px-2.5 py-2 border-l border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors flex items-center justify-center"
                     >
                         <i className="bi bi-sliders text-xs"></i>
@@ -1132,7 +1234,7 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
                                 </div>
                                 <div>
                                     <h3 className="text-sm font-black text-slate-900">
-                                        Pratinjau Perbedaan Nilai Cloud GAS
+                                        Pratinjau Perbedaan Nilai Cloud ({providerMeta.shortName})
                                     </h3>
                                     <p className="text-xs text-slate-500 mt-0.5">
                                         Ditemukan <strong>{quickDiffState.newFieldsCount}</strong> sel kosong baru dan{' '}

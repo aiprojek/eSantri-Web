@@ -12,6 +12,15 @@ import {
     RAPOR_UNIFIED_GAS_SCRIPT_V3,
     generateRaporAuditPortalHtml
 } from '../../utils/raporAuditPortalGenerator';
+import {
+    RaporCloudProvider,
+    RAPOR_CLOUDFLARE_D1_WORKER_SCRIPT,
+    RAPOR_CLOUDFLARE_R2_WORKER_SCRIPT,
+    RAPOR_SUPABASE_SQL_SETUP,
+    getRaporCloudProviderMeta,
+    purgeRaporCloudStaging,
+    testRaporCloudConnection
+} from '../../services/raporCloudService';
 
 export interface TabGeneratorFormulirProps {
     initialMode?: 'ledger' | 'audit_portal';
@@ -38,11 +47,12 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
         }
     }, [initialMode]);
 
-    // --- SHARED CLOUD / GAS CONFIG (1 Link Universal untuk Semua Ledger & Portal Audit) ---
+    // --- SHARED CLOUD / ENDPOINT CONFIG (1 Link Universal untuk Semua Ledger & Portal Audit) ---
     const savedCloudCfg = settings.raporCloudConfig;
-    const [backendProvider, setBackendProvider] = useState<'gas' | 'cloudflare_d1' | 'supabase' | 'cloudflare_r2'>(
+    const [backendProvider, setBackendProvider] = useState<RaporCloudProvider>(
         savedCloudCfg?.backendProvider || 'gas'
     );
+    const providerMeta = useMemo(() => getRaporCloudProviderMeta(backendProvider), [backendProvider]);
     const [submissionMethod, setSubmissionMethod] = useState<'whatsapp' | 'google_sheet' | 'hybrid'>(
         savedCloudCfg?.submissionMethod || (savedCloudCfg?.googleScriptUrl ? 'hybrid' : 'whatsapp')
     );
@@ -54,6 +64,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
     );
     const [showScriptHelper, setShowScriptHelper] = useState(false);
     const [isSavingConfig, setIsSavingConfig] = useState(false);
+    const [isTestingConnection, setIsTestingConnection] = useState(false);
     const [isPurgingStaging, setIsPurgingStaging] = useState(false);
 
     // Sync state if settings load asynchronously
@@ -79,7 +90,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [settings.raporCloudConfig?.googleScriptUrl]);
+    }, [settings.raporCloudConfig?.googleScriptUrl, settings.raporCloudConfig?.backendProvider, settings.raporCloudConfig?.apiKey]);
 
     const hasUnsavedCloudChanges = useMemo(() => {
         const curProvider = backendProvider;
@@ -135,36 +146,38 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
 
     const handlePurgeStagingSubmissions = async () => {
         const confirmed = window.confirm(
-            'PERINGATAN SIKLUS BERSIH:\n\n' +
-            'Tindakan ini akan mengosongkan antrean setoran nilai semester lalu di server cloud agar database cloud tetap ramping dan bebas kuota bengkak.\n\n' +
-            'Pastikan seluruh nilai semester lalu sudah ditarik dan disahkan di menu Rapor sebelum melanjutkan!\n\n' +
+            `PERINGATAN SIKLUS BERSIH (${providerMeta.name}):\n\n` +
+            'Tindakan ini akan mengosongkan antrean setoran nilai di server cloud penampung agar database cloud tetap ramping dan bebas kuota bengkak.\n\n' +
+            'Pastikan seluruh nilai sudah ditarik dan disahkan di menu Rapor sebelum melanjutkan!\n\n' +
             'Lanjutkan pembersihan antrean cloud?'
         );
         if (!confirmed) return;
 
         setIsPurgingStaging(true);
         try {
-            // Jika menggunakan endpoint aktif, kita juga bisa mengirim sinyal purge
-            if (googleScriptUrl.trim()) {
-                try {
-                    await fetch(googleScriptUrl.trim(), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify({ action: 'purge_staging', timestamp: new Date().toISOString() })
-                    });
-                } catch {
-                    // non-blocking jika server hanya passive sheet
+            const purgeRes = await purgeRaporCloudStaging(
+                {
+                    endpointUrl: googleScriptUrl.trim(),
+                    backendProvider,
+                    apiKey: apiKey.trim()
+                },
+                {
+                    tahunAjaran: genTahunAjaran,
+                    semester: genSemester
                 }
-            }
+            );
 
             await onUpdateSettings({
                 ...settings,
                 raporCloudConfig: {
                     ...(settings.raporCloudConfig || {}),
+                    backendProvider,
+                    googleScriptUrl: googleScriptUrl.trim(),
+                    apiKey: apiKey.trim(),
                     lastPurgedAt: new Date().toISOString()
                 }
             });
-            showToast('Antrean data setoran cloud semester lalu berhasil dibersihkan! Server kembali lega.', 'success');
+            showToast(purgeRes.message, 'success');
         } catch (err) {
             showToast('Gagal membersihkan data cloud: ' + (err as Error).message, 'error');
         } finally {
@@ -287,6 +300,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
     const [previewModalOpen, setPreviewModalOpen] = useState(false);
     const [previewHtml, setPreviewHtml] = useState('');
     const [previewTitle, setPreviewTitle] = useState('Pratinjau Dokumen HTML');
+    const [previewViewport, setPreviewViewport] = useState<'desktop' | 'mobile'>('desktop');
 
     const jadwalPelajaranList = useLiveQuery(() => db.jadwalPelajaran.toArray(), []) || [];
 
@@ -470,6 +484,14 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
             showToast('Pilih minimal 1 kolom mata pelajaran untuk disertakan pada formulir.', 'error');
             return null;
         }
+        if ((submissionMethod === 'google_sheet' || submissionMethod === 'hybrid') && !googleScriptUrl.trim()) {
+            showToast(`Masukkan URL Endpoint ${providerMeta.name} terlebih dahulu atau pilih metode WhatsApp.`, 'error');
+            return null;
+        }
+        if ((submissionMethod === 'google_sheet' || submissionMethod === 'hybrid') && providerMeta.requiresApiKey && !apiKey.trim()) {
+            showToast(`${providerMeta.apiKeyLabel} wajib diisi agar formulir dapat terhubung ke ${providerMeta.name}.`, 'error');
+            return null;
+        }
         if (targetSantriList.length === 0) {
             showToast('Tidak ada santri aktif pada target yang dipilih', 'error');
             return null;
@@ -500,7 +522,9 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
             template: tpl,
             sheetId: genSheetId,
             submissionMethod,
+            backendProvider,
             googleScriptUrl: googleScriptUrl.trim(),
+            apiKey: apiKey.trim(),
             waDestination: waDestination.trim(),
             rankingScope: genRankingScope,
             tabMode,
@@ -588,7 +612,11 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
             return null;
         }
         if (!googleScriptUrl.trim() && !portalIncludeSnapshot) {
-            showToast('Masukkan URL Google Apps Script atau aktifkan Snapshot Data Lokal.', 'error');
+            showToast(`Masukkan URL Endpoint ${providerMeta.name} atau aktifkan Snapshot Data Lokal.`, 'error');
+            return null;
+        }
+        if (googleScriptUrl.trim() && providerMeta.requiresApiKey && !apiKey.trim()) {
+            showToast(`${providerMeta.apiKeyLabel} wajib diisi agar Portal Audit dapat menarik data live.`, 'error');
             return null;
         }
 
@@ -600,6 +628,8 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                 santriList,
                 localRecords,
                 googleScriptUrl: googleScriptUrl.trim(),
+                backendProvider,
+                apiKey: apiKey.trim(),
                 defaultTahunAjaran: genTahunAjaran || defaultAcademicYear,
                 defaultSemester: genSemester,
                 filterJenjangId: portalJenjangId,
@@ -661,13 +691,13 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                 <div className="space-y-1 min-w-0">
                     <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-teal-300">
                         <i className="bi bi-hdd-network-fill shrink-0"></i>
-                        <span className="truncate">Ekosistem 1 Link GAS Terpadu (Konsep Multi-Tab seperti PSB)</span>
+                        <span className="truncate">Ekosistem 1 Endpoint Cloud Universal (GAS / Cloudflare D1 / Supabase / R2)</span>
                     </div>
                     <h3 className="text-base sm:text-lg font-black text-white">
                         Generator File Mandiri HTML: Input Ledger Guru &amp; Portal Audit Pengurus
                     </h3>
                     <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-                        Cukup pasang <strong>1 Link Google Apps Script</strong> sekali untuk seluruh Rombel &amp; Template Rapor. Kiriman guru otomatis dipisah ke <strong>Tab Baru</strong> dan digabung per santri, serta dapat dipantau live lewat file <strong>Portal Audit Tanpa Login</strong>.
+                        Pilih backend sesuai kebutuhan (Google Apps Script, Cloudflare D1, Supabase, atau Cloudflare R2) lalu pasang <strong>1 Link Endpoint</strong> untuk seluruh Rombel &amp; Template Rapor. Kiriman guru digabung otomatis per santri, dan dapat ditarik ke aplikasi maupun dipantau live lewat <strong>Portal Audit Tanpa Login</strong>.
                     </p>
                 </div>
 
@@ -891,7 +921,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                                     </div>
 
                                                     <p className="text-[10px] text-slate-500 leading-relaxed">
-                                                        Formulir yang diunduh hanya menampilkan kolom yang dicentang sehingga guru mata pelajaran fokus mengisi mapelnya sendiri. Saat dikirim ke Cloud GAS / WA, nilainya tetap digabungkan rapi ke rapor santri tanpa menimpa mapel guru lain.
+                                                        Formulir yang diunduh hanya menampilkan kolom yang dicentang sehingga guru mata pelajaran fokus mengisi mapelnya sendiri. Saat dikirim ke Cloud Server / WA, nilainya tetap digabungkan rapi ke rapor santri tanpa menimpa mapel guru lain.
                                                     </p>
                                                 </div>
                                             )}
@@ -1252,7 +1282,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                         Sertakan Snapshot Nilai Lokal Aplikasi saat Ini (Rekomendasi)
                                     </span>
                                     <span className="text-slate-500 leading-relaxed">
-                                        Nilai yang sudah diinput Wali Kelas di aplikasi utama ikut terbawa sebagai data dasar, lalu otomatis digabung (Smart Merge) dengan kiriman terbaru guru dari Link GAS saat portal dibuka online.
+                                        Nilai yang sudah diinput Wali Kelas di aplikasi utama ikut terbawa sebagai data dasar, lalu otomatis digabung (Smart Merge) dengan kiriman terbaru guru dari Endpoint Cloud saat portal dibuka online.
                                     </span>
                                 </div>
                             </label>
@@ -1381,7 +1411,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                                 : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                                         }`}
                                     >
-                                        <i className="bi bi-cloud-arrow-up shrink-0"></i> Direct Cloud ({backendProvider === 'gas' ? 'GAS' : backendProvider.toUpperCase()})
+                                        <i className="bi bi-cloud-arrow-up shrink-0"></i> Direct Cloud ({providerMeta.shortName})
                                     </button>
                                     <button
                                         type="button"
@@ -1418,10 +1448,10 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                 <div>
                                     <div className="flex items-center justify-between mb-1">
                                         <label className="block text-xs font-bold text-slate-800">
-                                            URL Endpoint {backendProvider === 'gas' ? 'Web App Google Apps Script' : backendProvider === 'cloudflare_d1' ? 'Cloudflare Worker D1' : backendProvider === 'supabase' ? 'Supabase REST Endpoint' : 'Cloudflare R2 Webhook'} (1 Link Selamanya)
+                                            {providerMeta.endpointLabel}
                                         </label>
                                         <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-                                            Universal Endpoint
+                                            {providerMeta.shortName} Universal
                                         </span>
                                     </div>
                                     <div className="flex gap-2 min-w-0">
@@ -1429,45 +1459,60 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                             type="text"
                                             value={googleScriptUrl}
                                             onChange={e => setGoogleScriptUrl(e.target.value)}
-                                            placeholder={
-                                                backendProvider === 'gas'
-                                                    ? 'https://script.google.com/macros/s/.../exec'
-                                                    : backendProvider === 'cloudflare_d1'
-                                                    ? 'https://api-rapor.pondok.workers.dev/api/ledger'
-                                                    : backendProvider === 'supabase'
-                                                    ? 'https://xyzcompany.supabase.co/rest/v1/rapor_submissions'
-                                                    : 'https://r2.domainpondok.sch.id/ledger-webhook'
-                                            }
+                                            placeholder={providerMeta.endpointPlaceholder}
                                             className="flex-grow min-w-0 border border-slate-300 bg-white rounded-lg p-2 text-xs font-mono outline-none focus:border-teal-600"
                                         />
                                         <button
                                             type="button"
+                                            disabled={isTestingConnection}
                                             onClick={async () => {
                                                 if (!googleScriptUrl.trim()) {
                                                     return showToast('Masukkan URL Endpoint terlebih dahulu', 'error');
                                                 }
+                                                setIsTestingConnection(true);
                                                 try {
-                                                    const res = await fetch(googleScriptUrl.trim(), { method: 'GET' });
-                                                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                                                    const json = await res.json().catch(() => null);
-                                                    const count = Array.isArray(json) ? json.length : (json?.count ?? 'Aktif');
-                                                    showToast(
-                                                        `Koneksi Endpoint Aktif! Respons server terbaca (${count}).`,
-                                                        'success'
-                                                    );
+                                                    const res = await testRaporCloudConnection({
+                                                        endpointUrl: googleScriptUrl.trim(),
+                                                        backendProvider,
+                                                        apiKey: apiKey.trim()
+                                                    });
+                                                    showToast(res.message, 'success');
                                                 } catch (e: any) {
                                                     showToast(
-                                                        'Endpoint belum merespons. Pastikan URL benar dan izin CORS/Access publik aktif (' + (e?.message || 'Gagal') + ').',
+                                                        `Endpoint ${providerMeta.name} belum merespons: ${e?.message || 'Gagal terhubung'}.`,
                                                         'error'
                                                     );
+                                                } finally {
+                                                    setIsTestingConnection(false);
                                                 }
                                             }}
-                                            className="bg-slate-800 hover:bg-slate-900 text-white px-3 rounded-lg text-xs font-bold whitespace-nowrap shrink-0"
+                                            className="bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white px-3 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1.5"
                                         >
-                                            Tes Link
+                                            {isTestingConnection && (
+                                                <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                            )}
+                                            <span>Tes Link</span>
                                         </button>
                                     </div>
                                 </div>
+
+                                {providerMeta.supportsApiKey && (
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                                            {providerMeta.apiKeyLabel}
+                                        </label>
+                                        <input
+                                            type="password"
+                                            value={apiKey}
+                                            onChange={e => setApiKey(e.target.value)}
+                                            placeholder={providerMeta.apiKeyPlaceholder}
+                                            className="w-full border border-slate-300 bg-white rounded-lg p-2 text-xs font-mono outline-none focus:border-teal-600"
+                                        />
+                                        {providerMeta.apiKeyHelp && (
+                                            <p className="text-[10px] text-slate-500 mt-1">{providerMeta.apiKeyHelp}</p>
+                                        )}
+                                    </div>
+                                )}
 
                                 {backendProvider === 'gas' && generatorMode === 'ledger' && (
                                     <div>
@@ -1501,10 +1546,10 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                         <div className="space-y-0.5">
                                             <div className="font-bold text-xs text-amber-950 flex items-center gap-1.5">
                                                 <i className="bi bi-recycle text-amber-600"></i>
-                                                <span>Siklus Bersih Pasca-Bagi Rapor (Anti-Server Penuh)</span>
+                                                <span>Siklus Bersih Pasca-Bagi Rapor ({providerMeta.shortName})</span>
                                             </div>
                                             <p className="text-[10px] text-amber-800 leading-relaxed">
-                                                Setelah seluruh rapor semester lalu disahkan dan dicetak, kosongkan antrean nilai di cloud penampung agar kuota gratis server tetap lega dan pencarian data kencang.
+                                                Kosongkan antrean setoran nilai ({genTahunAjaran} • {genSemester}) di <strong>{providerMeta.name}</strong> setelah nilai disahkan agar kuota server tetap lega.
                                             </p>
                                         </div>
                                         <button
@@ -1512,7 +1557,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                             disabled={isPurgingStaging}
                                             onClick={handlePurgeStagingSubmissions}
                                             className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 text-white rounded-lg text-xs font-bold whitespace-nowrap shadow-2xs transition-all active:scale-95 shrink-0"
-                                            title="Bersihkan setoran nilai mentah semester lalu dari cloud penampung"
+                                            title="Bersihkan setoran nilai mentah periode terpilih dari cloud penampung"
                                         >
                                             <i className={`bi ${isPurgingStaging ? 'bi-arrow-repeat animate-spin' : 'bi-trash3-fill'} mr-1`}></i>
                                             Bersihkan Cloud
@@ -1526,25 +1571,18 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                 </div>
 
                                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                                    {backendProvider === 'gas' ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowScriptHelper(!showScriptHelper)}
-                                            className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
-                                        >
-                                            <i className={`bi ${showScriptHelper ? 'bi-chevron-up' : 'bi-code-slash'}`}></i>
-                                            <span>
-                                                {showScriptHelper
-                                                    ? 'Sembunyikan Kode Apps Script v3.0'
-                                                    : 'Salin Kode Google Apps Script Terpadu v3.0 (Multi-Tab)'}
-                                            </span>
-                                        </button>
-                                    ) : (
-                                        <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                                            <i className="bi bi-shield-check text-emerald-600"></i>
-                                            <span>Format Payload JSON Universal: <code>tahunAjaran</code>, <code>semester</code>, <code>rombelId</code>, <code>scores</code></span>
-                                        </div>
-                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowScriptHelper(!showScriptHelper)}
+                                        className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
+                                    >
+                                        <i className={`bi ${showScriptHelper ? 'bi-chevron-up' : 'bi-code-slash'}`}></i>
+                                        <span>
+                                            {showScriptHelper
+                                                ? `Sembunyikan Kode Setup ${providerMeta.shortName}`
+                                                : providerMeta.scriptButtonLabel}
+                                        </span>
+                                    </button>
 
                                     <button
                                         type="button"
@@ -1557,37 +1595,71 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                     </button>
                                 </div>
 
-
-                                {showScriptHelper && (
-                                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 text-xs text-slate-700">
-                                        <div className="font-bold text-slate-900">
-                                            Setup Cukup 1x untuk Seluruh Rombel, Template &amp; Portal Audit:
+                                {showScriptHelper && (() => {
+                                    const scriptContent =
+                                        backendProvider === 'cloudflare_d1'
+                                            ? RAPOR_CLOUDFLARE_D1_WORKER_SCRIPT
+                                            : backendProvider === 'supabase'
+                                            ? RAPOR_SUPABASE_SQL_SETUP
+                                            : backendProvider === 'cloudflare_r2'
+                                            ? RAPOR_CLOUDFLARE_R2_WORKER_SCRIPT
+                                            : RAPOR_UNIFIED_GAS_SCRIPT_V3;
+                                    return (
+                                        <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 text-xs text-slate-700">
+                                            <div className="font-bold text-slate-900">
+                                                {providerMeta.scriptModalTitle}
+                                            </div>
+                                            {backendProvider === 'gas' && (
+                                                <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-600">
+                                                    <li>Buka 1 <strong>Google Spreadsheet</strong> khusus Rapor Pondok &gt; klik <strong>Extensions &gt; Apps Script</strong>.</li>
+                                                    <li>Hapus kode lama, lalu <strong>Salin &amp; Tempel</strong> kode v3.1 di bawah ini.</li>
+                                                    <li>Klik <strong>Deploy &gt; New Deployment</strong> (atau <em>Manage Deployments &gt; Edit &gt; New Version</em> jika memperbarui script lama).</li>
+                                                    <li>Pilih type <strong>Web App</strong>, Execute as: <strong>Me</strong>, Who has access: <strong>Anyone</strong>, lalu tempel URL-nya di kolom atas dan klik <strong>Simpan Default Pondok</strong>.</li>
+                                                </ol>
+                                            )}
+                                            {backendProvider === 'cloudflare_d1' && (
+                                                <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-600">
+                                                    <li>Buat D1 Database di Cloudflare Dashboard, lalu jalankan SQL pembuatan tabel <code>rapor_submissions</code> di tab Console D1.</li>
+                                                    <li>Buat Cloudflare Worker baru &amp; tempel kode Worker di bawah ini.</li>
+                                                    <li>Tambahkan D1 Binding bernama <code>DB</code> (dan opsional Secret <code>API_KEY</code> bila ingin proteksi token).</li>
+                                                    <li>Deploy Worker, tempel URL Worker di atas, lalu klik <strong>Simpan Default Pondok</strong>.</li>
+                                                </ol>
+                                            )}
+                                            {backendProvider === 'supabase' && (
+                                                <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-600">
+                                                    <li>Buka project Supabase &gt; <strong>SQL Editor</strong> &gt; jalankan seluruh skrip SQL di bawah (otomatis membuat tabel + Smart Merge trigger + RLS policy).</li>
+                                                    <li>Buka <strong>Project Settings &gt; API</strong>, salin Project URL (atau tambahkan <code>/rest/v1/rapor_submissions</code>) dan <strong>anon public key</strong>.</li>
+                                                    <li>Tempel URL &amp; Anon Key pada kolom di atas, klik <strong>Tes Link</strong>, lalu klik <strong>Simpan Default Pondok</strong>.</li>
+                                                </ol>
+                                            )}
+                                            {backendProvider === 'cloudflare_r2' && (
+                                                <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-600">
+                                                    <li>Buat R2 Bucket di Cloudflare Dashboard (misal <code>esantri-rapor</code>).</li>
+                                                    <li>Buat Cloudflare Worker baru &amp; tempel kode Worker R2 di bawah ini.</li>
+                                                    <li>Tambahkan R2 Bucket Binding bernama <code>R2_BUCKET</code> (dan opsional Secret <code>API_KEY</code>).</li>
+                                                    <li>Deploy Worker, tempel URL Worker di atas, lalu klik <strong>Simpan Default Pondok</strong>.</li>
+                                                </ol>
+                                            )}
+                                            <div className="relative">
+                                                <textarea
+                                                    readOnly
+                                                    className="w-full h-36 text-[10px] font-mono border border-slate-200 rounded-lg p-2.5 bg-slate-900 text-teal-300"
+                                                    value={scriptContent}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(scriptContent);
+                                                        showToast(`Kode setup ${providerMeta.name} berhasil disalin!`, 'success');
+                                                    }}
+                                                    className="absolute top-2 right-2 bg-teal-600 hover:bg-teal-500 text-white px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 shadow-sm"
+                                                >
+                                                    <i className="bi bi-clipboard-check"></i> Salin Kode
+                                                </button>
+                                            </div>
                                         </div>
-                                        <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-600">
-                                            <li>Buka 1 <strong>Google Spreadsheet</strong> khusus Rapor Pondok &gt; klik <strong>Extensions &gt; Apps Script</strong>.</li>
-                                            <li>Hapus kode lama, lalu <strong>Salin &amp; Tempel</strong> kode v3.0 di bawah ini.</li>
-                                            <li>Klik <strong>Deploy &gt; New Deployment</strong> (atau <em>Manage Deployments &gt; Edit &gt; New Version</em> jika memperbarui script lama).</li>
-                                            <li>Pilih type <strong>Web App</strong>, Execute as: <strong>Me</strong>, Who has access: <strong>Anyone</strong>, lalu tempel URL-nya di kolom atas dan klik <strong>Simpan Default Pondok</strong>.</li>
-                                        </ol>
-                                        <div className="relative">
-                                            <textarea
-                                                readOnly
-                                                className="w-full h-36 text-[10px] font-mono border border-slate-200 rounded-lg p-2.5 bg-slate-900 text-teal-300"
-                                                value={RAPOR_UNIFIED_GAS_SCRIPT_V3}
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(RAPOR_UNIFIED_GAS_SCRIPT_V3);
-                                                    showToast('Kode Google Apps Script Terpadu v3.0 berhasil disalin!', 'success');
-                                                }}
-                                                className="absolute top-2 right-2 bg-teal-600 hover:bg-teal-500 text-white px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 shadow-sm"
-                                            >
-                                                <i className="bi bi-clipboard-check"></i> Salin Script v3.0
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
+                                    );
+                                })()}
                             </div>
                         )}
                     </div>
@@ -1616,7 +1688,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                 </button>
                             </div>
                             <p className="text-[11px] text-slate-500 leading-relaxed">
-                                Dilengkapi tombol <strong>Muat Cloud</strong> di dalam formulir agar guru/wali kelas juga dapat menarik nilai yang sudah masuk sebelumnya dari Link GAS yang sama.
+                                Dilengkapi tombol <strong>Muat Cloud</strong> di dalam formulir agar guru/wali kelas juga dapat menarik nilai yang sudah masuk sebelumnya dari backend <strong>{providerMeta.name}</strong> yang sama.
                             </p>
                         </div>
                     ) : (
@@ -1642,7 +1714,7 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                                 </button>
                             </div>
                             <p className="text-[11px] text-slate-500 leading-relaxed">
-                                Bagikan file <code>.html</code> ini via WhatsApp ke Kepala Madrasah / Pimpinan / Grup Guru, atau unggah ke hosting statis (Cloudflare Pages / GitHub Pages). <strong>Tanpa login</strong>, otomatis membaca data live dari Link GAS yang sama.
+                                Bagikan file <code>.html</code> ini via WhatsApp ke Kepala Madrasah / Pimpinan / Grup Guru, atau unggah ke hosting statis. <strong>Tanpa login</strong>, otomatis membaca data live dari <strong>{providerMeta.name}</strong> yang sama.
                             </p>
                         </div>
                     )}
@@ -1651,22 +1723,51 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
 
             {/* INTERACTIVE PREVIEW MODAL */}
             {previewModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 md:p-6 animate-fade-in">
-                    <div className="bg-white w-full h-full max-w-7xl max-h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300">
-                        <div className="bg-slate-900 text-white px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 animate-fade-in">
+                    <div className="bg-white w-full h-[92vh] max-w-7xl rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300">
+                        <div className="bg-slate-900 text-white px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
                             <div className="flex items-center gap-3 min-w-0">
                                 <div className="p-2 bg-teal-500/20 text-teal-400 rounded-xl border border-teal-500/30 shrink-0">
                                     <i className="bi bi-window-fullscreen text-lg"></i>
                                 </div>
                                 <div className="min-w-0">
                                     <h3 className="font-bold text-sm text-white truncate">{previewTitle}</h3>
-                                    <p className="text-[11px] text-slate-400">
-                                        Tampilan interaktif mandiri persis seperti saat file dibuka di HP/Laptop penerima.
+                                    <p className="text-[11px] text-slate-400 truncate">
+                                        Tampilan interaktif mandiri persis seperti saat file dibuka di {previewViewport === 'desktop' ? 'PC / Laptop' : 'Ponsel'}.
                                     </p>
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <div className="inline-flex bg-slate-800 p-0.5 rounded-lg border border-slate-700">
+                                    <button
+                                        type="button"
+                                        onClick={() => setPreviewViewport('desktop')}
+                                        className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1 transition-colors ${
+                                            previewViewport === 'desktop'
+                                                ? 'bg-teal-500 text-slate-950'
+                                                : 'text-slate-300 hover:text-white'
+                                        }`}
+                                        title="Pratinjau Layar PC / Laptop"
+                                    >
+                                        <i className="bi bi-laptop"></i>
+                                        <span className="hidden sm:inline">PC</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPreviewViewport('mobile')}
+                                        className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1 transition-colors ${
+                                            previewViewport === 'mobile'
+                                                ? 'bg-teal-500 text-slate-950'
+                                                : 'text-slate-300 hover:text-white'
+                                        }`}
+                                        title="Pratinjau Layar Ponsel (390px)"
+                                    >
+                                        <i className="bi bi-phone"></i>
+                                        <span className="hidden sm:inline">HP</span>
+                                    </button>
+                                </div>
+
                                 <button
                                     type="button"
                                     onClick={
@@ -1689,13 +1790,21 @@ export const TabGeneratorFormulir: React.FC<TabGeneratorFormulirProps> = ({
                             </div>
                         </div>
 
-                        <div className="flex-grow w-full h-full bg-slate-100 relative">
-                            <iframe
-                                title={previewTitle}
-                                srcDoc={previewHtml}
-                                className="w-full h-full border-0"
-                                sandbox="allow-scripts allow-modals allow-same-origin allow-downloads"
-                            />
+                        <div className="flex-1 min-h-0 w-full bg-slate-200/80 relative overflow-hidden flex items-center justify-center p-0 sm:p-2">
+                            <div
+                                className={
+                                    previewViewport === 'mobile'
+                                        ? 'w-[390px] max-w-full h-full bg-white rounded-xl shadow-2xl border border-slate-300 overflow-hidden relative transition-all'
+                                        : 'w-full h-full bg-white sm:rounded-xl shadow-xs border border-slate-200 overflow-hidden relative transition-all'
+                                }
+                            >
+                                <iframe
+                                    title={previewTitle}
+                                    srcDoc={previewHtml}
+                                    className="absolute inset-0 w-full h-full border-0"
+                                    sandbox="allow-scripts allow-modals allow-same-origin allow-downloads"
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>

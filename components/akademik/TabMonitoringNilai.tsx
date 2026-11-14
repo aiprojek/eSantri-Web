@@ -87,9 +87,17 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
             const templateKeys = matchedTemplate ? extractTemplateKeys(matchedTemplate, 'all') : [];
             const expectedCount = templateKeys.length;
 
-            const santriInRombel = santriList.filter(
-                s => !s.deleted && s.rombelId === rombel.id && s.status === 'Aktif'
-            );
+            const isActiveYear = !defaultAcademicYear || currentYear === defaultAcademicYear;
+            const recSantriIdsInRombel = new Set<number>();
+            records.forEach(r => {
+                if (r.rombelId === rombel.id) recSantriIdsInRombel.add(r.santriId);
+            });
+
+            const santriInRombel = santriList.filter(s => {
+                if (s.deleted) return false;
+                if (!isActiveYear) return recSantriIdsInRombel.has(s.id);
+                return (s.rombelId === rombel.id && s.status === 'Aktif') || (s.status !== 'Aktif' && recSantriIdsInRombel.has(s.id));
+            });
             const totalSantri = santriInRombel.length;
 
             let completeCount = 0;
@@ -168,7 +176,7 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                 lastUpdate
             };
         });
-    }, [livePeriodRecords, settings, santriList]);
+    }, [livePeriodRecords, settings, santriList, currentYear, defaultAcademicYear]);
 
     // Audit specific rombel students (reactive to livePeriodRecords)
     const isAuditLoading = selectedAuditRombel !== null && livePeriodRecords === undefined;
@@ -195,8 +203,18 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
             (templates.length > 0 ? templates[0] : null);
         const templateKeys = matchedTemplate ? extractTemplateKeys(matchedTemplate, 'all') : [];
 
+        const isActiveYear = !defaultAcademicYear || currentYear === defaultAcademicYear;
+        const recSantriIdsInRombel = new Set<number>();
+        records.forEach(r => {
+            if (!r.deleted && r.rombelId === selectedAuditRombel.id) recSantriIdsInRombel.add(r.santriId);
+        });
+
         return santriList
-            .filter(s => !s.deleted && s.rombelId === selectedAuditRombel.id && s.status === 'Aktif')
+            .filter(s => {
+                if (s.deleted) return false;
+                if (!isActiveYear) return recSantriIdsInRombel.has(s.id);
+                return (s.rombelId === selectedAuditRombel.id && s.status === 'Aktif') || (s.status !== 'Aktif' && recSantriIdsInRombel.has(s.id));
+            })
             .sort((a, b) => a.namaLengkap.localeCompare(b.namaLengkap))
             .map(s => {
                 const rec = recMap.get(s.id);
@@ -232,7 +250,7 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                     lastModified: rec?.lastModified || rec?.tanggalRapor || null
                 };
             });
-    }, [selectedAuditRombel, livePeriodRecords, settings, santriList]);
+    }, [selectedAuditRombel, livePeriodRecords, settings, santriList, currentYear, defaultAcademicYear]);
 
     // Audit per-mapel & guru pengampu matrix for selected rombel
     const auditSubjects = useMemo(() => {
@@ -262,9 +280,16 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
             templates.find(t => !t.jenjangId) ||
             (templates.length > 0 ? templates[0] : null);
         const templateKeys = matchedTemplate ? extractTemplateKeys(matchedTemplate, 'all') : [];
-        const activeSantri = santriList.filter(
-            s => !s.deleted && s.rombelId === selectedAuditRombel.id && s.status === 'Aktif'
-        );
+        const isActiveYear = !defaultAcademicYear || currentYear === defaultAcademicYear;
+        const recSantriIdsInRombel = new Set<number>();
+        records.forEach(r => {
+            if (!r.deleted && r.rombelId === selectedAuditRombel.id) recSantriIdsInRombel.add(r.santriId);
+        });
+        const activeSantri = santriList.filter(s => {
+            if (s.deleted) return false;
+            if (!isActiveYear) return recSantriIdsInRombel.has(s.id);
+            return (s.rombelId === selectedAuditRombel.id && s.status === 'Aktif') || (s.status !== 'Aktif' && recSantriIdsInRombel.has(s.id));
+        });
         const totalSantri = activeSantri.length;
         const rombelSchedules = jadwalPelajaranList.filter(
             j => !j.deleted && j.rombelId === selectedAuditRombel.id

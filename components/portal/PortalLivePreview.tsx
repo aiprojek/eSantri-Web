@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { PondokSettings } from '../../types';
 import { db } from '../../db';
 import { THEME_PALETTES } from '../../utils/portalStandaloneGenerator';
+import { isSubjectGradeKey } from '../../services/raporCalculationService';
 
 interface PortalLivePreviewProps {
     settings: PondokSettings;
@@ -92,7 +93,8 @@ export const PortalLivePreview: React.FC<PortalLivePreviewProps> = ({
     const santriTahfizh = useLiveQuery(
         async () => {
             if (!activeSantri?.id) return [];
-            return await db.tahfizh.where('santriId').equals(activeSantri.id).reverse().limit(5).toArray();
+            const list = await db.tahfizh.where('santriId').equals(activeSantri.id).filter(r => !r.deleted).reverse().toArray();
+            return list.slice(0, 5);
         },
         [activeSantri?.id],
         []
@@ -101,7 +103,8 @@ export const PortalLivePreview: React.FC<PortalLivePreviewProps> = ({
     const santriHealth = useLiveQuery(
         async () => {
             if (!activeSantri?.id) return [];
-            return await db.kesehatanRecords.where('santriId').equals(activeSantri.id).reverse().limit(3).toArray();
+            const list = await db.kesehatanRecords.where('santriId').equals(activeSantri.id).filter(r => !r.deleted).reverse().toArray();
+            return list.slice(0, 3);
         },
         [activeSantri?.id],
         []
@@ -110,7 +113,10 @@ export const PortalLivePreview: React.FC<PortalLivePreviewProps> = ({
     const santriRapor = useLiveQuery(
         async () => {
             if (!activeSantri?.id) return null;
-            return await db.raporRecords.where('santriId').equals(activeSantri.id).last();
+            const list = await db.raporRecords.where('santriId').equals(activeSantri.id).filter(r => !r.deleted).toArray();
+            if (list.length === 0) return null;
+            list.sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0));
+            return list[0];
         },
         [activeSantri?.id],
         null
@@ -641,19 +647,50 @@ export const PortalLivePreview: React.FC<PortalLivePreviewProps> = ({
                                                         <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5">Evaluasi capaian belajar &amp; nilai santri</p>
                                                     </div>
                                                     <span className="inline-flex items-center self-start sm:self-auto text-xs font-bold px-2.5 py-1 rounded-full text-white shrink-0 shadow-2xs mt-0.5 sm:mt-0" style={{ backgroundColor: 'var(--p-color)' }}>
-                                                        Rata-rata: {santriRapor?.nilai && santriRapor.nilai.length > 0
-                                                            ? (santriRapor.nilai.reduce((a, b) => a + (b.nilaiAngka || 0), 0) / santriRapor.nilai.length).toFixed(1)
-                                                            : ((santriRapor as any)?.rataRata || '85.4')}
+                                                        Rata-rata: {(() => {
+                                                            if (santriRapor?.nilai && santriRapor.nilai.length > 0) {
+                                                                return (santriRapor.nilai.reduce((a, b) => a + (b.nilaiAngka || 0), 0) / santriRapor.nilai.length).toFixed(1);
+                                                            }
+                                                            if (santriRapor?.customData) {
+                                                                try {
+                                                                    const parsed = JSON.parse(santriRapor.customData);
+                                                                    const scores: number[] = [];
+                                                                    Object.entries(parsed).forEach(([k, raw]) => {
+                                                                        if (!k || k.startsWith('_')) return;
+                                                                        if (!isSubjectGradeKey(k, undefined, k, undefined, settings.mataPelajaran || [], kelasObj?.jenjangId)) return;
+                                                                        const sv = String(raw ?? '').trim();
+                                                                        if (!sv || sv === '-') return;
+                                                                        const num = Number(sv.replace(',', '.'));
+                                                                        if (!isNaN(num) && isFinite(num) && num >= 0 && num <= 100) scores.push(num);
+                                                                    });
+                                                                    if (scores.length > 0) {
+                                                                        return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+                                                                    }
+                                                                } catch {}
+                                                            }
+                                                            return (santriRapor as any)?.rataRata || '-';
+                                                        })()}
                                                     </span>
                                                 </div>
                                                 <p className="text-xs text-slate-600">
                                                     Wali Kelas: <span className="font-bold text-slate-800">{waliKelasObj?.nama || 'Ustadz Pembina'}</span>
                                                 </p>
-                                                {santriRapor?.catatanWaliKelas && (
-                                                    <div className="p-2.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-700 italic break-words">
-                                                        &ldquo;{santriRapor.catatanWaliKelas}&rdquo;
-                                                    </div>
-                                                )}
+                                                {(() => {
+                                                    let resolvedCatatan = santriRapor?.catatanWaliKelas || '';
+                                                    if (!resolvedCatatan && santriRapor?.customData) {
+                                                        try {
+                                                            const parsed = JSON.parse(santriRapor.customData);
+                                                            resolvedCatatan = String(
+                                                                parsed.CATATAN_WALI_KELAS || parsed.CATATAN_WALI || parsed.catatan_wali || parsed.CATATAN || ''
+                                                            ).trim();
+                                                        } catch {}
+                                                    }
+                                                    return resolvedCatatan && resolvedCatatan !== '-' ? (
+                                                        <div className="p-2.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-700 italic break-words">
+                                                            &ldquo;{resolvedCatatan}&rdquo;
+                                                        </div>
+                                                    ) : null;
+                                                })()}
                                             </div>
 
                                             <div className="rounded-xl border border-slate-200 p-3.5 sm:p-4 bg-white shadow-2xs">

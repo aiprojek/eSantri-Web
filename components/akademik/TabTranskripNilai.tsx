@@ -761,11 +761,15 @@ export const TabTranskripNilai: React.FC<TabTranskripNilaiProps> = ({
                 if (selectedRombelId) {
                     return s.rombelId === parseInt(selectedRombelId, 10);
                 }
+                const rm = s.rombelId ? settings.rombel.find(r => r.id === s.rombelId) : undefined;
+                const effKelasId = rm?.kelasId || s.kelasId || 0;
+                const kl = effKelasId ? settings.kelas.find(k => k.id === effKelasId) : undefined;
+                const effJenjangId = kl?.jenjangId || s.jenjangId || 0;
                 if (selectedKelasId) {
-                    return s.kelasId === parseInt(selectedKelasId, 10);
+                    return effKelasId === parseInt(selectedKelasId, 10);
                 }
                 if (selectedJenjangId) {
-                    return s.jenjangId === parseInt(selectedJenjangId, 10);
+                    return effJenjangId === parseInt(selectedJenjangId, 10);
                 }
                 return true;
             })
@@ -777,7 +781,9 @@ export const TabTranskripNilai: React.FC<TabTranskripNilaiProps> = ({
         santriStatusFilter,
         selectedRombelId,
         selectedKelasId,
-        selectedJenjangId
+        selectedJenjangId,
+        settings.rombel,
+        settings.kelas
     ]);
 
     const cohortStudentIds = useMemo(() => cohortSantriPool.map(s => s.id), [cohortSantriPool]);
@@ -790,8 +796,8 @@ export const TabTranskripNilai: React.FC<TabTranskripNilaiProps> = ({
                 return { raporRecords: [], tahfizhRecords: [], digitalAssets: assets };
             }
             const [raporRecords, tahfizhRecords, digitalAssets] = await Promise.all([
-                db.raporRecords.where('santriId').anyOf(cohortStudentIds).toArray(),
-                db.tahfizh.where('santriId').anyOf(cohortStudentIds).toArray(),
+                db.raporRecords.where('santriId').anyOf(cohortStudentIds).filter(r => !r.deleted).toArray(),
+                db.tahfizh.where('santriId').anyOf(cohortStudentIds).filter(t => !t.deleted).toArray(),
                 db.digitalAssets.toArray()
             ]);
             return { raporRecords, tahfizhRecords, digitalAssets };

@@ -21,6 +21,7 @@ import { RaporTahfizhSyncModal, TahfizhSyncPayload, StudentTahfizhAggregate } fr
 import { RaporBulkHelperModal } from './modals/RaporBulkHelperModal';
 import { classifyRaporInputField, RaporInputClassification } from '../../services/raporCalculationService';
 import { pushRaporGradesToCloud } from '../../services/academicService';
+import { getRaporCloudProviderMeta } from '../../services/raporCloudService';
 
 export interface TabInputNilaiWaliProps {
     initialContext?: {
@@ -43,6 +44,10 @@ export interface TabInputNilaiWaliProps {
 export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialContext, onContextChange }) => {
     const { settings, onUpdateSettings, showToast, showConfirmation, currentUser } = useAppContext();
     const { santriList } = useSantriContext();
+    const activeCloudMeta = useMemo(
+        () => getRaporCloudProviderMeta(settings.raporCloudConfig?.backendProvider),
+        [settings.raporCloudConfig?.backendProvider]
+    );
     const defaultAcademicYear = useMemo(() => getDefaultAcademicYear(settings), [settings]);
     const archiveYears = useAcademicRaporYears();
     const availableAcademicYears = useMemo(() => getAcademicYearOptions(settings, archiveYears), [settings, archiveYears]);
@@ -1102,12 +1107,12 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                 const cloudRes = await syncSnapshotToCloudGas(mergedGradesSnapshot, previousBaselineGrades);
                 if (cloudRes.error) {
                     showToast(
-                        'Nilai tersimpan aman di aplikasi (sinkron otomatis ke Cloud GAS tertunda, cek koneksi/URL GAS).',
+                        `Nilai tersimpan aman di aplikasi (sinkron otomatis ke ${activeCloudMeta.shortName} tertunda, cek koneksi/endpoint).`,
                         'info'
                     );
                 } else if (cloudRes.synced) {
                     showToast(
-                        `Nilai berhasil disimpan & otomatis diperbarui ke Cloud GAS (${cloudRes.pushedStudents} santri).`,
+                        `Nilai berhasil disimpan & otomatis diperbarui ke ${activeCloudMeta.shortName} (${cloudRes.pushedStudents} santri).`,
                         'success'
                     );
                 } else {
@@ -1189,14 +1194,14 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
             });
             if (res.pushedStudents > 0) {
                 showToast(
-                    `Berhasil memperbarui nilai ${res.pushedStudents} santri ke Google Sheet & Portal Audit.`,
+                    `Berhasil memperbarui nilai ${res.pushedStudents} santri ke ${activeCloudMeta.name} & Portal Audit.`,
                     'success'
                 );
             } else {
-                showToast('Belum ada nilai terisi pada tabel ini untuk dikirim ke Google Sheet.', 'info');
+                showToast(`Belum ada nilai terisi pada tabel ini untuk dikirim ke ${activeCloudMeta.name}.`, 'info');
             }
         } catch (err) {
-            showToast('Gagal mengirim ke Cloud GAS: ' + (err as Error).message, 'error');
+            showToast(`Gagal mengirim ke ${activeCloudMeta.shortName}: ` + (err as Error).message, 'error');
         } finally {
             setIsPushingGas(false);
         }
@@ -1428,7 +1433,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                     <button
                         onClick={() => openExternalImportModal('cloud')}
                         disabled={isRaporLocked}
-                        title="Tarik Nilai dari Cloud GAS / Sheet"
+                        title="Tarik Nilai dari Cloud"
                         className="w-[42px] h-[42px] flex items-center justify-center bg-blue-50 text-blue-700 border border-blue-200 rounded-xl disabled:opacity-50"
                     >
                         <i className="bi bi-cloud-arrow-down-fill text-lg"></i>
@@ -1682,33 +1687,33 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                             <span>Import Excel</span>
                         </button>
 
-                        {/* Tarik Nilai Cloud GAS */}
+                        {/* Tarik Nilai Cloud */}
                         <button
                             type="button"
                             onClick={() => openExternalImportModal('cloud')}
                             disabled={isRaporLocked}
                             className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50"
-                            title="Tarik & gabungkan nilai dari 1 Link Google Apps Script / Spreadsheet"
+                            title={`Tarik & gabungkan nilai dari ${activeCloudMeta.name}`}
                         >
                             <i className="bi bi-cloud-arrow-down-fill text-blue-600"></i>
-                            <span>Tarik GAS</span>
+                            <span>Tarik Nilai dari Cloud</span>
                         </button>
 
-                        {/* Kirim / Sinkron ke Cloud GAS */}
+                        {/* Kirim / Sinkron ke Cloud */}
                         {Boolean((settings.raporCloudConfig?.googleScriptUrl || '').trim()) && (
                             <button
                                 type="button"
                                 onClick={handleManualPushToGas}
                                 disabled={isPushingGas || isSaving || studentsInRombel.length === 0 || !selectedTemplateId || isRaporLocked}
                                 className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50"
-                                title="Dorong (Push) nilai di tabel ini ke Google Sheet & Portal Audit (otomatis juga berjalan saat Simpan Nilai)"
+                                title={`Dorong (Push) nilai di tabel ini ke ${activeCloudMeta.name} & Portal Audit (otomatis juga berjalan saat Simpan Nilai)`}
                             >
                                 {isPushingGas ? (
                                     <span className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
                                 ) : (
                                     <i className="bi bi-cloud-arrow-up-fill text-indigo-600"></i>
                                 )}
-                                <span>Kirim GAS</span>
+                                <span>Kirim {activeCloudMeta.shortName}</span>
                             </button>
                         )}
 
@@ -1973,7 +1978,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                 className="w-full py-2.5 px-4 bg-blue-50 text-blue-800 border border-blue-200 rounded-xl font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50"
                             >
                                 <i className="bi bi-cloud-arrow-down-fill text-blue-600"></i>
-                                <span>Tarik Nilai Cloud GAS (Sheet)</span>
+                                <span>Tarik Nilai dari Cloud</span>
                             </button>
                             {Boolean((settings.raporCloudConfig?.googleScriptUrl || '').trim()) && (
                                 <button
@@ -1986,7 +1991,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                     className="w-full py-2.5 px-4 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-xl font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50"
                                 >
                                     <i className="bi bi-cloud-arrow-up-fill text-indigo-600"></i>
-                                    <span>Kirim Nilai ke Cloud GAS (Sheet)</span>
+                                    <span>Kirim Nilai ke {activeCloudMeta.shortName}</span>
                                 </button>
                             )}
                             <button

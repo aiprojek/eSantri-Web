@@ -105,7 +105,7 @@ export const RaporTahfizhSyncModal: React.FC<RaporTahfizhSyncModalProps> = ({
 
             const bySantri = new Map<number, TahfizhRecord[]>();
             allRecords.forEach(r => {
-                if (santriIdSet.has(r.santriId)) {
+                if (!r.deleted && santriIdSet.has(r.santriId)) {
                     const list = bySantri.get(r.santriId) || [];
                     list.push(r);
                     bySantri.set(r.santriId, list);

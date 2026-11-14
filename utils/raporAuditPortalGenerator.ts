@@ -3,15 +3,21 @@ import {
     compileTemplateInteractiveSchema,
     CompiledTemplateSchema
 } from '../services/academicService';
+import {
+    RaporCloudProvider,
+    buildStandaloneCloudHelperJs,
+    getRaporCloudProviderMeta,
+    obfuscateSecretToCodeArray
+} from '../services/raporCloudService';
 import { buildMasterKkmLookupMap, computeDefaultKkmForPool } from '../utils/raporFormulaUtils';
 
 /**
- * Google Apps Script v3.0 (Terpadu / Multi-Tab Otomatis + Smart Merge per Santri)
+ * Google Apps Script v3.1 (Terpadu / Multi-Tab Otomatis + Smart Merge per Santri + Siklus Bersih Purge)
  * Satu URL Web App GAS untuk seluruh Rombel, Jenjang, Template Rapor (Reguler, Diniyah, Hadits/Mutun, Tahfizh),
  * sekaligus menjadi sumber data live bagi Portal Audit & Rekap Leger Tanpa Login (.html).
  */
 export const RAPOR_UNIFIED_GAS_SCRIPT_V3 = `/* ============================================================================
- * GOOGLE APPS SCRIPT TERPADU RAPOR & PORTAL AUDIT LEGER v3.0 (eSantri Web)
+ * GOOGLE APPS SCRIPT TERPADU RAPOR & PORTAL AUDIT LEGER v3.1 (eSantri Web)
  * 1 Link GAS untuk Semua Rombel, Semua Template & Portal Audit Tanpa Login
  * Fitur:
  *  - Otomatis buat Tab Baru (Worksheet) per Rombel/Template/Periode (Konsep PSB)
@@ -188,6 +194,45 @@ function doPost(e) {
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var payload = JSON.parse(e.postData.contents);
+
+    if (payload && payload.action === "purge_staging") {
+      var filterTa = payload.tahunAjaran ? String(payload.tahunAjaran).trim() : "";
+      var filterSem = payload.semester ? String(payload.semester).trim().toLowerCase() : "";
+      var deletedRows = 0;
+      var sheetsList = ss.getSheets();
+      for (var si = 0; si < sheetsList.length; si++) {
+        var sh = sheetsList[si];
+        var shName = sh.getName();
+        if (shName === "LOGS") continue;
+        var lastR = sh.getLastRow();
+        if (lastR <= 1) continue;
+        var vals = sh.getDataRange().getValues();
+        var hdr = vals[0].map(function(h) { return String(h || "").trim(); });
+        if (hdr.indexOf("DataJSON") === -1) continue;
+        var colTa = hdr.indexOf("TahunAjaran");
+        var colSem = hdr.indexOf("Semester");
+        var rowsToRemove = [];
+        for (var ri = 1; ri < vals.length; ri++) {
+          var rTa = colTa !== -1 ? String(vals[ri][colTa] || "").trim() : "";
+          var rSem = colSem !== -1 ? String(vals[ri][colSem] || "").trim().toLowerCase() : "";
+          if (filterTa && rTa && rTa !== filterTa) continue;
+          if (filterSem && rSem && rSem !== filterSem) continue;
+          rowsToRemove.push(ri + 1);
+        }
+        rowsToRemove.sort(function(a, b) { return b - a; });
+        for (var di = 0; di < rowsToRemove.length; di++) {
+          sh.deleteRow(rowsToRemove[di]);
+          deletedRows++;
+        }
+      }
+      logToSheet("Purge Staging: " + deletedRows + " baris dibersihkan.");
+      return ContentService.createTextOutput(JSON.stringify({
+        result: "success",
+        deletedCount: deletedRows,
+        message: "Antrean staging berhasil dibersihkan"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     var meta = payload.meta || {};
     var records = Array.isArray(payload.records) ? payload.records : [];
     var columnLabels = meta.columnLabels || {};
@@ -507,6 +552,8 @@ export interface GenerateRaporAuditPortalOptions {
     santriList: Santri[];
     localRecords?: RaporRecord[];
     googleScriptUrl: string;
+    backendProvider?: RaporCloudProvider;
+    apiKey?: string;
     defaultTahunAjaran: string;
     defaultSemester: 'Ganjil' | 'Genap';
     filterJenjangId?: number;
@@ -543,17 +590,6 @@ interface PortalCompiledTemplatePayload {
     rankConfigs: CompiledTemplateSchema['rankConfigs'];
 }
 
-const obfuscateUrlToCodeArray = (raw: string): number[] => {
-    const clean = (raw || '').trim();
-    if (!clean) return [];
-    const salt = 43;
-    const out: number[] = [];
-    for (let i = 0; i < clean.length; i++) {
-        out.push(clean.charCodeAt(i) ^ (salt + (i % 19)));
-    }
-    return out;
-};
-
 const safeJsonForHtmlScript = (value: unknown): string => {
     return JSON.stringify(value)
         .replace(/<\//g, '<\\/')
@@ -566,12 +602,15 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
         santriList,
         localRecords = [],
         googleScriptUrl,
+        backendProvider = 'gas',
+        apiKey = '',
         defaultTahunAjaran,
         defaultSemester,
         filterJenjangId = 0,
         filterTemplateId = '',
         includeLocalSnapshot = true
     } = options;
+    const cloudMeta = getRaporCloudProviderMeta(backendProvider);
 
     // 1. Filter Struktur Pendidikan sesuai cakupan
     const targetJenjangList = (settings.jenjang || []).filter(j =>
@@ -704,8 +743,14 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                       if (parsed.ALPHA === undefined) parsed.ALPHA = r.alpha;
                       if (parsed.ALFA === undefined) parsed.ALFA = r.alpha;
                   }
-                  if (r.catatanWaliKelas && parsed.CATATAN_WALI === undefined) parsed.CATATAN_WALI = r.catatanWaliKelas;
-                  if (r.keputusan && parsed.KEPUTUSAN === undefined) parsed.KEPUTUSAN = r.keputusan;
+                  if (r.catatanWaliKelas) {
+                      if (parsed.CATATAN_WALI === undefined) parsed.CATATAN_WALI = r.catatanWaliKelas;
+                      if (parsed.CATATAN_WALI_KELAS === undefined) parsed.CATATAN_WALI_KELAS = r.catatanWaliKelas;
+                  }
+                  if (r.keputusan) {
+                      if (parsed.KEPUTUSAN === undefined) parsed.KEPUTUSAN = r.keputusan;
+                      if (parsed.STATUS_NAIK === undefined) parsed.STATUS_NAIK = r.keputusan;
+                  }
 
                   return {
                       SantriID: Number(r.santriId),
@@ -732,7 +777,10 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 ? targetJenjangList[0]?.nama || 'Marhalah Terpilih'
                 : 'Seluruh Jenjang / Marhalah',
         generatedAt: new Date().toISOString(),
-        gasBytes: obfuscateUrlToCodeArray(googleScriptUrl)
+        backendProvider,
+        providerName: cloudMeta.name,
+        gasBytes: obfuscateSecretToCodeArray(googleScriptUrl),
+        apiKeyBytes: obfuscateSecretToCodeArray(apiKey)
     };
 
     const kkmLookupByJenjang: Record<string, Record<string, number>> = {};
@@ -832,6 +880,19 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
         table.leger-table.freeze-cols thead .col-sticky-name {
             z-index: 35;
         }
+
+        /* Fallback minimal layout utilities jika offline / Tailwind CDN lambat */
+        header { background: #0f172a; color: #ffffff; }
+        main { max-width: 1440px; margin: 0 auto; padding: 14px; }
+        select, input[type="text"] {
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 12px;
+            background: #ffffff;
+            color: #0f172a;
+        }
+        button { font-family: inherit; }
 
         @media print {
             .no-print { display: none !important; }
@@ -1009,6 +1070,12 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
         const BASELINE_ROWS = RAW.baseline || [];
         const KKM_CONFIG = RAW.kkm || { byJenjang: {}, global: {}, defaultByJenjang: {}, defaultGlobal: 70 };
 
+        ${buildStandaloneCloudHelperJs({
+            providerVar: backendProvider,
+            urlExpr: JSON.stringify(googleScriptUrl),
+            apiKeyBytesJson: JSON.stringify(obfuscateSecretToCodeArray(apiKey))
+        })}
+
         function decodeGasUrl(bytes) {
             if (!Array.isArray(bytes) || bytes.length === 0) return '';
             const salt = 43;
@@ -1058,7 +1125,8 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         let toastTimeout = null;
@@ -1538,6 +1606,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
 
             // Map: key = santriId + '|' + (templateId || '*')
             const bySantriAndTpl = new Map();
+            const bySantriNoTpl = new Map();
             const bySantriAny = new Map();
 
             combined.forEach(item => {
@@ -1564,20 +1633,27 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 }
                 const anyEntry = bySantriAny.get(sid);
 
-                // Simpan pada bucket spesifik template bila ada tplId
+                // Simpan pada bucket spesifik template bila ada tplId, atau bucket umum tanpa templateId
                 let tplEntry = null;
+                let noTplEntry = null;
                 if (tplId) {
                     const key = sid + '|' + tplId;
                     if (!bySantriAndTpl.has(key)) {
                         bySantriAndTpl.set(key, { data: {}, lastTs: 0 });
                     }
                     tplEntry = bySantriAndTpl.get(key);
+                } else {
+                    if (!bySantriNoTpl.has(sid)) {
+                        bySantriNoTpl.set(sid, { data: {}, lastTs: 0 });
+                    }
+                    noTplEntry = bySantriNoTpl.get(sid);
                 }
 
                 if (parsed.__cleared && typeof parsed.__cleared === 'object') {
                     Object.keys(parsed.__cleared).forEach(ck => {
                         delete anyEntry.data[ck];
                         if (tplEntry) delete tplEntry.data[ck];
+                        if (noTplEntry) delete noTplEntry.data[ck];
                     });
                 }
 
@@ -1587,22 +1663,29 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                     if (v === '' || v === null || v === undefined) return;
                     anyEntry.data[k] = v;
                     if (tplEntry) tplEntry.data[k] = v;
+                    if (noTplEntry) noTplEntry.data[k] = v;
                 });
 
                 if (ts && !isNaN(ts)) {
                     if (ts > anyEntry.lastTs) anyEntry.lastTs = ts;
                     if (tplEntry && ts > tplEntry.lastTs) tplEntry.lastTs = ts;
+                    if (noTplEntry && ts > noTplEntry.lastTs) noTplEntry.lastTs = ts;
                 }
             });
 
             return {
                 getStudentRecord(santriId, templateId) {
+                    const noTpl = bySantriNoTpl.get(santriId);
                     if (state.templateId !== 'auto' && templateId) {
-                        // Jika user memfilter Template tertentu (misal Rapor Hadits), ambil dari bucket template tersebut,
-                        // namun izinkan fallback dari baseline lokal tanpa TemplateID jika cocok kolomnya
                         const specific = bySantriAndTpl.get(santriId + '|' + templateId);
+                        if (specific && noTpl) {
+                            return {
+                                data: Object.assign({}, noTpl.data, specific.data),
+                                lastTs: Math.max(noTpl.lastTs, specific.lastTs)
+                            };
+                        }
                         if (specific) return specific;
-                        // Cek apakah santri punya data di template lain: jangan campurkan jika eksplisit beda template
+                        if (noTpl) return noTpl;
                         return { data: {}, lastTs: 0 };
                     }
                     if (templateId) {
@@ -1619,6 +1702,14 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                     return bySantriAny.get(santriId) || { data: {}, lastTs: 0 };
                 }
             };
+        }
+
+        function isStudentCompatibleWithTemplate(s, tpl) {
+            if (!tpl) return true;
+            if (tpl.rombelId && Number(s.rombelId) !== Number(tpl.rombelId)) return false;
+            if (tpl.kelasId && Number(s.kelasId) !== Number(tpl.kelasId)) return false;
+            if (tpl.jenjangId && Number(s.jenjangId) !== Number(tpl.jenjangId)) return false;
+            return true;
         }
 
         // --- EVALUASI PENUH COHORT SANTRI UNTUK SUATU TEMPLATE ---
@@ -1641,13 +1732,27 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
 
             students.forEach(s => {
                 const rec = gradesIndex.getStudentRecord(s.id, template.id);
+                const recData = rec.data || {};
+                const recUpperMap = {};
+                Object.keys(recData).forEach(dk => {
+                    recUpperMap[String(dk).toUpperCase()] = recData[dk];
+                });
+
                 const rowVals = {};
                 let filledCount = 0;
                 const missingCols = [];
                 const numericScores = [];
 
                 inputColumns.forEach(col => {
-                    const rawVal = rec.data[col.key];
+                    let rawVal = recData[col.key];
+                    if (rawVal === undefined) {
+                        rawVal = recUpperMap[String(col.key).toUpperCase()];
+                    }
+                    if (rawVal === undefined && col.key === 'CATATAN_WALI_KELAS') {
+                        rawVal = recData['CATATAN_WALI'] ?? recUpperMap['CATATAN_WALI'];
+                    } else if (rawVal === undefined && col.key === 'CATATAN_WALI') {
+                        rawVal = recData['CATATAN_WALI_KELAS'] ?? recUpperMap['CATATAN_WALI_KELAS'];
+                    }
                     const rawTrim = rawVal !== undefined && rawVal !== null ? String(rawVal).trim() : '';
                     const hasVal = rawTrim !== '';
                     if (hasVal) {
@@ -2142,7 +2247,10 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
         function renderAuditView(gradesIndex) {
             const container = document.getElementById('view-audit');
             const activeTemplate = resolveActiveTemplateForLeger();
-            const cohortAll = getFilteredSantri(true);
+            const rawCohortAll = getFilteredSantri(true);
+            const cohortAll = (state.templateId === 'auto' && activeTemplate)
+                ? rawCohortAll.filter(s => isStudentCompatibleWithTemplate(s, activeTemplate))
+                : rawCohortAll;
             const evalRes = evaluateCohortWithTemplate(cohortAll, activeTemplate, gradesIndex);
 
             if (!activeTemplate) {
@@ -2207,7 +2315,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                                 ? '<span class="text-[10px] font-bold text-rose-600"><i class="bi bi-exclamation-circle mr-0.5"></i>' + st.belowKkm + ' &lt; KKM</span>'
                                 : '<span class="text-[10px] text-slate-400">' + (st.missing === 0 ? 'Semua santri terisi' : st.missing + ' belum diisi') + '</span>') +
                             (st.missing > 0
-                                ? '<button type="button" onclick="toggleMissingSubjectFilter(\'' + esc(st.col.key) + '\')" class="px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap cursor-pointer ' +
+                                ? '<button type="button" data-key="' + esc(st.col.key) + '" onclick="toggleMissingSubjectFilter(this.dataset.key)" class="px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap cursor-pointer ' +
                                     (isSelectedMissing ? 'bg-teal-700 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700') + '">' +
                                     (isSelectedMissing ? 'Reset Filter' : 'Cek ' + st.missing + ' Kosong') +
                                   '</button>'
@@ -2218,7 +2326,9 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
             }).join('');
 
             // 2. Daftar Audit Kelengkapan per Santri
+            const compatIds = new Set(cohortAll.map(s => s.id));
             const visibleStudents = getFilteredSantri(false).filter(s => {
+                if (!compatIds.has(s.id)) return false;
                 const info = evalRes.studentMap.get(s.id);
                 const m = info ? info.meta : { filledCount: 0, expectedCount: 0 };
                 if (state.auditStatusFilter === 'incomplete' && (m.filledCount >= m.expectedCount)) return false;
@@ -2332,8 +2442,12 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 return;
             }
 
-            // Evaluasi cohort penuh pada cakupan filter (tanpa search agar RANK tetap akurat!)
-            const cohortForRank = getFilteredSantri(true);
+            // Evaluasi cohort penuh pada cakupan filter & kompatibel template (tanpa search agar RANK tetap akurat!)
+            const rawCohortForRank = getFilteredSantri(true);
+            const cohortForRank = (state.templateId === 'auto')
+                ? rawCohortForRank.filter(s => isStudentCompatibleWithTemplate(s, activeTemplate))
+                : rawCohortForRank;
+            const compatIds = new Set(cohortForRank.map(s => s.id));
             const evalRes = evaluateCohortWithTemplate(cohortForRank, activeTemplate, gradesIndex);
 
             // Pastikan sheet filter valid
@@ -2347,7 +2461,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
             );
 
             // Filter pencarian & urutkan
-            let displayStudents = getFilteredSantri(false);
+            let displayStudents = getFilteredSantri(false).filter(s => compatIds.has(s.id));
             displayStudents = [...displayStudents].sort((a, b) => {
                 if (state.sortBy === 'name') {
                     return a.nama.localeCompare(b.nama);
@@ -2381,15 +2495,36 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
             document.getElementById('print-subtitle').textContent =
                 'LEGER NILAI RAPOR • ' + activeTemplate.name + ' • ' + rombelTitle + ' • ' + state.tahunAjaran + ' (' + state.semester + ')';
 
+            // Quick Rombel Switcher Bar (untuk navigasi cepat 1 klik per kelas/rombel di Leger PC)
+            const availRombelsForBar = ROMBEL_LIST.filter(r => {
+                if (state.jenjangId > 0 && Number(r.jenjangId) !== Number(state.jenjangId)) return false;
+                if (state.kelasId > 0 && Number(r.kelasId) !== Number(state.kelasId)) return false;
+                return true;
+            });
+            const quickRombelBarHtml = availRombelsForBar.length > 1
+                ? '<div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 no-print">' +
+                    '<button type="button" onclick="quickSelectLegerRombel(0)" class="px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap cursor-pointer ' +
+                        (state.rombelId === 0 ? 'bg-teal-700 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50') + '">' +
+                        'Semua Rombel (' + availRombelsForBar.length + ')' +
+                    '</button>' +
+                    availRombelsForBar.map(rm =>
+                        '<button type="button" onclick="quickSelectLegerRombel(' + rm.id + ')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap cursor-pointer ' +
+                        (Number(state.rombelId) === Number(rm.id) ? 'bg-teal-700 text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50') + '">' +
+                        esc(rm.nama) +
+                        '</button>'
+                    ).join('') +
+                  '</div>'
+                : '';
+
             // Sheet Tabs HTML (bila multi-sheet)
             const sheetTabsHtml = sheets.length > 1
                 ? '<div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 no-print">' +
-                    '<button type="button" onclick="setLegerSheet(\'all\')" class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer ' +
+                    '<button type="button" data-sheet="all" onclick="setLegerSheet(this.dataset.sheet)" class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer ' +
                         (state.activeSheetId === 'all' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50') + '">' +
                         'Semua Lembar (' + evalRes.allColumns.length + ')' +
                     '</button>' +
                     sheets.map(sh =>
-                        '<button type="button" onclick="setLegerSheet(\'' + esc(sh.id) + '\')" class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer ' +
+                        '<button type="button" data-sheet="' + esc(sh.id) + '" onclick="setLegerSheet(this.dataset.sheet)" class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer ' +
                         (state.activeSheetId === sh.id ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50') + '">' +
                         esc(sh.name) +
                         '</button>'
@@ -2445,7 +2580,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 '</div>';
 
             if (displayStudents.length === 0) {
-                container.innerHTML = sheetTabsHtml + toolbarHtml +
+                container.innerHTML = quickRombelBarHtml + sheetTabsHtml + toolbarHtml +
                     '<div class="bg-white rounded-xl border border-slate-200 p-10 text-center text-sm text-slate-500">Tidak ada santri pada filter yang dipilih.</div>';
                 return;
             }
@@ -2493,7 +2628,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                     );
                 }).join('');
 
-                container.innerHTML = sheetTabsHtml + toolbarHtml +
+                container.innerHTML = quickRombelBarHtml + sheetTabsHtml + toolbarHtml +
                     '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">' + cards + '</div>';
                 return;
             }
@@ -2572,6 +2707,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
             });
 
             container.innerHTML =
+                quickRombelBarHtml +
                 sheetTabsHtml +
                 toolbarHtml +
                 '<div class="leger-scroll-wrap shadow-2xs">' +
@@ -2590,18 +2726,19 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 '</div>';
         }
 
-        // --- FETCH LIVE DARI GOOGLE APPS SCRIPT ---
+        // --- FETCH LIVE DARI CLOUD BACKEND (GAS / CLOUDFLARE D1 / SUPABASE / R2) ---
         async function fetchLiveFromGas(manualClick) {
             const statusText = document.getElementById('sync-status-text');
             const icon = document.getElementById('refresh-icon');
             const btn = document.getElementById('btn-refresh-live');
+            const pName = PONDOK.providerName || 'Cloud Server';
 
             if (!GAS_URL) {
                 statusText.textContent = BASELINE_ROWS.length > 0
                     ? 'Mode Snapshot Lokal (' + BASELINE_ROWS.length + ' data)'
-                    : 'Link GAS belum disematkan';
+                    : 'Link Endpoint Cloud belum disematkan';
                 if (manualClick) {
-                    showPortalToast('File portal ini dibuat tanpa Link Google Apps Script.', 'info');
+                    showPortalToast('File portal ini dibuat tanpa Link Endpoint Cloud.', 'info');
                 }
                 return;
             }
@@ -2610,28 +2747,27 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
             state.isFetching = true;
             if (icon) icon.classList.add('animate-spin');
             if (btn) btn.disabled = true;
-            statusText.textContent = 'Menarik data live dari Cloud...';
+            statusText.textContent = 'Menarik data live dari ' + pName + '...';
 
             try {
-                // PENTING: Tanpa custom header agar tetap CORS Simple Request pada Google Apps Script
-                const res = await fetch(GAS_URL, { method: 'GET' });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                const json = await res.json();
-                const rows = Array.isArray(json) ? json : (json && Array.isArray(json.records) ? json.records : []);
+                const rows = await fetchCloudRowsUniversal(GAS_URL, {
+                    tahunAjaran: state.tahunAjaran,
+                    semester: state.semester
+                });
                 state.liveRows = rows;
                 state.lastSyncAt = new Date();
                 const timeLabel = state.lastSyncAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-                statusText.textContent = 'Live Cloud Aktif • ' + timeLabel + ' (' + rows.length + ' entri)';
+                statusText.textContent = 'Live ' + pName + ' • ' + timeLabel + ' (' + rows.length + ' entri)';
                 renderAll();
                 if (manualClick) {
-                    showPortalToast('Data live berhasil diperbarui (' + rows.length + ' baris kiriman).', 'success');
+                    showPortalToast('Data live dari ' + pName + ' berhasil diperbarui (' + rows.length + ' baris kiriman).', 'success');
                 }
             } catch (err) {
                 statusText.textContent = BASELINE_ROWS.length > 0
                     ? 'Offline • Memakai Snapshot Awal'
-                    : 'Gagal terhubung ke Cloud';
+                    : 'Gagal terhubung ke ' + pName;
                 if (manualClick) {
-                    showPortalToast('Gagal memuat dari Google Sheet: ' + err.message, 'error');
+                    showPortalToast('Gagal memuat dari ' + pName + ': ' + err.message, 'error');
                 }
             } finally {
                 state.isFetching = false;
@@ -2824,6 +2960,10 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
         };
         window.setLegerSort = function(sortBy) {
             state.sortBy = sortBy;
+            renderAll();
+        };
+        window.quickSelectLegerRombel = function(rombelId) {
+            state.rombelId = Number(rombelId) || 0;
             renderAll();
         };
 

@@ -846,6 +846,12 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
     const inlineEditorRef = useRef<HTMLTextAreaElement | null>(null);
     const wasAlreadySingleSelectedRef = useRef(false);
     const formulaInputHistoryPushedRef = useRef(false);
+    const selectionAnchorRef = useRef<{ r: number; c: number } | null>(null);
+    const selectionLeadRef = useRef<{ r: number; c: number } | null>(null);
+    const dragStartPosRef = useRef<{ x: number; y: number } | null>(null);
+    const hasCrossedDragThresholdRef = useRef<boolean>(false);
+    const [mergeMenuOpen, setMergeMenuOpen] = useState(false);
+    const [newDropdownOptionDraft, setNewDropdownOptionDraft] = useState('');
 
     // Undo & Redo History Stacks
     const [undoStack, setUndoStack] = useState<RaporTemplate[]>([]);
@@ -872,17 +878,29 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
         return () => onDirtyChange?.(false);
     }, [isEditing, isDirty, onDirtyChange]);
 
-    // Auto-dismiss context menu on outside click or scroll
+    // Auto-dismiss context menu on outside click or Escape key without glitch
     useEffect(() => {
-        const handleDismissMenu = () => setContextMenuPos(null);
-        if (contextMenuPos) {
-            window.addEventListener('click', handleDismissMenu);
-            window.addEventListener('scroll', handleDismissMenu, true);
-            return () => {
-                window.removeEventListener('click', handleDismissMenu);
-                window.removeEventListener('scroll', handleDismissMenu, true);
-            };
-        }
+        if (!contextMenuPos) return;
+        const handleOutsidePointerDown = (e: MouseEvent | TouchEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest('[data-rapor-context-menu]')) return;
+            setContextMenuPos(null);
+        };
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setContextMenuPos(null);
+        };
+        // Gunakan timeout kecil agar event mouseup/click pembuka menu tidak langsung menutup menu
+        const timer = setTimeout(() => {
+            window.addEventListener('mousedown', handleOutsidePointerDown);
+            window.addEventListener('touchstart', handleOutsidePointerDown);
+            window.addEventListener('keydown', handleKeyDown);
+        }, 60);
+        return () => {
+            clearTimeout(timer);
+            window.removeEventListener('mousedown', handleOutsidePointerDown);
+            window.removeEventListener('touchstart', handleOutsidePointerDown);
+            window.removeEventListener('keydown', handleKeyDown);
+        };
     }, [contextMenuPos]);
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -996,16 +1014,101 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
         await onSaveSettings({ ...settings, raporTemplates: updatedTemplates });
     };
 
+    const sanitizeGridMergeIntegrity = (cells: GridCell[][]): GridCell[][] => {
+        if (!cells || cells.length === 0) return cells;
+        const rowCount = cells.length;
+        let maxColCount = 0;
+        for (let r = 0; r < rowCount; r++) {
+            if (cells[r]?.length > maxColCount) {
+                maxColCount = cells[r].length;
+            }
+        }
+        if (maxColCount === 0) return cells;
+
+        // Pastikan setiap baris memiliki jumlah sel yang persis sama (pad dengan empty cell jika ada baris yang kurang panjang)
+        const newGrid = cells.map((row, r) => {
+            const padded = row.map(c => ({ ...c, row: r }));
+            while (padded.length < maxColCount) {
+                const cIdx = padded.length;
+                padded.push({
+                    ...createEmptyCell(r, cIdx),
+                    width: getColWidth(cIdx),
+                    height: padded[0]?.height || 28
+                });
+            }
+            return padded;
+        });
+
+        const covered = new Set<string>();
+
+        // 1. Catat semua sel yang sah dicakup oleh master cell (rowSpan > 1 atau colSpan > 1)
+        for (let r = 0; r < rowCount; r++) {
+            for (let c = 0; c < maxColCount; c++) {
+                const cell = newGrid[r][c];
+                if (!cell) continue;
+
+                // Jika sel sudah dicakup oleh master cell sebelumnya, ia tidak boleh menjadi master cell baru
+                if (covered.has(`${r}:${c}`)) {
+                    cell.hidden = true;
+                    cell.rowSpan = 1;
+                    cell.colSpan = 1;
+                    continue;
+                }
+
+                const rSpan = Math.max(1, cell.rowSpan || 1);
+                const cSpan = Math.max(1, cell.colSpan || 1);
+
+                if (rSpan > 1 || cSpan > 1) {
+                    cell.hidden = false;
+                    for (let rr = r; rr < Math.min(rowCount, r + rSpan); rr++) {
+                        for (let cc = c; cc < Math.min(maxColCount, c + cSpan); cc++) {
+                            if (rr === r && cc === c) continue;
+                            covered.add(`${rr}:${cc}`);
+                            if (newGrid[rr]?.[cc]) {
+                                newGrid[rr][cc].hidden = true;
+                                newGrid[rr][cc].rowSpan = 1;
+                                newGrid[rr][cc].colSpan = 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Bersihkan sel yatim piatu (orphan): cell.hidden === true padahal tidak ada master cell yang menutupinya
+        for (let r = 0; r < rowCount; r++) {
+            for (let c = 0; c < maxColCount; c++) {
+                const cell = newGrid[r][c];
+                if (!cell) continue;
+                if (cell.hidden && !covered.has(`${r}:${c}`)) {
+                    // Sel ini tersembunyi tanpa induk! Pulihkan menjadi sel mandiri agar tidak menggeser kolom tabel
+                    cell.hidden = false;
+                    cell.rowSpan = 1;
+                    cell.colSpan = 1;
+                }
+            }
+        }
+
+        return newGrid;
+    };
+
     const ensureTemplateSheets = (tpl: RaporTemplate): RaporTemplate => {
         if (tpl.sheets && tpl.sheets.length > 0) {
             const activeId = tpl.activeSheetId || tpl.sheets[0].id;
             const currentSheet = tpl.sheets.find(s => s.id === activeId) || tpl.sheets[0];
+            const sanitizedCurrentCells = sanitizeGridMergeIntegrity(currentSheet.cells || tpl.cells || []);
+            const sanitizedSheets = tpl.sheets.map(s => ({
+                ...s,
+                cells: sanitizeGridMergeIntegrity(s.cells || [])
+            }));
+
             return {
                 ...tpl,
+                sheets: sanitizedSheets,
                 activeSheetId: currentSheet.id,
-                cells: currentSheet.cells,
-                rowCount: currentSheet.rowCount,
-                colCount: currentSheet.colCount,
+                cells: sanitizedCurrentCells,
+                rowCount: sanitizedCurrentCells.length,
+                colCount: sanitizedCurrentCells[0]?.length || currentSheet.colCount || 8,
                 customTitle: currentSheet.customTitle !== undefined ? currentSheet.customTitle : tpl.customTitle,
                 showJudul: currentSheet.showJudul !== undefined ? currentSheet.showJudul : tpl.showJudul,
                 showBiodataHeader: currentSheet.showBiodataHeader !== undefined ? currentSheet.showBiodataHeader : tpl.showBiodataHeader,
@@ -1019,12 +1122,14 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                 marginMode: currentSheet.marginMode || tpl.marginMode
             };
         }
+        const defaultRawCells = tpl.cells || createInitialGrid(10, 8);
+        const sanitizedDefaultCells = sanitizeGridMergeIntegrity(defaultRawCells);
         const defaultSheet: RaporSheet = {
             id: 'sheet_' + Date.now(),
             name: 'Lembar 1 (Akademik)',
-            rowCount: tpl.rowCount || tpl.cells?.length || 10,
-            colCount: tpl.colCount || tpl.cells?.[0]?.length || 8,
-            cells: tpl.cells || createInitialGrid(10, 8),
+            rowCount: sanitizedDefaultCells.length,
+            colCount: sanitizedDefaultCells[0]?.length || 8,
+            cells: sanitizedDefaultCells,
             customTitle: tpl.customTitle,
             showJudul: tpl.showJudul,
             showBiodataHeader: tpl.showBiodataHeader,
@@ -1041,7 +1146,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
             ...tpl,
             sheets: [defaultSheet],
             activeSheetId: defaultSheet.id,
-            cells: defaultSheet.cells,
+            cells: sanitizedDefaultCells,
             rowCount: defaultSheet.rowCount,
             colCount: defaultSheet.colCount
         };
@@ -1049,12 +1154,13 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
 
     const syncCurrentSheetToTemplate = (tpl: RaporTemplate, curSheetId?: string): RaporTemplate => {
         const sheetId = curSheetId || activeSheetId || tpl.activeSheetId || (tpl.sheets?.[0]?.id) || 'sheet_1';
+        const sanitizedCells = sanitizeGridMergeIntegrity(tpl.cells || []);
         const sheets = tpl.sheets && tpl.sheets.length > 0 ? [...tpl.sheets] : [{
             id: sheetId,
             name: 'Lembar 1',
-            rowCount: tpl.rowCount,
-            colCount: tpl.colCount,
-            cells: tpl.cells,
+            rowCount: sanitizedCells.length,
+            colCount: sanitizedCells[0]?.length || tpl.colCount || 8,
+            cells: sanitizedCells,
             showJudul: tpl.showJudul,
             paperSize: (tpl.paperSize || 'A4') as 'A4' | 'F4'
         }];
@@ -1063,9 +1169,9 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
         if (idx >= 0) {
             sheets[idx] = {
                 ...sheets[idx],
-                rowCount: tpl.rowCount,
-                colCount: tpl.colCount,
-                cells: tpl.cells,
+                rowCount: sanitizedCells.length,
+                colCount: sanitizedCells[0]?.length || tpl.colCount || 8,
+                cells: sanitizedCells,
                 customTitle: tpl.customTitle !== undefined ? tpl.customTitle : sheets[idx].customTitle,
                 showJudul: tpl.showJudul !== undefined ? tpl.showJudul : sheets[idx].showJudul,
                 showBiodataHeader: tpl.showBiodataHeader !== undefined ? tpl.showBiodataHeader : sheets[idx].showBiodataHeader,
@@ -1083,9 +1189,9 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                 id: sheetId,
                 name: `Lembar ${sheets.length + 1}`,
                 customTitle: tpl.customTitle,
-                rowCount: tpl.rowCount,
-                colCount: tpl.colCount,
-                cells: tpl.cells,
+                rowCount: sanitizedCells.length,
+                colCount: sanitizedCells[0]?.length || tpl.colCount || 8,
+                cells: sanitizedCells,
                 showJudul: tpl.showJudul,
                 showBiodataHeader: tpl.showBiodataHeader,
                 fitToPage: tpl.fitToPage,
@@ -1101,6 +1207,9 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
 
         return {
             ...tpl,
+            cells: sanitizedCells,
+            rowCount: sanitizedCells.length,
+            colCount: sanitizedCells[0]?.length || tpl.colCount || 8,
             sheets,
             activeSheetId: sheetId
         };
@@ -2183,6 +2292,9 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
         const nextR = Math.max(0, Math.min(tpl.rowCount - 1, master.r + rStep));
         const nextC = Math.max(0, Math.min(tpl.colCount - 1, master.c + cStep));
         const dest = findMasterCell(tpl, nextR, nextC);
+        selectionAnchorRef.current = { r: dest.r, c: dest.c };
+        selectionLeadRef.current = { r: dest.r, c: dest.c };
+        setDragStart({ r: dest.r, c: dest.c });
         setSelectedCells([{ r: dest.r, c: dest.c }]);
     };
 
@@ -2719,22 +2831,81 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
 
             if (!activeTemplate || selectedCells.length === 0) return;
             const primary = selectedCells[0];
+            const anchor = selectionAnchorRef.current || dragStart || primary;
+            const lead = selectionLeadRef.current || primary;
+
+            const handleArrowNav = (dr: number, dc: number, isShift: boolean) => {
+                if (!activeTemplate) return;
+                if (!isShift) {
+                    moveSelectionFrom(lead.r, lead.c, dr, dc);
+                } else {
+                    const aMaster = findMasterCell(activeTemplate, anchor.r, anchor.c);
+                    const aCell = activeTemplate.cells[aMaster.r]?.[aMaster.c];
+                    const aRSpan = aCell?.rowSpan || 1;
+                    const aCSpan = aCell?.colSpan || 1;
+
+                    const lMaster = findMasterCell(activeTemplate, lead.r, lead.c);
+                    const lCell = activeTemplate.cells[lMaster.r]?.[lMaster.c];
+                    const rStep = dr > 0 ? (lCell?.rowSpan || 1) : dr;
+                    const cStep = dc > 0 ? (lCell?.colSpan || 1) : dc;
+
+                    const nextLeadR = Math.max(0, Math.min(activeTemplate.rowCount - 1, lMaster.r + rStep));
+                    const nextLeadC = Math.max(0, Math.min(activeTemplate.colCount - 1, lMaster.c + cStep));
+                    const nextLMaster = findMasterCell(activeTemplate, nextLeadR, nextLeadC);
+                    const nextLCell = activeTemplate.cells[nextLMaster.r]?.[nextLMaster.c];
+                    const nlRSpan = nextLCell?.rowSpan || 1;
+                    const nlCSpan = nextLCell?.colSpan || 1;
+
+                    let rMin = Math.min(aMaster.r, nextLMaster.r);
+                    let rMax = Math.max(aMaster.r + aRSpan - 1, nextLMaster.r + nlRSpan - 1);
+                    let cMin = Math.min(aMaster.c, nextLMaster.c);
+                    let cMax = Math.max(aMaster.c + aCSpan - 1, nextLMaster.c + nlCSpan - 1);
+
+                    let changed = true;
+                    let loopCount = 0;
+                    while (changed && loopCount < 4) {
+                        changed = false;
+                        loopCount++;
+                        for (let i = rMin; i <= rMax; i++) {
+                            for (let j = cMin; j <= cMax; j++) {
+                                const m = findMasterCell(activeTemplate, i, j);
+                                const cl = activeTemplate.cells[m.r]?.[m.c];
+                                const rs = cl?.rowSpan || 1;
+                                const cs = cl?.colSpan || 1;
+                                if (m.r < rMin) { rMin = m.r; changed = true; }
+                                if (m.c < cMin) { cMin = m.c; changed = true; }
+                                if (m.r + rs - 1 > rMax) { rMax = m.r + rs - 1; changed = true; }
+                                if (m.c + cs - 1 > cMax) { cMax = m.c + cs - 1; changed = true; }
+                            }
+                        }
+                    }
+
+                    const newSel: { r: number; c: number }[] = [];
+                    for (let r = rMin; r <= rMax; r++) {
+                        for (let c = cMin; c <= cMax; c++) {
+                            newSel.push({ r, c });
+                        }
+                    }
+                    selectionLeadRef.current = { r: nextLMaster.r, c: nextLMaster.c };
+                    setSelectedCells(newSel);
+                }
+            };
 
             if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                moveSelectionFrom(primary.r, primary.c, -1, 0);
+                handleArrowNav(-1, 0, e.shiftKey);
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                moveSelectionFrom(primary.r, primary.c, 1, 0);
+                handleArrowNav(1, 0, e.shiftKey);
             } else if (e.key === 'ArrowLeft') {
                 e.preventDefault();
-                moveSelectionFrom(primary.r, primary.c, 0, -1);
+                handleArrowNav(0, -1, e.shiftKey);
             } else if (e.key === 'ArrowRight') {
                 e.preventDefault();
-                moveSelectionFrom(primary.r, primary.c, 0, 1);
+                handleArrowNav(0, 1, e.shiftKey);
             } else if (e.key === 'Tab') {
                 e.preventDefault();
-                moveSelectionFrom(primary.r, primary.c, 0, e.shiftKey ? -1 : 1);
+                moveSelectionFrom(lead.r, lead.c, 0, e.shiftKey ? -1 : 1);
             } else if (e.key === 'Enter' || e.key === 'F2') {
                 e.preventDefault();
                 startInlineEdit(primary.r, primary.c);
@@ -3285,7 +3456,15 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                         mRMax >= tgtBounds.rMin &&
                         mc <= tgtBounds.cMax &&
                         mCMax >= tgtBounds.cMin;
-                    if (overlapsTarget) {
+                    const strictlyContained =
+                        mr >= tgtBounds.rMin &&
+                        mRMax <= tgtBounds.rMax &&
+                        mc >= tgtBounds.cMin &&
+                        mCMax <= tgtBounds.cMax;
+                    const sameSpanAsSource = rs === srcH && cs === srcW;
+                    if (overlapsTarget && (strictlyContained || sameSpanAsSource)) {
+                        const mBorders = cell.borders || { top: false, bottom: false, left: false, right: false };
+                        const hasBorder = Boolean(mBorders.top || mBorders.bottom || mBorders.left || mBorders.right);
                         newGrid[mr][mc] = { ...newGrid[mr][mc], rowSpan: 1, colSpan: 1 };
                         for (let rr = mr; rr <= mRMax; rr++) {
                             for (let cc = mc; cc <= mCMax; cc++) {
@@ -3295,7 +3474,10 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                         ...newGrid[rr][cc],
                                         hidden: false,
                                         rowSpan: 1,
-                                        colSpan: 1
+                                        colSpan: 1,
+                                        borders: hasBorder
+                                            ? { top: true, bottom: true, left: true, right: true }
+                                            : newGrid[rr][cc].borders
                                     };
                                 }
                             }
@@ -3449,13 +3631,34 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                     }
                 }
 
-                // Replikasi merge internal jika sel sumber punya rowSpan/colSpan yang muat utuh dalam blok sumber & blok target
+                // Replikasi merge internal jika sel sumber punya rowSpan/colSpan
                 const rawRSpan = srcCell.rowSpan || 1;
                 const rawCSpan = srcCell.colSpan || 1;
-                const fitsSource = srcR + rawRSpan - 1 <= srcBounds.rMax && srcC + rawCSpan - 1 <= srcBounds.cMax;
-                const fitsTarget = destR + rawRSpan - 1 <= tgtBounds.rMax && destC + rawCSpan - 1 <= tgtBounds.cMax;
-                const finalRSpan = fitsSource && fitsTarget ? rawRSpan : 1;
-                const finalCSpan = fitsSource && fitsTarget ? rawCSpan : 1;
+                let finalRSpan = 1;
+                let finalCSpan = 1;
+
+                if (direction === 'down' || direction === 'up') {
+                    // Ketika seret vertikal, pertahankan colSpan horizontal jika muat di grid dan di blok sumber
+                    const fitsGridCols = destC + rawCSpan - 1 < (newGrid[destR]?.length || 0);
+                    const fitsSourceCols = srcC + rawCSpan - 1 <= srcBounds.cMax;
+                    finalCSpan = (fitsGridCols && fitsSourceCols) ? rawCSpan : (fitsGridCols ? rawCSpan : 1);
+                    const fitsTargetRows = destR + rawRSpan - 1 <= tgtBounds.rMax;
+                    const fitsSourceRows = srcR + rawRSpan - 1 <= srcBounds.rMax;
+                    finalRSpan = (fitsSourceRows && fitsTargetRows) ? rawRSpan : 1;
+                } else if (direction === 'right' || direction === 'left') {
+                    // Ketika seret horizontal, pertahankan rowSpan vertikal jika muat di grid dan di blok sumber
+                    const fitsGridRows = destR + rawRSpan - 1 < newGrid.length;
+                    const fitsSourceRows = srcR + rawRSpan - 1 <= srcBounds.rMax;
+                    finalRSpan = (fitsGridRows && fitsSourceRows) ? rawRSpan : (fitsGridRows ? rawRSpan : 1);
+                    const fitsTargetCols = destC + rawCSpan - 1 <= tgtBounds.cMax;
+                    const fitsSourceCols = srcC + rawCSpan - 1 <= srcBounds.cMax;
+                    finalCSpan = (fitsSourceCols && fitsTargetCols) ? rawCSpan : 1;
+                } else {
+                    const fitsSource = srcR + rawRSpan - 1 <= srcBounds.rMax && srcC + rawCSpan - 1 <= srcBounds.cMax;
+                    const fitsTarget = destR + rawRSpan - 1 <= tgtBounds.rMax && destC + rawCSpan - 1 <= tgtBounds.cMax;
+                    finalRSpan = fitsSource && fitsTarget ? rawRSpan : 1;
+                    finalCSpan = fitsSource && fitsTarget ? rawCSpan : 1;
+                }
 
                 newGrid[destR][destC] = {
                     ...JSON.parse(JSON.stringify(srcCell)),
@@ -3514,8 +3717,9 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                 : sampleDestCell.value || ''
             : '';
 
+        const sanitizedGrid = sanitizeGridMergeIntegrity(newGrid);
         const updatedTpl = syncCurrentSheetToTemplate(
-            { ...baseTpl, cells: newGrid },
+            { ...baseTpl, cells: sanitizedGrid },
             targetSheetKey
         );
         return { updatedTpl, unionSelection, summaryLabel };
@@ -3779,12 +3983,94 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
         };
     }, [fillDragState, activeTemplate]);
 
+    // Global mouseup listener untuk menjamin seleksi drag tidak tersangkut / glitch saat mouse dilepas di mana pun
+    useEffect(() => {
+        const handleGlobalMouseUp = () => {
+            setIsDragging(false);
+            dragStartPosRef.current = null;
+            hasCrossedDragThresholdRef.current = false;
+        };
+        window.addEventListener('mouseup', handleGlobalMouseUp);
+        return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+    }, []);
+
     // --- GRID OPERATIONS ---
     const handleMouseDown = (r: number, c: number, e?: React.MouseEvent) => {
         // Jika sedang dalam Mode Pilih Sel Rumus ala Excel, klik/seret akan memasukkan koordinat/rentang sel ke rumus!
         if (tryStartFormulaCellPick(r, c, Boolean(e?.ctrlKey || e?.metaKey))) {
             e?.preventDefault();
             e?.stopPropagation();
+            return;
+        }
+
+        // Jangan mulai drag seleksi atau ubah seleksi saat klik kanan (button === 2) jika sel sudah terseleksi
+        if (e && e.button !== 0) {
+            if (e.button === 2) {
+                const master = activeTemplate ? findMasterCell(activeTemplate, r, c) : { r, c };
+                const isAlreadySelected = selectedCells.some(s => s.r === master.r && s.c === master.c);
+                if (!isAlreadySelected) {
+                    setSelectedCells([{ r: master.r, c: master.c }]);
+                    selectionAnchorRef.current = { r: master.r, c: master.c };
+                    selectionLeadRef.current = { r: master.r, c: master.c };
+                }
+            }
+            return;
+        }
+
+        // Shift + Click ala Excel: Perluas blok seleksi dari sel anchor ke sel yang baru diklik
+        if (e && e.shiftKey && (selectionAnchorRef.current || selectedCells.length > 0)) {
+            e.preventDefault();
+            const anchor = selectionAnchorRef.current || dragStart || selectedCells[0];
+            const anchorMaster = activeTemplate ? findMasterCell(activeTemplate, anchor.r, anchor.c) : anchor;
+            const aCell = activeTemplate?.cells[anchorMaster.r]?.[anchorMaster.c];
+            const aRSpan = aCell?.rowSpan || 1;
+            const aCSpan = aCell?.colSpan || 1;
+
+            const targetMaster = activeTemplate ? findMasterCell(activeTemplate, r, c) : { r, c };
+            const tCell = activeTemplate?.cells[targetMaster.r]?.[targetMaster.c];
+            const tRSpan = tCell?.rowSpan || 1;
+            const tCSpan = tCell?.colSpan || 1;
+
+            if (anchorMaster.r === targetMaster.r && anchorMaster.c === targetMaster.c) {
+                setSelectedCells([{ r: anchorMaster.r, c: anchorMaster.c }]);
+                selectionLeadRef.current = { r: anchorMaster.r, c: anchorMaster.c };
+                return;
+            }
+
+            let rMin = Math.min(anchorMaster.r, targetMaster.r);
+            let rMax = Math.max(anchorMaster.r + aRSpan - 1, targetMaster.r + tRSpan - 1);
+            let cMin = Math.min(anchorMaster.c, targetMaster.c);
+            let cMax = Math.max(anchorMaster.c + aCSpan - 1, targetMaster.c + tCSpan - 1);
+
+            if (activeTemplate) {
+                let changed = true;
+                let loopCount = 0;
+                while (changed && loopCount < 4) {
+                    changed = false;
+                    loopCount++;
+                    for (let i = rMin; i <= rMax; i++) {
+                        for (let j = cMin; j <= cMax; j++) {
+                            const m = findMasterCell(activeTemplate, i, j);
+                            const cl = activeTemplate.cells[m.r]?.[m.c];
+                            const rs = cl?.rowSpan || 1;
+                            const cs = cl?.colSpan || 1;
+                            if (m.r < rMin) { rMin = m.r; changed = true; }
+                            if (m.c < cMin) { cMin = m.c; changed = true; }
+                            if (m.r + rs - 1 > rMax) { rMax = m.r + rs - 1; changed = true; }
+                            if (m.c + cs - 1 > cMax) { cMax = m.c + cs - 1; changed = true; }
+                        }
+                    }
+                }
+            }
+
+            const newSel: { r: number; c: number }[] = [];
+            for (let i = rMin; i <= rMax; i++) {
+                for (let j = cMin; j <= cMax; j++) {
+                    newSel.push({ r: i, c: j });
+                }
+            }
+            selectionLeadRef.current = { r: targetMaster.r, c: targetMaster.c };
+            setSelectedCells(newSel);
             return;
         }
 
@@ -3800,18 +4086,28 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
             activeFormulaSourceRef.current = null;
         }
         setAutocompleteState(null);
+
+        const master = activeTemplate ? findMasterCell(activeTemplate, r, c) : { r, c };
         wasAlreadySingleSelectedRef.current =
-            !isFormatPainterActive && selectedCells.length === 1 && selectedCells[0].r === r && selectedCells[0].c === c;
+            !isFormatPainterActive && selectedCells.length === 1 && selectedCells[0].r === master.r && selectedCells[0].c === master.c;
+        dragStartPosRef.current = e ? { x: e.clientX, y: e.clientY } : null;
+        hasCrossedDragThresholdRef.current = false;
         setIsDragging(true);
-        setDragStart({ r, c });
-        setSelectedCells([{ r, c }]);
+        setDragStart({ r: master.r, c: master.c });
+        selectionAnchorRef.current = { r: master.r, c: master.c };
+        selectionLeadRef.current = { r: master.r, c: master.c };
+        setSelectedCells([{ r: master.r, c: master.c }]);
         requestAnimationFrame(() => {
             if (!editingCellRef.current) {
                 scrollContainerRef.current?.focus({ preventScroll: true });
             }
         });
     };
-    const handleMouseEnter = (r: number, c: number) => {
+    const handleMouseEnter = (r: number, c: number, e?: React.MouseEvent) => {
+        if (e && e.buttons !== 1) {
+            if (isDragging) setIsDragging(false);
+            return;
+        }
         if (fillDragStateRef.current) {
             const cur = fillDragStateRef.current;
             const { targetBounds, direction } = computeFillTargetFromHover(cur.sourceBounds, r, c);
@@ -3825,10 +4121,68 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
             return;
         }
         if (!isDragging || !dragStart) return;
-        const rMin = Math.min(dragStart.r, r); const rMax = Math.max(dragStart.r, r);
-        const cMin = Math.min(dragStart.c, c); const cMax = Math.max(dragStart.c, c);
-        const newSelection = [];
-        for(let i=rMin; i<=rMax; i++) for(let j=cMin; j<=cMax; j++) newSelection.push({ r: i, c: j });
+
+        // Mencegah gerakan mikro mouse (tremor kursor saat klik) memicu seleksi banyak sel secara tidak sengaja
+        if (!hasCrossedDragThresholdRef.current && dragStartPosRef.current && e) {
+            const dx = e.clientX - dragStartPosRef.current.x;
+            const dy = e.clientY - dragStartPosRef.current.y;
+            if (Math.hypot(dx, dy) < 6) {
+                return;
+            }
+            hasCrossedDragThresholdRef.current = true;
+        }
+
+        const startMaster = activeTemplate ? findMasterCell(activeTemplate, dragStart.r, dragStart.c) : dragStart;
+        const hoverMaster = activeTemplate ? findMasterCell(activeTemplate, r, c) : { r, c };
+
+        // Jika kursor mouse masih berada di sel yang sama dengan sel awal klik, pertahankan seleksi sel tunggal
+        if (hoverMaster.r === startMaster.r && hoverMaster.c === startMaster.c) {
+            setSelectedCells([{ r: startMaster.r, c: startMaster.c }]);
+            selectionLeadRef.current = { r: startMaster.r, c: startMaster.c };
+            return;
+        }
+
+        const sCell = activeTemplate?.cells[startMaster.r]?.[startMaster.c];
+        const sRSpan = sCell?.rowSpan || 1;
+        const sCSpan = sCell?.colSpan || 1;
+
+        const hCell = activeTemplate?.cells[hoverMaster.r]?.[hoverMaster.c];
+        const hRSpan = hCell?.rowSpan || 1;
+        const hCSpan = hCell?.colSpan || 1;
+
+        let rMin = Math.min(startMaster.r, hoverMaster.r);
+        let rMax = Math.max(startMaster.r + sRSpan - 1, hoverMaster.r + hRSpan - 1);
+        let cMin = Math.min(startMaster.c, hoverMaster.c);
+        let cMax = Math.max(startMaster.c + sCSpan - 1, hoverMaster.c + hCSpan - 1);
+
+        if (activeTemplate) {
+            let changed = true;
+            let loopCount = 0;
+            while (changed && loopCount < 4) {
+                changed = false;
+                loopCount++;
+                for (let i = rMin; i <= rMax; i++) {
+                    for (let j = cMin; j <= cMax; j++) {
+                        const m = findMasterCell(activeTemplate, i, j);
+                        const cl = activeTemplate.cells[m.r]?.[m.c];
+                        const rs = cl?.rowSpan || 1;
+                        const cs = cl?.colSpan || 1;
+                        if (m.r < rMin) { rMin = m.r; changed = true; }
+                        if (m.c < cMin) { cMin = m.c; changed = true; }
+                        if (m.r + rs - 1 > rMax) { rMax = m.r + rs - 1; changed = true; }
+                        if (m.c + cs - 1 > cMax) { cMax = m.c + cs - 1; changed = true; }
+                    }
+                }
+            }
+        }
+
+        const newSelection: { r: number; c: number }[] = [];
+        for (let i = rMin; i <= rMax; i++) {
+            for (let j = cMin; j <= cMax; j++) {
+                newSelection.push({ r: i, c: j });
+            }
+        }
+        selectionLeadRef.current = { r: hoverMaster.r, c: hoverMaster.c };
         setSelectedCells(newSelection);
     };
     const handleMouseUp = () => {
@@ -3867,7 +4221,16 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
             setCopiedFormat(null);
             showToast(`Format berhasil diterapkan ke ${selectedCells.length} sel.`, 'success');
         }
+        // Jika tidak melewati ambang batas seret (hanya klik sel tunggal), pastikan seleksi tetap sel tunggal
+        if (!hasCrossedDragThresholdRef.current && dragStart) {
+            const sm = activeTemplate ? findMasterCell(activeTemplate, dragStart.r, dragStart.c) : dragStart;
+            setSelectedCells([{ r: sm.r, c: sm.c }]);
+            selectionAnchorRef.current = { r: sm.r, c: sm.c };
+            selectionLeadRef.current = { r: sm.r, c: sm.c };
+        }
         setIsDragging(false);
+        dragStartPosRef.current = null;
+        hasCrossedDragThresholdRef.current = false;
     };
 
     const handleCanvasPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
@@ -4171,36 +4534,388 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
         showToast(`Berhasil menyisipkan ${generatedRows.length} baris mapel kurikulum.`, 'success');
     };
 
-    const mergeCells = () => {
-        if (!activeTemplate || selectedCells.length < 2) return;
+    const mergeCells = (mode: 'all' | 'horizontal' | 'vertical' = 'all') => {
+        if (!activeTemplate || selectedCells.length === 0) return;
+        if (selectedCells.length < 2) {
+            const single = selectedCells[0];
+            const sm = findMasterCell(activeTemplate, single.r, single.c);
+            const sCell = activeTemplate.cells[sm.r]?.[sm.c];
+            if (sCell && ((sCell.rowSpan || 1) > 1 || (sCell.colSpan || 1) > 1)) {
+                showToast('Sel ini sudah digabung. Klik "Pisah" (Unmerge) untuk memisahkannya, atau seret ke sel lain untuk memperluas.', 'info');
+            } else {
+                showToast('Pilih minimal 2 sel terlebih dahulu (tahan & seret mouse atau Shift+Klik) lalu tekan Merge.', 'info');
+            }
+            return;
+        }
         pushToHistory(activeTemplate);
-        const rMin = Math.min(...selectedCells.map(c => c.r)); const rMax = Math.max(...selectedCells.map(c => c.r));
-        const cMin = Math.min(...selectedCells.map(c => c.c)); const cMax = Math.max(...selectedCells.map(c => c.c));
-        const newCells = [...activeTemplate.cells];
+
+        const newCells = activeTemplate.cells.map(row => row.map(c => ({ ...c })));
+
+        // Helper untuk memisahkan sel gabungan lama secara aman sebelum digabung ulang
+        const releaseOverlappingMerges = (rMinB: number, rMaxB: number, cMinB: number, cMaxB: number, onlyPartial: boolean) => {
+            const toUnmerge = new Set<string>();
+            for (let r = rMinB; r <= rMaxB; r++) {
+                for (let c = cMinB; c <= cMaxB; c++) {
+                    const m = findMasterCell(activeTemplate, r, c);
+                    const cl = activeTemplate.cells[m.r]?.[m.c];
+                    const rs = cl?.rowSpan || 1;
+                    const cs = cl?.colSpan || 1;
+                    if (rs > 1 || cs > 1) {
+                        const extendsOutside = m.r < rMinB || (m.r + rs - 1) > rMaxB || m.c < cMinB || (m.c + cs - 1) > cMaxB;
+                        if (!onlyPartial || extendsOutside) {
+                            toUnmerge.add(`${m.r}:${m.c}`);
+                        }
+                    }
+                }
+            }
+            toUnmerge.forEach(coord => {
+                const [mr, mc] = coord.split(':').map(Number);
+                const master = newCells[mr]?.[mc];
+                if (!master) return;
+                const rSpan = master.rowSpan || 1;
+                const cSpan = master.colSpan || 1;
+                const masterBorders = master.borders || { top: false, bottom: false, left: false, right: false };
+                const hasAnyBorder = Boolean(masterBorders.top || masterBorders.bottom || masterBorders.left || masterBorders.right);
+                master.rowSpan = 1;
+                master.colSpan = 1;
+                for (let rr = mr; rr < mr + rSpan; rr++) {
+                    for (let cc = mc; cc < mc + cSpan; cc++) {
+                        if (newCells[rr]?.[cc]) {
+                            newCells[rr][cc].hidden = false;
+                            newCells[rr][cc].rowSpan = 1;
+                            newCells[rr][cc].colSpan = 1;
+                            newCells[rr][cc].borders = hasAnyBorder
+                                ? { top: true, bottom: true, left: true, right: true }
+                                : { top: false, bottom: false, left: false, right: false };
+                            newCells[rr][cc].align = newCells[rr][cc].align || master.align || 'center';
+                            newCells[rr][cc].verticalAlign = newCells[rr][cc].verticalAlign || master.verticalAlign || 'middle';
+                            newCells[rr][cc].fontSize = newCells[rr][cc].fontSize || master.fontSize || 11;
+                            newCells[rr][cc].bold = newCells[rr][cc].bold !== undefined ? newCells[rr][cc].bold : master.bold;
+                            newCells[rr][cc].italic = newCells[rr][cc].italic !== undefined ? newCells[rr][cc].italic : master.italic;
+                        }
+                    }
+                }
+            });
+        };
+
+        const userMinR = Math.min(...selectedCells.map(s => s.r));
+        const userMaxR = Math.max(...selectedCells.map(s => s.r));
+        const userMinC = Math.min(...selectedCells.map(s => s.c));
+        const userMaxC = Math.max(...selectedCells.map(s => s.c));
+
+        if (mode === 'horizontal') {
+            if (userMaxC <= userMinC) {
+                showToast('Pilih minimal 2 kolom pada baris yang sama untuk Merge Horizontal.', 'info');
+                return;
+            }
+            // Lepas dahulu sel gabungan yang bertumpang-tindih agar tidak tabrakan antar-baris
+            releaseOverlappingMerges(userMinR, userMaxR, userMinC, userMaxC, false);
+
+            const nextSel: { r: number; c: number }[] = [];
+            let mergedRowCount = 0;
+
+            for (let r = userMinR; r <= userMaxR; r++) {
+                const masterCell = newCells[r]?.[userMinC];
+                if (!masterCell) continue;
+
+                masterCell.colSpan = (userMaxC - userMinC) + 1;
+                masterCell.rowSpan = 1;
+                masterCell.hidden = false;
+
+                let hasTop = Boolean(masterCell.borders?.top);
+                let hasBottom = Boolean(masterCell.borders?.bottom);
+                let hasLeft = Boolean(masterCell.borders?.left);
+                let hasRight = Boolean(newCells[r]?.[userMaxC]?.borders?.right);
+
+                for (let c = userMinC; c <= userMaxC; c++) {
+                    if (newCells[r]?.[c]?.borders?.top) hasTop = true;
+                    if (newCells[r]?.[c]?.borders?.bottom) hasBottom = true;
+                    if (newCells[r]?.[c]?.borders?.left && c === userMinC) hasLeft = true;
+                    if (newCells[r]?.[c]?.borders?.right && c === userMaxC) hasRight = true;
+                }
+
+                masterCell.borders = { top: hasTop, bottom: hasBottom, left: hasLeft, right: hasRight };
+
+                let rowVal = masterCell.value;
+                let rowKey = masterCell.key;
+                let rowType = masterCell.type;
+                if (!rowVal && !rowKey) {
+                    for (let c = userMinC; c <= userMaxC; c++) {
+                        const cand = newCells[r]?.[c];
+                        if (cand && (cand.value || cand.key)) {
+                            rowVal = cand.value;
+                            rowKey = cand.key;
+                            rowType = cand.type;
+                            break;
+                        }
+                    }
+                }
+                masterCell.value = rowVal;
+                masterCell.key = rowKey;
+                masterCell.type = rowType;
+
+                for (let c = userMinC + 1; c <= userMaxC; c++) {
+                    if (newCells[r]?.[c]) {
+                        newCells[r][c].hidden = true;
+                        newCells[r][c].rowSpan = 1;
+                        newCells[r][c].colSpan = 1;
+                        newCells[r][c].value = '';
+                        newCells[r][c].key = '';
+                    }
+                }
+                nextSel.push({ r, c: userMinC });
+                mergedRowCount++;
+            }
+
+            const sanitized = sanitizeGridMergeIntegrity(newCells);
+            const updated = { ...activeTemplate, cells: sanitized };
+            setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+            if (nextSel.length > 0) setSelectedCells(nextSel);
+            showToast(`Berhasil menggabungkan baris horizontal (Merge Across) pada ${mergedRowCount} baris.`, 'success');
+            return;
+        }
+
+        if (mode === 'vertical') {
+            if (userMaxR <= userMinR) {
+                showToast('Pilih minimal 2 baris pada kolom yang sama untuk Merge Vertikal.', 'info');
+                return;
+            }
+            releaseOverlappingMerges(userMinR, userMaxR, userMinC, userMaxC, false);
+
+            const nextSel: { r: number; c: number }[] = [];
+            let mergedColCount = 0;
+
+            for (let c = userMinC; c <= userMaxC; c++) {
+                const masterCell = newCells[userMinR]?.[c];
+                if (!masterCell) continue;
+
+                masterCell.rowSpan = (userMaxR - userMinR) + 1;
+                masterCell.colSpan = 1;
+                masterCell.hidden = false;
+
+                let hasTop = Boolean(masterCell.borders?.top);
+                let hasBottom = Boolean(newCells[userMaxR]?.[c]?.borders?.bottom);
+                let hasLeft = Boolean(masterCell.borders?.left);
+                let hasRight = Boolean(masterCell.borders?.right);
+
+                for (let r = userMinR; r <= userMaxR; r++) {
+                    if (newCells[r]?.[c]?.borders?.top && r === userMinR) hasTop = true;
+                    if (newCells[r]?.[c]?.borders?.bottom && r === userMaxR) hasBottom = true;
+                    if (newCells[r]?.[c]?.borders?.left) hasLeft = true;
+                    if (newCells[r]?.[c]?.borders?.right) hasRight = true;
+                }
+
+                masterCell.borders = { top: hasTop, bottom: hasBottom, left: hasLeft, right: hasRight };
+
+                let colVal = masterCell.value;
+                let colKey = masterCell.key;
+                let colType = masterCell.type;
+                if (!colVal && !colKey) {
+                    for (let r = userMinR; r <= userMaxR; r++) {
+                        const cand = newCells[r]?.[c];
+                        if (cand && (cand.value || cand.key)) {
+                            colVal = cand.value;
+                            colKey = cand.key;
+                            colType = cand.type;
+                            break;
+                        }
+                    }
+                }
+                masterCell.value = colVal;
+                masterCell.key = colKey;
+                masterCell.type = colType;
+
+                for (let r = userMinR + 1; r <= userMaxR; r++) {
+                    if (newCells[r]?.[c]) {
+                        newCells[r][c].hidden = true;
+                        newCells[r][c].rowSpan = 1;
+                        newCells[r][c].colSpan = 1;
+                        newCells[r][c].value = '';
+                        newCells[r][c].key = '';
+                    }
+                }
+                nextSel.push({ r: userMinR, c });
+                mergedColCount++;
+            }
+
+            const sanitized = sanitizeGridMergeIntegrity(newCells);
+            const updated = { ...activeTemplate, cells: sanitized };
+            setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+            if (nextSel.length > 0) setSelectedCells(nextSel);
+            showToast(`Berhasil menggabungkan kolom vertikal pada ${mergedColCount} kolom.`, 'success');
+            return;
+        }
+
+        // MODE 'ALL': Merge & Center biasa
+        const firstMaster = findMasterCell(activeTemplate, selectedCells[0].r, selectedCells[0].c);
+        const allSameMaster = selectedCells.every(s => {
+            const m = findMasterCell(activeTemplate, s.r, s.c);
+            return m.r === firstMaster.r && m.c === firstMaster.c;
+        });
+        const firstMasterCell = activeTemplate.cells[firstMaster.r]?.[firstMaster.c];
+        if (allSameMaster && ((firstMasterCell?.rowSpan || 1) > 1 || (firstMasterCell?.colSpan || 1) > 1)) {
+            showToast('Sel ini sudah digabung. Gunakan tombol "Pisah" (Unmerge) untuk memisahkannya.', 'info');
+            return;
+        }
+
+        // Pisahkan hanya sel gabungan yang terpotong sebagian oleh batas seleksi agar bagian di luar seleksi tetap rapi
+        releaseOverlappingMerges(userMinR, userMaxR, userMinC, userMaxC, true);
+
+        const rMin = userMinR;
+        const rMax = userMaxR;
+        const cMin = userMinC;
+        const cMax = userMaxC;
+
+        if (rMin === rMax && cMin === cMax) return;
+
         const masterCell = newCells[rMin][cMin];
-        masterCell.rowSpan = (rMax - rMin) + 1; masterCell.colSpan = (cMax - cMin) + 1; masterCell.hidden = false;
-        for(let r=rMin; r<=rMax; r++) for(let c=cMin; c<=cMax; c++) { if (r === rMin && c === cMin) continue; newCells[r][c].hidden = true; newCells[r][c].value = ''; newCells[r][c].key = ''; }
-        const updated = { ...activeTemplate, cells: newCells };
+        masterCell.rowSpan = (rMax - rMin) + 1;
+        masterCell.colSpan = (cMax - cMin) + 1;
+        masterCell.hidden = false;
+
+        let hasTopBorder = Boolean(masterCell.borders?.top);
+        let hasBottomBorder = Boolean(masterCell.borders?.bottom);
+        let hasLeftBorder = Boolean(masterCell.borders?.left);
+        let hasRightBorder = Boolean(masterCell.borders?.right);
+
+        for (let c = cMin; c <= cMax; c++) {
+            if (newCells[rMin]?.[c]?.borders?.top) hasTopBorder = true;
+            if (newCells[rMax]?.[c]?.borders?.bottom) hasBottomBorder = true;
+        }
+        for (let r = rMin; r <= rMax; r++) {
+            if (newCells[r]?.[cMin]?.borders?.left) hasLeftBorder = true;
+            if (newCells[r]?.[cMax]?.borders?.right) hasRightBorder = true;
+        }
+
+        masterCell.borders = {
+            top: hasTopBorder,
+            bottom: hasBottomBorder,
+            left: hasLeftBorder,
+            right: hasRightBorder
+        };
+
+        let preservedValue = masterCell.value;
+        let preservedKey = masterCell.key;
+        let preservedType = masterCell.type;
+        if (!preservedValue && !preservedKey) {
+            for (let r = rMin; r <= rMax; r++) {
+                for (let c = cMin; c <= cMax; c++) {
+                    const cCandidate = newCells[r]?.[c];
+                    if (cCandidate && (cCandidate.value || cCandidate.key)) {
+                        preservedValue = cCandidate.value;
+                        preservedKey = cCandidate.key;
+                        preservedType = cCandidate.type;
+                        break;
+                    }
+                }
+                if (preservedValue || preservedKey) break;
+            }
+        }
+        masterCell.value = preservedValue;
+        masterCell.key = preservedKey;
+        masterCell.type = preservedType;
+
+        for (let r = rMin; r <= rMax; r++) {
+            for (let c = cMin; c <= cMax; c++) {
+                if (r === rMin && c === cMin) continue;
+                if (newCells[r]?.[c]) {
+                    newCells[r][c].hidden = true;
+                    newCells[r][c].rowSpan = 1;
+                    newCells[r][c].colSpan = 1;
+                    newCells[r][c].value = '';
+                    newCells[r][c].key = '';
+                }
+            }
+        }
+
+        const sanitized = sanitizeGridMergeIntegrity(newCells);
+        const updated = { ...activeTemplate, cells: sanitized };
         setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
         setSelectedCells([{ r: rMin, c: cMin }]);
+        selectionAnchorRef.current = { r: rMin, c: cMin };
+        selectionLeadRef.current = { r: rMin, c: cMin };
+        showToast(`Berhasil menggabungkan sel rentang ${getExcelColName(cMin)}${rMin + 1}:${getExcelColName(cMax)}${rMax + 1}.`, 'success');
     };
 
     const unmergeCells = () => {
         if (!activeTemplate || selectedCells.length === 0) return;
         pushToHistory(activeTemplate);
-        const target = selectedCells[0]; const newCells = [...activeTemplate.cells]; const cell = newCells[target.r][target.c];
-        if ((cell.rowSpan || 1) === 1 && (cell.colSpan || 1) === 1) return;
-        const rMax = target.r + (cell.rowSpan || 1) - 1; const cMax = target.c + (cell.colSpan || 1) - 1;
-        cell.rowSpan = 1; cell.colSpan = 1;
-        for(let r=target.r; r<=rMax; r++) for(let c=target.c; c<=cMax; c++) newCells[r][c].hidden = false;
-        const updated = { ...activeTemplate, cells: newCells };
+
+        const newCells = activeTemplate.cells.map(row => row.map(c => ({ ...c })));
+        const masterCoords = new Set<string>();
+
+        selectedCells.forEach(s => {
+            const master = findMasterCell(activeTemplate, s.r, s.c);
+            const cl = activeTemplate.cells[master.r]?.[master.c];
+            if (cl && ((cl.rowSpan || 1) > 1 || (cl.colSpan || 1) > 1)) {
+                masterCoords.add(`${master.r}:${master.c}`);
+            }
+        });
+
+        if (masterCoords.size === 0) {
+            showToast('Tidak ada sel gabungan (merge) di area yang dipilih.', 'info');
+            return;
+        }
+
+        const unmergedCoords: { r: number; c: number }[] = [];
+        masterCoords.forEach(coord => {
+            const [mr, mc] = coord.split(':').map(Number);
+            const master = newCells[mr]?.[mc];
+            if (!master) return;
+            const rSpan = master.rowSpan || 1;
+            const cSpan = master.colSpan || 1;
+            const masterBorders = master.borders || { top: false, bottom: false, left: false, right: false };
+            const hasAnyBorder = Boolean(masterBorders.top || masterBorders.bottom || masterBorders.left || masterBorders.right);
+            master.rowSpan = 1;
+            master.colSpan = 1;
+
+            for (let r = mr; r < mr + rSpan; r++) {
+                for (let c = mc; c < mc + cSpan; c++) {
+                    if (newCells[r]?.[c]) {
+                        newCells[r][c].hidden = false;
+                        newCells[r][c].rowSpan = 1;
+                        newCells[r][c].colSpan = 1;
+                        // Pertahankan garis kisi tabel agar saat dipisah tidak merusak tampilan tabel
+                        newCells[r][c].borders = hasAnyBorder
+                            ? { top: true, bottom: true, left: true, right: true }
+                            : {
+                                top: r === mr ? Boolean(masterBorders.top) : false,
+                                bottom: r === mr + rSpan - 1 ? Boolean(masterBorders.bottom) : false,
+                                left: c === mc ? Boolean(masterBorders.left) : false,
+                                right: c === mc + cSpan - 1 ? Boolean(masterBorders.right) : false
+                            };
+                        newCells[r][c].align = newCells[r][c].align || master.align || 'center';
+                        newCells[r][c].verticalAlign = newCells[r][c].verticalAlign || master.verticalAlign || 'middle';
+                        newCells[r][c].fontSize = newCells[r][c].fontSize || master.fontSize || 11;
+                        newCells[r][c].bold = newCells[r][c].bold !== undefined ? newCells[r][c].bold : master.bold;
+                        newCells[r][c].italic = newCells[r][c].italic !== undefined ? newCells[r][c].italic : master.italic;
+                        newCells[r][c].width = getColWidth(c);
+                        newCells[r][c].height = getRowHeight(r);
+                        unmergedCoords.push({ r, c });
+                    }
+                }
+            }
+        });
+
+        const sanitized = sanitizeGridMergeIntegrity(newCells);
+        const updated = { ...activeTemplate, cells: sanitized };
         setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        // Alih-alih memilih seluruh puluhan koordinat yang baru dipisah (yang memicu seleksi massal tak terduga),
+        // pilih hanya sel induk pertama (top-left) layaknya di Microsoft Excel
+        const firstCoord = Array.from(masterCoords)[0];
+        if (firstCoord) {
+            const [firstMr, firstMc] = firstCoord.split(':').map(Number);
+            setSelectedCells([{ r: firstMr, c: firstMc }]);
+            selectionAnchorRef.current = { r: firstMr, c: firstMc };
+            selectionLeadRef.current = { r: firstMr, c: firstMc };
+        }
+        showToast(`Berhasil memisahkan ${masterCoords.size} sel gabungan. Garis kisi tabel dan format tetap utuh rapi.`, 'success');
     };
 
     const toggleBorder = (side: 'top' | 'right' | 'bottom' | 'left' | 'all' | 'none' | 'outer') => {
         if (!activeTemplate || selectedCells.length === 0) return;
         pushToHistory(activeTemplate);
-        const newCells = [...activeTemplate.cells];
+        const newCells = activeTemplate.cells.map(row => [...row]);
         if (side === 'outer') {
             const minR = Math.min(...selectedCells.map(c => c.r));
             const maxR = Math.max(...selectedCells.map(c => c.r));
@@ -4208,15 +4923,18 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
             const maxC = Math.max(...selectedCells.map(c => c.c));
 
             selectedCells.forEach(({ r, c }) => {
-                const cell = newCells[r][c]; if (cell.hidden) return;
+                const cell = newCells[r]?.[c];
+                if (!cell || cell.hidden) return;
                 const currentBorders = cell.borders || { top: false, right: false, bottom: false, left: false };
+                const cellBottom = r + (cell.rowSpan || 1) - 1;
+                const cellRight = c + (cell.colSpan || 1) - 1;
                 newCells[r][c] = {
                     ...cell,
                     borders: {
                         top: r === minR ? true : currentBorders.top,
-                        bottom: r === maxR ? true : currentBorders.bottom,
+                        bottom: cellBottom >= maxR ? true : currentBorders.bottom,
                         left: c === minC ? true : currentBorders.left,
-                        right: c === maxC ? true : currentBorders.right
+                        right: cellRight >= maxC ? true : currentBorders.right
                     }
                 };
             });
@@ -5431,22 +6149,65 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                         </>
                     )}
 
-                    <button 
-                        type="button" 
-                        onClick={mergeCells} 
-                        className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 shrink-0 text-xs font-semibold flex items-center gap-1 shadow-2xs" 
-                        title="Gabung Sel yang Dipilih"
-                    >
-                        <i className="bi bi-intersect"></i>
-                        <span>Merge</span>
-                    </button>
+                    <div className="relative inline-flex items-center rounded-lg border border-slate-200 bg-white shadow-2xs">
+                        <button 
+                            type="button" 
+                            onClick={() => mergeCells('all')} 
+                            className="px-2 py-1 hover:bg-slate-100 text-slate-700 shrink-0 text-xs font-semibold flex items-center gap-1 rounded-l-lg" 
+                            title="Gabung Sel yang Dipilih (Merge & Center)"
+                        >
+                            <i className="bi bi-intersect text-indigo-600"></i>
+                            <span>Merge</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setMergeMenuOpen(prev => !prev)}
+                            className="px-1 py-1 hover:bg-slate-100 text-slate-500 border-l border-slate-200 rounded-r-lg"
+                            title="Pilihan Merge (Horizontal / Vertikal)"
+                        >
+                            <i className="bi bi-chevron-down text-[10px]"></i>
+                        </button>
+                        {mergeMenuOpen && (
+                            <div 
+                                className="absolute top-full left-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-50 text-xs"
+                                onMouseLeave={() => setMergeMenuOpen(false)}
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => { mergeCells('all'); setMergeMenuOpen(false); }}
+                                    className="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2 font-medium"
+                                >
+                                    <i className="bi bi-intersect text-indigo-600"></i>
+                                    <span>Gabung Semua (Merge All)</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { mergeCells('horizontal'); setMergeMenuOpen(false); }}
+                                    className="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2 font-medium text-emerald-700"
+                                    title="Gabungkan kolom terpilih pada setiap baris secara terpisah"
+                                >
+                                    <i className="bi bi-arrows-expand-vertical -rotate-90 text-emerald-600"></i>
+                                    <span>Gabung Baris (Merge Across)</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { mergeCells('vertical'); setMergeMenuOpen(false); }}
+                                    className="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2 font-medium text-teal-700"
+                                    title="Gabungkan baris terpilih pada setiap kolom secara terpisah"
+                                >
+                                    <i className="bi bi-arrows-expand-vertical text-teal-600"></i>
+                                    <span>Gabung Kolom (Merge Down)</span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
                     <button 
                         type="button" 
                         onClick={unmergeCells} 
                         className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 shrink-0 text-xs font-semibold flex items-center gap-1 shadow-2xs" 
-                        title="Pisah Sel Gabungan"
+                        title="Pisah Sel Gabungan (Unmerge)"
                     >
-                        <i className="bi bi-union"></i>
+                        <i className="bi bi-union text-amber-600"></i>
                         <span>Pisah</span>
                     </button>
 
@@ -6406,12 +7167,30 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                             {/* Merge & Clear */}
                             <button
                                 type="button"
-                                onClick={mergeCells}
+                                onClick={() => mergeCells('all')}
                                 className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm whitespace-nowrap shrink-0 transition-colors"
-                                title="Gabungkan Sel Terpilih (Merge Cells)"
+                                title="Gabungkan Sel Terpilih (Merge All)"
                             >
                                 <i className="bi bi-intersect"></i>
                                 <span>Merge</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => mergeCells('horizontal')}
+                                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm whitespace-nowrap shrink-0 transition-colors"
+                                title="Gabung Kolom Terpilih Per Baris (Merge Across)"
+                            >
+                                <i className="bi bi-arrows-expand-vertical -rotate-90"></i>
+                                <span>Merge Baris</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={unmergeCells}
+                                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm whitespace-nowrap shrink-0 transition-colors"
+                                title="Pisahkan Sel Gabungan (Unmerge)"
+                            >
+                                <i className="bi bi-arrows-angle-expand"></i>
+                                <span>Pisah</span>
                             </button>
                             <button
                                 type="button"
@@ -6535,36 +7314,39 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                     const isPageBreak = showPageBreakGuide && pageBreakRowIndices.includes(rIdx);
 
                                     return (
-                                        <React.Fragment key={rIdx}>
-                                            {isPageBreak && (
-                                                <tr className="pointer-events-none select-none bg-rose-500/10">
-                                                    <td colSpan={(activeTemplate?.colCount || 1) + 1} className="p-0 border-y-2 border-dashed border-rose-500">
-                                                        <div className="bg-rose-100 text-rose-900 text-[10px] font-black py-1 px-3 flex items-center justify-between gap-2">
-                                                            <span className="flex items-center gap-1.5">
-                                                                <i className="bi bi-scissors rotate-90 text-rose-600"></i>
-                                                                <span>
-                                                                    BATAS HALAMAN ({paperFormat}{curPageSetup.orientation === 'landscape' ? ' Landscape' : ''})
-                                                                </span>
-                                                            </span>
-                                                            <span className="text-[9px] font-bold text-rose-700 bg-white/90 px-2 py-0.5 rounded tabular-nums">
-                                                                {canvasPaginatedLayout?.isSinglePageFit
-                                                                    ? `Batas 100% — Otomatis diperkecil ke ${Math.round((canvasPaginatedLayout?.scale || 1) * 100)}% (Fit 1 Halaman)`
-                                                                    : `Mulai Halaman ${(pageBreakRowIndices.indexOf(rIdx) + 2)} (Baris ke-${rIdx + 1} di-oper ke halaman baru)`}
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            )}
-                                            <tr style={{ height: `${rowH}px` }}>
+                                        <tr key={rIdx} style={{ height: `${rowH}px` }}>
                                             {/* Row Header 1, 2, 3... */}
                                             <th
-                                                className={`group/row relative w-10 min-w-[40px] max-w-[40px] border border-slate-300 text-slate-700 font-bold text-[11px] text-center select-none cursor-pointer transition-colors sticky left-0 z-10 shadow-xs ${
+                                                className={`group/row relative w-10 min-w-[40px] max-w-[40px] border border-slate-300 text-slate-700 font-bold text-[11px] text-center select-none cursor-pointer transition-colors sticky left-0 shadow-xs ${
+                                                    isPageBreak ? 'z-30 overflow-visible' : 'z-10'
+                                                } ${
                                                     isRowSelected ? 'bg-blue-200 text-blue-900 font-black' : 'bg-slate-100 hover:bg-slate-200'
                                                 }`}
                                                 style={{ height: `${rowH}px`, minHeight: `${rowH}px` }}
                                                 onClick={() => handleSelectRow(rIdx)}
                                                 title={`Baris ${rIdx + 1} (${rowH}px) - Klik untuk pilih seluruh baris, seret pembatas bawah untuk atur tinggi`}
                                             >
+                                                {isPageBreak && (
+                                                    <div
+                                                        className="pointer-events-none select-none absolute left-0 top-0 border-t-2 border-dashed border-rose-500 flex items-center justify-between pl-12 pr-3"
+                                                        style={{
+                                                            width: `${40 + colWidthsList.reduce((acc, w) => acc + w, 0)}px`,
+                                                            transform: 'translateY(-50%)'
+                                                        }}
+                                                    >
+                                                        <span className="bg-rose-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 whitespace-nowrap">
+                                                            <i className="bi bi-scissors rotate-90"></i>
+                                                            <span>
+                                                                BATAS HALAMAN ({paperFormat}{curPageSetup.orientation === 'landscape' ? ' Landscape' : ''})
+                                                            </span>
+                                                        </span>
+                                                        <span className="bg-rose-100/95 text-rose-900 border border-rose-300 text-[9px] font-bold px-2 py-0.5 rounded-full shadow-xs whitespace-nowrap tabular-nums">
+                                                            {canvasPaginatedLayout?.isSinglePageFit
+                                                                ? `Batas 100% — Fit ${Math.round((canvasPaginatedLayout?.scale || 1) * 100)}%`
+                                                                : `Mulai Halaman ${(pageBreakRowIndices.indexOf(rIdx) + 2)} (Baris ke-${rIdx + 1})`}
+                                                        </span>
+                                                    </div>
+                                                )}
                                                 <div className="flex items-center justify-center gap-1 w-full h-full relative px-0.5">
                                                     <span className="pointer-events-none">{rIdx + 1}</span>
                                                     {activeTemplate && activeTemplate.rowCount > 1 && canWrite && (
@@ -6671,7 +7453,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                                         rowSpan={cellRowSpan} 
                                                         className={cellClass} 
                                                         onMouseDown={(e) => handleMouseDown(rIdx, cIdx, e)} 
-                                                        onMouseEnter={() => handleMouseEnter(rIdx, cIdx)}
+                                                        onMouseEnter={(e) => handleMouseEnter(rIdx, cIdx, e)}
                                                         onTouchStart={(e) => {
                                                             if (e.touches.length === 1 && tryStartFormulaCellPick(rIdx, cIdx, false)) {
                                                                 e.preventDefault();
@@ -6702,19 +7484,18 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                                         }}
                                                         onClick={() => {
                                                             if (isFormulaSelectingRef.current) return;
-                                                            if (wasAlreadySingleSelectedRef.current && selectedCells.length === 1 && !editingCellRef.current && canWrite) {
-                                                                startInlineEdit(rIdx, cIdx);
-                                                            }
                                                         }}
                                                         onDoubleClick={() => startInlineEdit(rIdx, cIdx)}
                                                         onContextMenu={(e) => {
                                                             e.preventDefault();
+                                                            e.stopPropagation();
                                                             if (editingCellRef.current) commitInlineEdit();
-                                                            const isAlreadyInSelection = selectedCells.some(s => s.r === rIdx && s.c === cIdx);
+                                                            const master = activeTemplate ? findMasterCell(activeTemplate, rIdx, cIdx) : { r: rIdx, c: cIdx };
+                                                            const isAlreadyInSelection = selectedCells.some(s => s.r === master.r && s.c === master.c);
                                                             if (!isAlreadyInSelection) {
-                                                                setSelectedCells([{ r: rIdx, c: cIdx }]);
+                                                                setSelectedCells([{ r: master.r, c: master.c }]);
                                                             }
-                                                            setContextMenuPos({ x: e.clientX, y: e.clientY, r: rIdx, c: cIdx });
+                                                            setContextMenuPos({ x: e.clientX, y: e.clientY, r: master.r, c: master.c });
                                                         }}
                                                         style={{ 
                                                             width: `${cellWidthPx}px`, 
@@ -6948,7 +7729,6 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                                 );
                                             })}
                                         </tr>
-                                        </React.Fragment>
                                     );
                                 })}
                             </tbody>
@@ -7719,22 +8499,131 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                     />
                                 </div>
 
-                                <div>
-                                    <label className="block text-xs font-bold mb-1 text-orange-800">Daftar Pilihan (Pisahkan dengan koma)</label>
-                                    <textarea
-                                        value={(activeCellData.options || []).join(', ')}
-                                        onChange={e => {
-                                            const opts = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                                            updateActiveCell({ options: opts });
-                                        }}
-                                        className="w-full border rounded-lg p-2 text-xs bg-white focus:ring-2 focus:ring-orange-500"
-                                        rows={2}
-                                        placeholder="Sangat Baik, Baik, Cukup, Kurang"
-                                    />
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="block text-xs font-bold text-orange-800">
+                                            Daftar Pilihan ({(activeCellData.options || []).length} item)
+                                        </label>
+                                        {(activeCellData.options || []).length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => updateActiveCell({ options: [] })}
+                                                className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline"
+                                                title="Kosongkan semua item pilihan"
+                                            >
+                                                Hapus Semua
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Input tambah item baru (bebas tanda koma & tanda baca kalimat) */}
+                                    <div className="flex gap-1.5">
+                                        <input
+                                            type="text"
+                                            value={newDropdownOptionDraft}
+                                            onChange={e => setNewDropdownOptionDraft(e.target.value)}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    const trimmed = newDropdownOptionDraft.trim();
+                                                    if (!trimmed) return;
+                                                    const nextOpts = [...(activeCellData.options || []), trimmed];
+                                                    updateActiveCell({ options: nextOpts });
+                                                    setNewDropdownOptionDraft('');
+                                                }
+                                            }}
+                                            placeholder="Ketik opsi kalimat / pilihan (koma & tanda baca aman)..."
+                                            className="flex-1 min-w-0 border border-orange-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const trimmed = newDropdownOptionDraft.trim();
+                                                if (!trimmed) return;
+                                                const nextOpts = [...(activeCellData.options || []), trimmed];
+                                                updateActiveCell({ options: nextOpts });
+                                                setNewDropdownOptionDraft('');
+                                            }}
+                                            disabled={!newDropdownOptionDraft.trim()}
+                                            className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white rounded-lg text-xs font-bold flex items-center gap-1 shrink-0 transition-colors"
+                                            title="Tambah item ke daftar pilihan"
+                                        >
+                                            <i className="bi bi-plus-lg"></i>
+                                            <span>Tambah</span>
+                                        </button>
+                                    </div>
+
+                                    {/* List item interaktif: Edit, Geser Urutan, Hapus */}
+                                    {activeCellData.options && activeCellData.options.length > 0 ? (
+                                        <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
+                                            {activeCellData.options.map((opt, idx) => (
+                                                <div key={idx} className="flex items-center gap-1 bg-white border border-orange-200 rounded-lg p-1 shadow-2xs">
+                                                    <span className="w-5 text-center text-[10px] font-bold text-orange-500 shrink-0 tabular-nums">
+                                                        {idx + 1}.
+                                                    </span>
+                                                    <input
+                                                        type="text"
+                                                        value={opt}
+                                                        onChange={e => {
+                                                            const nextOpts = [...(activeCellData.options || [])];
+                                                            nextOpts[idx] = e.target.value;
+                                                            updateActiveCell({ options: nextOpts });
+                                                        }}
+                                                        className="flex-1 min-w-0 text-xs px-1.5 py-1 rounded border border-transparent focus:border-orange-300 focus:bg-orange-50/30 focus:outline-none text-slate-800"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        disabled={idx === 0}
+                                                        onClick={() => {
+                                                            const nextOpts = [...(activeCellData.options || [])];
+                                                            const temp = nextOpts[idx - 1];
+                                                            nextOpts[idx - 1] = nextOpts[idx];
+                                                            nextOpts[idx] = temp;
+                                                            updateActiveCell({ options: nextOpts });
+                                                        }}
+                                                        className="p-1 text-slate-400 hover:text-orange-700 disabled:opacity-25 rounded"
+                                                        title="Geser ke atas"
+                                                    >
+                                                        <i className="bi bi-chevron-up text-[10px]"></i>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={idx === (activeCellData.options?.length || 0) - 1}
+                                                        onClick={() => {
+                                                            const nextOpts = [...(activeCellData.options || [])];
+                                                            const temp = nextOpts[idx + 1];
+                                                            nextOpts[idx + 1] = nextOpts[idx];
+                                                            nextOpts[idx] = temp;
+                                                            updateActiveCell({ options: nextOpts });
+                                                        }}
+                                                        className="p-1 text-slate-400 hover:text-orange-700 disabled:opacity-25 rounded"
+                                                        title="Geser ke bawah"
+                                                    >
+                                                        <i className="bi bi-chevron-down text-[10px]"></i>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const nextOpts = (activeCellData.options || []).filter((_, i) => i !== idx);
+                                                            updateActiveCell({ options: nextOpts });
+                                                        }}
+                                                        className="p-1 text-rose-500 hover:bg-rose-50 hover:text-rose-700 rounded transition-colors"
+                                                        title="Hapus item ini"
+                                                    >
+                                                        <i className="bi bi-trash text-xs"></i>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-[11px] text-orange-700/70 italic bg-white/60 border border-dashed border-orange-200 rounded-lg px-3 py-2 text-center">
+                                            Belum ada item pilihan. Tambahkan kalimat di atas atau pilih template di bawah.
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Preset Templates for Dropdowns */}
-                                <div className="space-y-1.5">
+                                <div className="space-y-1.5 pt-1 border-t border-orange-200/70">
                                     <label className="block text-[10px] font-bold text-gray-500 uppercase">Template Pilihan Cepat</label>
                                     <div className="flex flex-wrap gap-1">
                                         {[
@@ -7756,19 +8645,6 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                         ))}
                                     </div>
                                 </div>
-
-                                {activeCellData.options && activeCellData.options.length > 0 && (
-                                    <div className="pt-2 border-t border-orange-200">
-                                        <div className="text-[10px] font-bold text-orange-900 mb-1">Pratinjau Opsi ({activeCellData.options.length}):</div>
-                                        <div className="flex flex-wrap gap-1">
-                                            {activeCellData.options.map((opt, i) => (
-                                                <span key={i} className="bg-white border border-orange-300 text-orange-800 text-[10px] px-1.5 py-0.5 rounded font-medium">
-                                                    {opt}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         )}
                         {activeCellData.type === 'input' && (
@@ -9678,11 +10554,13 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
             {/* CUSTOM CONTEXT MENU (Right-click on Table Cell) */}
             {contextMenuPos && (
                 <div
+                    data-rapor-context-menu="true"
                     className="fixed z-[100] bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 w-60 text-xs font-semibold text-slate-700 animate-fade-in select-none"
                     style={{
                         top: `${Math.min(contextMenuPos.y, window.innerHeight - 440)}px`,
                         left: `${Math.min(contextMenuPos.x, window.innerWidth - 260)}px`
                     }}
+                    onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center justify-between">
@@ -9788,20 +10666,53 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
 
                     <div className="my-1 border-t border-slate-100"></div>
 
-                    {selectedCells.length > 1 ? (
-                        <button
-                            type="button"
-                            onClick={() => {
-                                mergeCells();
-                                setContextMenuPos(null);
-                            }}
-                            disabled={!canWrite}
-                            className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center gap-2 text-indigo-700 font-bold"
-                        >
-                            <i className="bi bi-union"></i>
-                            <span>Gabungkan Sel (Merge)</span>
-                        </button>
-                    ) : (activeCellData && ((activeCellData.rowSpan || 1) > 1 || (activeCellData.colSpan || 1) > 1)) ? (
+                    {selectedCells.length > 1 && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    mergeCells('all');
+                                    setContextMenuPos(null);
+                                }}
+                                disabled={!canWrite}
+                                className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center gap-2 text-indigo-700 font-bold"
+                            >
+                                <i className="bi bi-intersect"></i>
+                                <span>Gabungkan Semua (Merge All)</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    mergeCells('horizontal');
+                                    setContextMenuPos(null);
+                                }}
+                                disabled={!canWrite}
+                                className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center gap-2 text-emerald-700 font-bold"
+                                title="Gabungkan kolom terpilih pada setiap baris secara terpisah"
+                            >
+                                <i className="bi bi-arrows-expand-vertical -rotate-90"></i>
+                                <span>Gabung Baris (Merge Across)</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    mergeCells('vertical');
+                                    setContextMenuPos(null);
+                                }}
+                                disabled={!canWrite}
+                                className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center gap-2 text-teal-700 font-bold"
+                                title="Gabungkan baris terpilih pada setiap kolom secara terpisah"
+                            >
+                                <i className="bi bi-arrows-expand-vertical"></i>
+                                <span>Gabung Kolom (Merge Down)</span>
+                            </button>
+                        </>
+                    )}
+
+                    {(selectedCells.some(s => {
+                        const cell = activeTemplate?.cells[s.r]?.[s.c];
+                        return cell && ((cell.rowSpan || 1) > 1 || (cell.colSpan || 1) > 1);
+                    }) || Boolean(activeCellData && ((activeCellData.rowSpan || 1) > 1 || (activeCellData.colSpan || 1) > 1))) && (
                         <button
                             type="button"
                             onClick={() => {
@@ -9814,7 +10725,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                             <i className="bi bi-arrows-angle-expand"></i>
                             <span>Pisahkan Sel (Unmerge)</span>
                         </button>
-                    ) : null}
+                    )}
 
                     <button
                         type="button"

@@ -5,6 +5,7 @@ import { Santri, PondokSettings, RaporRecord, NilaiMapel, RaporTemplate, GridCel
 import { db } from '../db';
 import { getTemplateSheets } from './raporExcelService';
 import { classifyRaporInputField } from './raporCalculationService';
+import { getDefaultAcademicYear } from '../utils/academicYear';
 import {
     parseExcelCellCoord,
     parseExcelRangeCoord,
@@ -14,6 +15,14 @@ import {
     buildMasterKkmLookupMap,
     extractMapelLookupCandidates
 } from '../utils/raporFormulaUtils';
+import {
+    RaporCloudProvider,
+    getRaporCloudProviderMeta,
+    fetchRaporFromCloudAdapter,
+    pushRaporPayloadToCloudAdapter,
+    buildStandaloneCloudHelperJs,
+    obfuscateSecretToCodeArray
+} from './raporCloudService';
 
 // --- HELPER: FILTER NON-MEANINGFUL LABELS (SKIP NUMBERS, KKM, BULLETS, FORMULAS) ---
 const isMeaningfulCellLabel = (raw?: string): boolean => {
@@ -541,7 +550,9 @@ export interface GeneratorConfig {
     template: RaporTemplate;
     sheetId?: string; // Optional: specific sheet ID or 'all'
     submissionMethod?: 'whatsapp' | 'google_sheet' | 'hybrid';
+    backendProvider?: RaporCloudProvider;
     googleScriptUrl?: string;
+    apiKey?: string;
     waDestination?: string; 
     rankingScope?: 'rombel' | 'kelas' | 'jenjang' | 'global';
     tabMode?: 'per_rombel' | 'per_jenjang' | 'per_file';
@@ -909,8 +920,8 @@ export const generateRaporFormHtml = (
     const showMultiSheetBadges = targetSheets.length > 1;
     const theadHtml = `
         <tr class="sticky-header">
-            <th class="p-2.5 bg-slate-100 border border-slate-300 text-xs font-bold text-center sticky left-0 z-30 w-12 text-slate-700">No</th>
-            <th class="p-2.5 bg-slate-100 border border-slate-300 text-xs font-bold text-left min-w-[200px] sticky left-12 z-30 shadow-[2px_0_5px_rgba(0,0,0,0.06)] text-slate-800">Nama Santri</th>
+            <th class="p-2.5 bg-slate-100 border border-slate-300 text-xs font-bold text-center sticky left-0 sticky-corner w-12 text-slate-700">No</th>
+            <th class="p-2.5 bg-slate-100 border border-slate-300 text-xs font-bold text-left min-w-[200px] sticky left-12 sticky-corner shadow-[2px_0_5px_rgba(0,0,0,0.06)] text-slate-800">Nama Santri</th>
             <th class="p-2.5 bg-slate-100 border border-slate-300 text-xs font-bold text-center w-24 text-slate-600">NIS</th>
             ${interactiveCells.map(cell => {
                 let badgeClass = "bg-blue-100 text-blue-800 border-blue-200";
@@ -929,7 +940,7 @@ export const generateRaporFormHtml = (
                     : '';
                 
                 const quickDashBtnHtml = cell.type === 'input'
-                    ? `<button type="button" onclick="fillColumnEmptyWithDash(${escHtml(JSON.stringify(cell.key))}, ${escHtml(JSON.stringify(cell.label))})" class="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-200/75 hover:bg-amber-100 text-slate-600 hover:text-amber-900 border border-slate-300/80 text-[8px] font-bold transition-colors" title="Isi tanda '-' (belum diajarkan) ke seluruh sel yang masih kosong pada kolom ini">Isi &quot;-&quot; Kosong</button>`
+                    ? `<button type="button" onclick="fillColumnEmptyWithDash(${escHtml(JSON.stringify(cell.key))}, ${escHtml(JSON.stringify(cell.label))})" class="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-200/75 hover:bg-amber-100 text-slate-600 hover:text-amber-900 border border-slate-300/80 text-[8px] font-bold transition-colors cursor-pointer" title="Isi tanda '-' (belum diajarkan) ke seluruh sel yang masih kosong pada kolom ini">Isi &quot;-&quot; Kosong</button>`
                     : '';
                 
                 return `
@@ -951,34 +962,16 @@ export const generateRaporFormHtml = (
     // --- Generate Ledger Table Body & Cards Body ---
     let tbodyHtml = "";
     let cardsHtml = "";
-    let currentRombelId = -1;
-    let currentKelasId = -1;
     
     targetSantri.forEach((s, index) => {
         const shortName = (s.namaLengkap || '').trim().split(/\s+/)[0] || s.namaLengkap;
-        const rombelObj = settings.rombel.find(r => r.id === s.rombelId);
+        const rombelObj = settings.rombel.find(r => Number(r.id) === Number(s.rombelId));
         const rombelName = rombelObj?.nama || "Tanpa Rombel";
-        const kelasObj = settings.kelas.find(k => k.id === s.kelasId) || (rombelObj ? settings.kelas.find(k => k.id === rombelObj.kelasId) : null);
+        const kelasObj = settings.kelas.find(k => Number(k.id) === Number(s.kelasId)) || (rombelObj ? settings.kelas.find(k => Number(k.id) === Number(rombelObj.kelasId)) : null);
         const kelasName = kelasObj?.nama || "";
-
-        // Add Separator Row if Rombel or Kelas changes (in "All Rombels", "Jenjang", or "Rentang Kelas" mode)
-        const isMultiGroup = config.rombelId === 0 || !!config.kelasRange;
-        const effectiveKelasId = s.kelasId || (rombelObj ? rombelObj.kelasId : 0);
-        const groupChanged = (s.rombelId !== currentRombelId) || (effectiveKelasId !== currentKelasId);
-
-        if (isMultiGroup && groupChanged) {
-            currentRombelId = s.rombelId;
-            currentKelasId = effectiveKelasId;
-            tbodyHtml += `
-                <tr class="bg-teal-700 text-white font-bold rombel-sep">
-                    <td colspan="${interactiveCells.length + 3}" class="p-2.5 text-xs border border-teal-800 sticky left-0 z-20">
-                        <span class="inline-flex items-center gap-2">
-                            <i class="bi bi-people-fill"></i> ${rombelName !== "Tanpa Rombel" ? `ROMBEL: <b>${escHtml(rombelName)}</b>` : 'SANTRI'} ${kelasName ? `• Tingkat: <b>${escHtml(kelasName)}</b>` : ''}
-                        </span>
-                    </td>
-                </tr>
-            `;
-        }
+        const effectiveKelasId = Number(s.kelasId || (rombelObj ? rombelObj.kelasId : 0) || 0);
+        const effectiveRombelId = Number(s.rombelId || 0);
+        const groupKey = effectiveRombelId > 0 ? `r_${effectiveRombelId}` : `k_${effectiveKelasId}`;
 
         const rowCells = interactiveCells.map(col => {
             const fieldId = `val_${s.id}_${col.key}`;
@@ -1011,11 +1004,11 @@ export const generateRaporFormHtml = (
         }).join('');
 
         tbodyHtml += `
-        <tr id="row_santri_${s.id}" class="hover:bg-slate-50 transition-colors">
-            <td class="p-2 text-center bg-slate-50 text-xs font-medium text-slate-500 border border-slate-300 sticky left-0 z-10 w-12">${index + 1}</td>
-            <td class="p-2 bg-white text-xs font-bold text-slate-900 whitespace-nowrap border border-slate-300 sticky left-12 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)]" title="${escHtml(s.namaLengkap)}">
+        <tr id="row_santri_${s.id}" data-group="${escHtml(groupKey)}" class="hover:bg-slate-50 transition-colors">
+            <td class="row-num-cell p-2 text-center bg-slate-50 text-xs font-medium text-slate-500 border border-slate-300 sticky left-0 z-20 w-12 tabular-nums">${index + 1}</td>
+            <td class="p-2 bg-white text-xs font-bold text-slate-900 whitespace-nowrap border border-slate-300 sticky left-12 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)]" title="${escHtml(s.namaLengkap)}">
                 <div class="leading-tight">${escHtml(s.namaLengkap)}</div>
-                <div class="text-[10px] text-slate-400 font-normal md:hidden">${escHtml(rombelName)}</div>
+                <div class="text-[10px] text-slate-400 font-normal md:hidden">${escHtml(rombelName !== 'Tanpa Rombel' ? rombelName : kelasName)}</div>
             </td>
             <td class="p-2 bg-slate-50/70 text-xs font-mono text-slate-600 text-center border border-slate-300">${escHtml(s.nis || '-')}</td>
             ${rowCells}
@@ -1100,6 +1093,9 @@ export const generateRaporFormHtml = (
         columnLabelsMap[c.key] = c.label || c.key;
     });
     const effectiveTabMode = config.tabMode || 'per_rombel';
+    const backendProvider: RaporCloudProvider = config.backendProvider || settings.raporCloudConfig?.backendProvider || 'gas';
+    const cloudApiKey = (config.apiKey ?? settings.raporCloudConfig?.apiKey ?? '').trim();
+    const providerMeta = getRaporCloudProviderMeta(backendProvider);
     const scriptUrl = (config.googleScriptUrl || '').trim();
     const waDest = config.waDestination ? config.waDestination.replace(/^0/, '62').replace(/[^0-9]/g, '') : '';
     const santriMetaArray = targetSantri.map(s => {
@@ -1107,16 +1103,22 @@ export const generateRaporFormHtml = (
         const kelasObj = settings.kelas.find(k => Number(k.id) === Number(s.kelasId)) || (rombelObj ? settings.kelas.find(k => Number(k.id) === Number(rombelObj.kelasId)) : null);
         const jenjangIdResolved = s.jenjangId || (kelasObj ? kelasObj.jenjangId : 0);
         const jenjangObj = settings.jenjang.find(j => Number(j.id) === Number(jenjangIdResolved));
+        const effRombelId = Number(s.rombelId || 0);
+        const effKelasId = Number(s.kelasId || (kelasObj ? kelasObj.id : 0) || 0);
+        const groupKey = effRombelId > 0 ? `r_${effRombelId}` : `k_${effKelasId}`;
+        const groupLabel = effRombelId > 0 ? (rombelObj?.nama || `Rombel #${effRombelId}`) : (kelasObj?.nama || 'Tanpa Kelas');
         return {
             id: s.id,
             nama: s.namaLengkap,
             nis: s.nis || '',
-            rombelId: s.rombelId || 0,
+            rombelId: effRombelId,
             rombelName: rombelObj?.nama || 'Tanpa Rombel',
-            kelasId: s.kelasId || (kelasObj ? kelasObj.id : 0),
+            kelasId: effKelasId,
             kelasName: kelasObj?.nama || 'Tanpa Kelas',
             jenjangId: jenjangIdResolved,
-            jenjangName: jenjangObj?.nama || ''
+            jenjangName: jenjangObj?.nama || '',
+            groupKey,
+            groupLabel
         };
     });
     const rankConfigsScript = `[${rankConfigs.map(rc => `{
@@ -1139,74 +1141,102 @@ export const generateRaporFormHtml = (
     const scopeStorageSuffix = allowedKeySet ? `_sub_${Array.from(allowedKeySet).sort().slice(0, 4).join('_')}_${allowedKeySet.size}` : '';
     const localStorageKey = `esantri_leger_${config.template.id}_${config.tahunAjaran}_${config.semester}_${config.rombelId || rangeKeyPart}${scopeStorageSuffix}`;
 
-    // Extract unique kelas & rombel for filter
+    // Extract unique kelas & class/rombel groups for filter
     const uniqueKelasMap = new Map<number, string>();
-    const uniqueRombelMap = new Map<number, { nama: string, kelasId: number }>();
+    const uniqueGroupsMap = new Map<string, { groupKey: string; label: string; kelasId: number; kelasName: string; rombelId: number; count: number }>();
     santriMetaArray.forEach(s => {
         if (s.kelasId && s.kelasName) uniqueKelasMap.set(s.kelasId, s.kelasName);
-        if (s.rombelId && s.rombelName) uniqueRombelMap.set(s.rombelId, { nama: s.rombelName, kelasId: s.kelasId });
+        const existingGrp = uniqueGroupsMap.get(s.groupKey);
+        if (existingGrp) {
+            existingGrp.count += 1;
+        } else {
+            uniqueGroupsMap.set(s.groupKey, {
+                groupKey: s.groupKey,
+                label: s.groupLabel,
+                kelasId: s.kelasId,
+                kelasName: s.kelasName || 'Tanpa Kelas',
+                rombelId: s.rombelId,
+                count: 1
+            });
+        }
     });
 
     const uniqueKelasOptions = Array.from(uniqueKelasMap.entries()).map(([id, nama]) => `<option value="${id}">${escHtml(nama)}</option>`).join('');
-    const uniqueRombelOptions = Array.from(uniqueRombelMap.entries()).map(([id, r]) => `<option value="${id}">${escHtml(r.nama)}</option>`).join('');
+    const uniqueGroupOptions = Array.from(uniqueGroupsMap.values()).map(g => `<option value="${escHtml(g.groupKey)}">${escHtml(g.label)}${g.kelasName && g.label !== g.kelasName ? ` (${escHtml(g.kelasName)})` : ''} — ${g.count} santri</option>`).join('');
 
-    const hasMultipleClasses = uniqueKelasMap.size > 1 || uniqueRombelMap.size > 1;
+    const hasMultipleClasses = uniqueKelasMap.size > 1 || uniqueGroupsMap.size > 1;
 
-    let filterToolbarHtml = '';
+    let sharedFilterToolbarHtml = '';
     if (hasMultipleClasses) {
-        filterToolbarHtml = `
-        <div class="max-w-3xl mx-auto bg-white p-3.5 rounded-2xl border border-teal-100 shadow-sm mb-3">
-            <div class="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-100">
+        sharedFilterToolbarHtml = `
+        <div class="bg-white p-3.5 rounded-2xl border border-teal-100 shadow-sm mb-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-slate-100">
                 <span class="text-xs font-black text-teal-900 flex items-center gap-1.5">
-                    <span class="w-2 h-2 rounded-full bg-teal-500"></span> Filter Rombel & Santri
+                    <span class="w-2 h-2 rounded-full bg-teal-500"></span> Filter Kelas, Rombel &amp; Santri
                 </span>
-                <span class="text-[10px] text-slate-500 font-medium">Cari atau filter santri</span>
+                <span id="filter-scope-hint" class="text-[11px] text-teal-700 font-semibold bg-teal-50 px-2.5 py-0.5 rounded-lg border border-teal-100">
+                    Mode Tabel PC menampilkan 1 kelas aktif agar ringan &amp; fokus
+                </span>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div>
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
+                <div class="md:col-span-3">
                     <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tingkat Kelas</label>
-                    <select id="card-filter-kelas" onchange="onKelasFilterChange(this.value)" class="w-full border rounded-xl p-2 text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
-                        <option value="0">Semua Tingkat Kelas</option>
+                    <select id="filter-kelas" onchange="onKelasFilterChange(this.value)" class="w-full border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
+                        <option value="0">Semua Tingkat Kelas (${uniqueKelasMap.size})</option>
                         ${uniqueKelasOptions}
                     </select>
                 </div>
-                <div>
-                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Rombel</label>
-                    <select id="card-filter-rombel" onchange="onRombelFilterChange(this.value)" class="w-full border rounded-xl p-2 text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
-                        <option value="0">Semua Rombel</option>
-                        ${uniqueRombelOptions}
-                    </select>
+                <div class="md:col-span-5">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Rombel / Kelas Aktif</label>
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" id="btn-prev-group" onclick="stepActiveGroup(-1)" class="px-2.5 py-2 rounded-xl border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold disabled:opacity-40 cursor-pointer shrink-0" title="Kelas / Rombel Sebelumnya">
+                            <i class="bi bi-chevron-left"></i>
+                        </button>
+                        <select id="filter-rombel" onchange="onGroupFilterChange(this.value)" class="flex-1 min-w-0 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
+                            ${uniqueGroupOptions}
+                        </select>
+                        <button type="button" id="btn-next-group" onclick="stepActiveGroup(1)" class="px-2.5 py-2 rounded-xl border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold disabled:opacity-40 cursor-pointer shrink-0" title="Kelas / Rombel Berikutnya">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </div>
                 </div>
-                <div>
+                <div class="md:col-span-4">
                     <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cari Santri</label>
-                    <input type="text" id="card-search-input" oninput="onSearchChange(this.value)" placeholder="Nama / NIS..." class="w-full border rounded-xl p-2 text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
+                    <div class="relative">
+                        <input type="text" id="filter-search-input" oninput="onSearchChange(this.value)" placeholder="Ketik nama santri atau NIS..." class="w-full border border-slate-300 rounded-xl p-2 pr-7 text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
+                    </div>
                 </div>
             </div>
         </div>`;
     } else {
-        filterToolbarHtml = `
-        <div class="max-w-3xl mx-auto bg-white p-2.5 rounded-2xl border border-teal-100 shadow-sm mb-3 flex items-center gap-2">
-            <span class="text-xs text-teal-700 font-bold whitespace-nowrap pl-1">🔍 Cari:</span>
-            <input type="text" id="card-search-input" oninput="onSearchChange(this.value)" placeholder="Ketik nama santri atau NIS..." class="w-full border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
+        sharedFilterToolbarHtml = `
+        <div class="bg-white p-2.5 rounded-2xl border border-teal-100 shadow-sm mb-3 flex flex-col sm:flex-row sm:items-center gap-2">
+            <div class="text-xs font-bold text-teal-900 px-2 py-1 bg-teal-50 border border-teal-100 rounded-xl whitespace-nowrap">
+                <i class="bi bi-people-fill mr-1 text-teal-700"></i> ${escHtml(contextName)} (${targetSantri.length} Santri)
+            </div>
+            <div class="flex items-center gap-2 flex-1 min-w-0">
+                <span class="text-xs text-teal-700 font-bold whitespace-nowrap pl-1"><i class="bi bi-search"></i></span>
+                <input type="text" id="filter-search-input" oninput="onSearchChange(this.value)" placeholder="Ketik nama santri atau NIS..." class="w-full border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
+            </div>
         </div>`;
     }
 
-    // Navigasi Sheet Filter Tabs jika multi-sheet
+    // Navigasi Sheet Filter Tabs jika multi-sheet (rendered ONCE in shared toolbar, no duplicate IDs)
     let sheetTabsToolbarHtml = '';
     if (targetSheets.length > 1) {
         sheetTabsToolbarHtml = `
-        <div class="sheet-tabs-container max-w-3xl mx-auto flex items-center gap-1.5 overflow-x-auto pb-2 mb-3">
+        <div class="sheet-tabs-container flex items-center gap-1.5 overflow-x-auto pb-1 mb-3">
             <span class="text-xs font-bold text-slate-600 mr-1 whitespace-nowrap flex items-center gap-1">
                 <i class="bi bi-layers"></i> Lembar:
             </span>
-            <button onclick="filterBySheet('all')" id="sheet-btn-all" class="sheet-filter-btn active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all bg-teal-700 text-white shadow-xs">
+            <button type="button" onclick="filterBySheet('all')" data-sheet-btn="all" class="sheet-filter-btn active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all bg-teal-700 text-white shadow-xs cursor-pointer">
                 Semua Lembar (${interactiveCells.length})
             </button>
             ${targetSheets.map(s => {
                 const count = interactiveCells.filter(c => c.sheetId === s.id).length;
                 const safeSheetIdAttr = escHtml(JSON.stringify(s.id));
                 return `
-                <button onclick="filterBySheet(${safeSheetIdAttr})" id="sheet-btn-${escHtml(s.id)}" class="sheet-filter-btn px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all bg-white text-slate-700 border border-slate-200 hover:bg-slate-50">
+                <button type="button" onclick="filterBySheet(${safeSheetIdAttr})" data-sheet-btn="${escHtml(s.id)}" class="sheet-filter-btn px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 cursor-pointer">
                     ${escHtml(s.name)} (${count})
                 </button>`;
             }).join('')}
@@ -1242,21 +1272,8 @@ export const generateRaporFormHtml = (
         `;
     } else {
         submissionScript = `
-            fetch(${JSON.stringify(scriptUrl)}, { 
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload) 
-            })
-            .then(async (res) => {
-                 if (!res.ok) throw new Error('HTTP ' + res.status);
-                 let respJson = null;
-                 try {
-                     const rawText = await res.text();
-                     if (rawText) respJson = JSON.parse(rawText);
-                 } catch (_) {}
-                 if (respJson && respJson.result === 'error') {
-                     throw new Error(respJson.error || 'Terjadi kendala pada Google Apps Script');
-                 }
+            pushCloudPayloadUniversal(${JSON.stringify(scriptUrl)}, payload)
+            .then(() => {
                  records.forEach(r => {
                      if (Array.isArray(r.clearedKeys) && loadedBaselineBySantri[r.santriId]) {
                          r.clearedKeys.forEach(ck => { delete loadedBaselineBySantri[r.santriId][ck]; });
@@ -1265,31 +1282,31 @@ export const generateRaporFormHtml = (
                          if (inputOnlySet.has(dk)) markLoadedBaseline(r.santriId, dk, dv);
                      });
                  });
-                 ${config.submissionMethod === 'google_sheet' ? `showFormToast('Data nilai berhasil dikirim ke Cloud Spreadsheet!', 'success'); btn.disabled = false; btn.innerHTML = originalText;` : `
+                 ${config.submissionMethod === 'google_sheet' ? `showFormToast('Data nilai berhasil dikirim ke ${providerMeta.storageLabel}!', 'success'); btn.disabled = false; btn.innerHTML = originalText;` : `
                     const jsonString = JSON.stringify(payload);
                     const encoded = btoa(unescape(encodeURIComponent(jsonString)));
-                    let message = "*Setoran Data Rapor (Hybrid)*\\nKelas: " + ${JSON.stringify(contextName)} + "\\nStatus: Terupload ke Cloud\\n\\n*BACKUP DATA:*\\nRAPOR_V2_START\\n" + encoded + "\\nRAPOR_V2_END";
+                    let message = "*Setoran Data Rapor (Hybrid)*\\nKelas: " + ${JSON.stringify(contextName)} + "\\nStatus: Terupload ke ${providerMeta.storageLabel}\\n\\n*BACKUP DATA:*\\nRAPOR_V2_START\\n" + encoded + "\\nRAPOR_V2_END";
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(message).then(() => {
                             const waUrl = ${JSON.stringify(waDest)} ? 'https://wa.me/${waDest}' : 'https://wa.me/';
-                            showFormToast("Terkirim ke Cloud & disalin ke Clipboard! Silakan tempel di WhatsApp sebagai cadangan.", "success", waUrl);
+                            showFormToast("Terkirim ke ${providerMeta.storageLabel} & disalin ke Clipboard! Tempel di WA sebagai cadangan.", "success", waUrl);
                             const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
                             btn.disabled = false; btn.innerHTML = originalText;
                         }).catch(() => {
                             const waUrl = (${JSON.stringify(waDest)} ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
-                            showFormToast("Terkirim ke Cloud! Klik tombol WhatsApp jika belum terbuka otomatis.", "success", waUrl);
+                            showFormToast("Terkirim ke ${providerMeta.storageLabel}! Klik tombol WhatsApp jika belum terbuka.", "success", waUrl);
                             const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
                             btn.disabled = false; btn.innerHTML = originalText;
                         });
                     } else {
                         const waUrl = (${JSON.stringify(waDest)} ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=') + encodeURIComponent(message);
-                        showFormToast("Terkirim ke Cloud! Membuka WhatsApp...", "success", waUrl);
+                        showFormToast("Terkirim ke ${providerMeta.storageLabel}! Membuka WhatsApp...", "success", waUrl);
                         const a = document.createElement('a'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
                         btn.disabled = false; btn.innerHTML = originalText;
                     }
                  `}
             }).catch(err => { 
-                showFormToast('Gagal mengirim ke Cloud. Pastikan URL Script benar & internet aktif (' + err + ')', 'error'); 
+                showFormToast('Gagal mengirim ke Cloud (${providerMeta.shortName}). Cek Endpoint/API Key & internet aktif (' + (err && err.message ? err.message : err) + ')', 'error'); 
                 btn.disabled = false; btn.innerHTML = originalText; 
             });
         `;
@@ -1337,7 +1354,7 @@ export const generateRaporFormHtml = (
             color: #0f172a;
             line-height: 1.5;
             margin: 0;
-            padding: 12px;
+            padding: 10px;
         }
         input, select, button, textarea {
             font-family: inherit;
@@ -1347,16 +1364,15 @@ export const generateRaporFormHtml = (
             -webkit-appearance: none;
             margin: 0;
         }
+        .hidden { display: none; }
         .sticky-header th {
             position: sticky;
             top: 0;
-            z-index: 40;
-            height: 40px;
+            z-index: 30;
+            vertical-align: middle;
         }
-        .rombel-sep td {
-            position: sticky;
-            top: 40px;
-            z-index: 35;
+        .sticky-corner {
+            z-index: 50 !important;
         }
         th, td {
             box-sizing: border-box;
@@ -1374,6 +1390,8 @@ export const generateRaporFormHtml = (
 
     <script>
         const santriList = ${JSON.stringify(santriMetaArray)};
+        const allGroupsList = ${JSON.stringify(Array.from(uniqueGroupsMap.values()))};
+        const hasMultipleClasses = ${hasMultipleClasses ? 'true' : 'false'};
         const santriById = new Map(santriList.map(s => [Number(s.id), s]));
         const santriIds = santriList.map(s => s.id);
         const rankConfigs = ${rankConfigsScript};
@@ -1386,10 +1404,15 @@ export const generateRaporFormHtml = (
         const numericInputKeys = ${JSON.stringify(numericInputKeysServer)};
         const colKeyAliasMap = ${JSON.stringify(colKeyAliasMapServer)};
         const storageKey = ${JSON.stringify(localStorageKey)};
-        let currentCardIndex = 0;
+        let currentViewMode = (window.innerWidth < 768) ? 'card' : 'table';
         let currentActiveSheet = 'all';
         let toastTimer = null;
         const loadedBaselineBySantri = {};
+        ${buildStandaloneCloudHelperJs({
+            providerVar: backendProvider,
+            urlExpr: JSON.stringify(scriptUrl),
+            apiKeyBytesJson: JSON.stringify(obfuscateSecretToCodeArray(cloudApiKey))
+        })}
         function escHtmlJs(v) {
             return String(v ?? '')
                 .replace(/&/g, '&amp;')
@@ -1886,32 +1909,33 @@ export const generateRaporFormHtml = (
         }
 
         function setViewMode(mode) {
+            currentViewMode = (mode === 'card') ? 'card' : 'table';
             const tableView = document.getElementById('table-view-container');
             const cardView = document.getElementById('card-view-container');
             const btnTable = document.getElementById('btn-mode-table');
             const btnCard = document.getElementById('btn-mode-card');
-            if (mode === 'table') {
+            if (currentViewMode === 'table') {
                 if (tableView) tableView.style.display = 'block';
                 if (cardView) cardView.style.display = 'none';
-                if (btnTable) { btnTable.className = 'bg-white text-teal-900 font-black px-3.5 py-1.5 rounded-lg text-xs shadow-sm'; }
-                if (btnCard) { btnCard.className = 'text-white font-semibold px-3.5 py-1.5 rounded-lg text-xs hover:bg-white/15'; }
+                if (btnTable) { btnTable.className = 'bg-white text-teal-900 font-black px-3.5 py-1.5 rounded-lg text-xs shadow-sm cursor-pointer'; }
+                if (btnCard) { btnCard.className = 'text-white font-semibold px-3.5 py-1.5 rounded-lg text-xs hover:bg-white/15 cursor-pointer'; }
             } else {
                 if (tableView) tableView.style.display = 'none';
                 if (cardView) cardView.style.display = 'block';
-                if (btnCard) { btnCard.className = 'bg-white text-teal-900 font-black px-3.5 py-1.5 rounded-lg text-xs shadow-sm'; }
-                if (btnTable) { btnTable.className = 'text-white font-semibold px-3.5 py-1.5 rounded-lg text-xs hover:bg-white/15'; }
+                if (btnCard) { btnCard.className = 'bg-white text-teal-900 font-black px-3.5 py-1.5 rounded-lg text-xs shadow-sm cursor-pointer'; }
+                if (btnTable) { btnTable.className = 'text-white font-semibold px-3.5 py-1.5 rounded-lg text-xs hover:bg-white/15 cursor-pointer'; }
             }
+            applyCardFilter();
         }
 
         function filterBySheet(sheetId) {
             currentActiveSheet = sheetId;
             document.querySelectorAll('.sheet-filter-btn').forEach(btn => {
-                btn.className = 'sheet-filter-btn px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all bg-white text-slate-700 border border-slate-200 hover:bg-slate-50';
+                const isTarget = btn.getAttribute('data-sheet-btn') === sheetId;
+                btn.className = isTarget
+                    ? 'sheet-filter-btn active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all bg-teal-700 text-white shadow-xs cursor-pointer'
+                    : 'sheet-filter-btn px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 cursor-pointer';
             });
-            const activeBtn = document.getElementById('sheet-btn-' + sheetId);
-            if (activeBtn) {
-                activeBtn.className = 'sheet-filter-btn active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all bg-teal-700 text-white shadow-xs';
-            }
 
             // In Table View: show/hide columns
             document.querySelectorAll('.table-col-cell').forEach(cell => {
@@ -1937,48 +1961,104 @@ export const generateRaporFormHtml = (
         let filteredSantriList = [...santriList];
         let currentFilteredIndex = 0;
         let activeFilterKelasId = 0;
-        let activeFilterRombelId = 0;
+        let activeFilterGroupKey = (allGroupsList.length > 0 ? allGroupsList[0].groupKey : '');
         let searchQuery = "";
 
+        function getAvailableGroupsForKelas() {
+            if (activeFilterKelasId > 0) {
+                return allGroupsList.filter(g => Number(g.kelasId) === Number(activeFilterKelasId));
+            }
+            return allGroupsList;
+        }
+
+        function syncGroupNavigationControls(availableGroups) {
+            const rombelSelect = document.getElementById('filter-rombel');
+            const prevGrpBtn = document.getElementById('btn-prev-group');
+            const nextGrpBtn = document.getElementById('btn-next-group');
+            const hintEl = document.getElementById('filter-scope-hint');
+
+            if (hintEl) {
+                hintEl.textContent = currentViewMode === 'table'
+                    ? 'Menampilkan 1 tabel kelas aktif agar efisien'
+                    : 'Pilih rombel atau tampilkan semua di Form Kartu';
+            }
+
+            if (rombelSelect) {
+                let optionsHtml = '';
+                if (currentViewMode === 'card' && availableGroups.length > 1) {
+                    const totalInKelas = availableGroups.reduce((acc, g) => acc + (g.count || 0), 0);
+                    optionsHtml += '<option value="ALL">Semua Rombel (' + totalInKelas + ' santri)</option>';
+                }
+                optionsHtml += availableGroups.map(g => {
+                    const suffix = g.kelasName && g.label !== g.kelasName ? ' (' + g.kelasName + ')' : '';
+                    return '<option value="' + escHtmlJs(g.groupKey) + '">' + escHtmlJs(g.label + suffix) + ' — ' + g.count + ' santri</option>';
+                }).join('');
+
+                rombelSelect.innerHTML = optionsHtml || '<option value="">Tidak ada kelas</option>';
+
+                if (currentViewMode === 'table') {
+                    // Pada mode Tabel PC, paksa selalu aktif tepat 1 kelas/rombel agar fokus dan efisien
+                    if (!activeFilterGroupKey || activeFilterGroupKey === 'ALL' || !availableGroups.some(g => g.groupKey === activeFilterGroupKey)) {
+                        activeFilterGroupKey = availableGroups.length > 0 ? availableGroups[0].groupKey : '';
+                    }
+                } else {
+                    if (!activeFilterGroupKey) {
+                        activeFilterGroupKey = availableGroups.length > 1 ? 'ALL' : (availableGroups[0] ? availableGroups[0].groupKey : '');
+                    } else if (activeFilterGroupKey !== 'ALL' && !availableGroups.some(g => g.groupKey === activeFilterGroupKey)) {
+                        activeFilterGroupKey = availableGroups.length > 0 ? availableGroups[0].groupKey : '';
+                    }
+                }
+                if (activeFilterGroupKey) {
+                    rombelSelect.value = activeFilterGroupKey;
+                }
+            }
+
+            const activeIdx = availableGroups.findIndex(g => g.groupKey === activeFilterGroupKey);
+            if (prevGrpBtn) {
+                prevGrpBtn.disabled = (availableGroups.length <= 1 || activeIdx <= 0);
+            }
+            if (nextGrpBtn) {
+                nextGrpBtn.disabled = (availableGroups.length <= 1 || activeIdx === -1 || activeIdx >= availableGroups.length - 1);
+            }
+
+            // Update Active Class Banner di atas Tabel PC
+            const activeTitleEl = document.getElementById('table-active-class-title');
+            const activeSubEl = document.getElementById('table-active-class-sub');
+            const activeBadgeEl = document.getElementById('table-active-class-badge');
+            const activeGrp = availableGroups.find(g => g.groupKey === activeFilterGroupKey) || availableGroups[0];
+            if (activeTitleEl) {
+                activeTitleEl.textContent = activeGrp ? activeGrp.label : 'Kelas Aktif';
+            }
+            if (activeSubEl) {
+                activeSubEl.textContent = activeGrp && activeGrp.kelasName && activeGrp.label !== activeGrp.kelasName
+                    ? 'Tingkat: ' + activeGrp.kelasName
+                    : 'Tabel Nilai Kelas Aktif';
+            }
+            if (activeBadgeEl && availableGroups.length > 0) {
+                const pos = Math.max(0, availableGroups.findIndex(g => g.groupKey === (activeGrp ? activeGrp.groupKey : '')));
+                activeBadgeEl.textContent = 'Kelas ' + (pos + 1) + ' dari ' + availableGroups.length;
+            }
+        }
+
         function applyCardFilter() {
+            const availableGroups = getAvailableGroupsForKelas();
+            syncGroupNavigationControls(availableGroups);
+
             filteredSantriList = santriList.filter(s => {
                 if (activeFilterKelasId > 0 && Number(s.kelasId) !== Number(activeFilterKelasId)) return false;
-                if (activeFilterRombelId > 0 && Number(s.rombelId) !== Number(activeFilterRombelId)) return false;
+                if (currentViewMode === 'table') {
+                    if (activeFilterGroupKey && s.groupKey !== activeFilterGroupKey) return false;
+                } else {
+                    if (activeFilterGroupKey && activeFilterGroupKey !== 'ALL' && s.groupKey !== activeFilterGroupKey) return false;
+                }
                 if (searchQuery.trim() !== '') {
-                    const q = searchQuery.toLowerCase();
+                    const q = searchQuery.toLowerCase().trim();
                     const matchName = (s.nama || '').toLowerCase().includes(q);
                     const matchNis = (s.nis || '').toLowerCase().includes(q);
                     if (!matchName && !matchNis) return false;
                 }
                 return true;
             });
-
-            // Update Rombel options dynamically based on selected Kelas
-            const rombelSelect = document.getElementById('card-filter-rombel');
-            if (rombelSelect) {
-                const currentVal = rombelSelect.value;
-                let availableRombels = santriList;
-                if (activeFilterKelasId > 0) {
-                    availableRombels = availableRombels.filter(s => Number(s.kelasId) === Number(activeFilterKelasId));
-                }
-                const uniqueRombels = [];
-                const seenRombel = new Set();
-                availableRombels.forEach(s => {
-                    if (s.rombelId && !seenRombel.has(s.rombelId)) {
-                        seenRombel.add(s.rombelId);
-                        uniqueRombels.push({ id: s.rombelId, nama: s.rombelName });
-                    }
-                });
-                uniqueRombels.sort((a,b) => a.nama.localeCompare(b.nama));
-                rombelSelect.innerHTML = '<option value="0">Semua Rombel (' + availableRombels.length + ')</option>' +
-                    uniqueRombels.map(r => '<option value="' + r.id + '">' + escHtmlJs(r.nama) + '</option>').join('');
-                if (seenRombel.has(Number(currentVal))) {
-                    rombelSelect.value = currentVal;
-                } else {
-                    rombelSelect.value = "0";
-                    activeFilterRombelId = 0;
-                }
-            }
 
             // Rebuild jump selector
             const jumpSel = document.getElementById('card-jump-select');
@@ -1992,14 +2072,37 @@ export const generateRaporFormHtml = (
                 }
             }
 
-            // Filter Table View rows too
+            // Filter Table View rows (strictly 1 active class/rombel on PC) + re-number visible rows cleanly
+            const matchedSet = new Set(filteredSantriList.map(fs => fs.id));
+            let visibleCounter = 0;
             santriList.forEach(s => {
                 const rowEl = document.getElementById('row_santri_' + s.id);
                 if (rowEl) {
-                    const isMatch = filteredSantriList.some(fs => fs.id === s.id);
+                    const isMatch = matchedSet.has(s.id);
                     rowEl.style.display = isMatch ? '' : 'none';
+                    if (isMatch) {
+                        visibleCounter++;
+                        const numCell = rowEl.querySelector('.row-num-cell');
+                        if (numCell) numCell.textContent = String(visibleCounter);
+                    }
                 }
             });
+
+            const tableCountEl = document.getElementById('table-visible-count');
+            if (tableCountEl) {
+                tableCountEl.textContent = visibleCounter + ' Santri Ditampilkan';
+            }
+            const tableEmptyEl = document.getElementById('table-empty-state');
+            const tableScrollEl = document.getElementById('table-scroll-wrapper');
+            if (tableEmptyEl && tableScrollEl) {
+                if (visibleCounter === 0) {
+                    tableEmptyEl.style.display = 'block';
+                    tableScrollEl.style.display = 'none';
+                } else {
+                    tableEmptyEl.style.display = 'none';
+                    tableScrollEl.style.display = 'block';
+                }
+            }
 
             // Show first card or empty state
             if (filteredSantriList.length > 0) {
@@ -2022,12 +2125,25 @@ export const generateRaporFormHtml = (
 
         function onKelasFilterChange(val) {
             activeFilterKelasId = parseInt(val) || 0;
-            activeFilterRombelId = 0;
+            const avail = getAvailableGroupsForKelas();
+            activeFilterGroupKey = (currentViewMode === 'card' && avail.length > 1)
+                ? 'ALL'
+                : (avail.length > 0 ? avail[0].groupKey : '');
             applyCardFilter();
         }
 
-        function onRombelFilterChange(val) {
-            activeFilterRombelId = parseInt(val) || 0;
+        function onGroupFilterChange(val) {
+            activeFilterGroupKey = val || '';
+            applyCardFilter();
+        }
+
+        function stepActiveGroup(delta) {
+            const avail = getAvailableGroupsForKelas();
+            if (avail.length === 0) return;
+            const curIdx = avail.findIndex(g => g.groupKey === activeFilterGroupKey);
+            const baseIdx = curIdx === -1 ? 0 : curIdx;
+            const nextIdx = Math.max(0, Math.min(avail.length - 1, baseIdx + delta));
+            activeFilterGroupKey = avail[nextIdx].groupKey;
             applyCardFilter();
         }
 
@@ -2064,7 +2180,7 @@ export const generateRaporFormHtml = (
         function nextCard() { showFilteredCard(currentFilteredIndex + 1); }
         function prevCard() { showFilteredCard(currentFilteredIndex - 1); }
 
-        function saveDraft() { 
+        function saveDraft(silent = false) { 
             try { 
                 const inputKeys = ${JSON.stringify(inputKeysToSave)}; 
                 const draft = { updatedAt: new Date().toISOString(), records: {} }; 
@@ -2077,8 +2193,12 @@ export const generateRaporFormHtml = (
                     draft.records[sid] = row; 
                 }); 
                 localStorage.setItem(storageKey, JSON.stringify(draft)); 
-                showFormToast('Draft nilai berhasil disimpan di perangkat ini.', 'success'); 
-            } catch (e) { showFormToast('Gagal menyimpan draft: ' + e.message, 'error'); } 
+                if (!silent) {
+                    showFormToast('Draft nilai berhasil disimpan di perangkat ini.', 'success'); 
+                }
+            } catch (e) {
+                if (!silent) showFormToast('Gagal menyimpan draft: ' + e.message, 'error');
+            } 
         }
 
         function loadDraft() { 
@@ -2159,10 +2279,14 @@ export const generateRaporFormHtml = (
                 btn.innerHTML = '<span class="inline-block animate-spin mr-1">↻</span>Memuat...';
             }
             try {
-                const res = await fetch(url, { method: 'GET' });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                const raw = await res.json();
-                const rawRows = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : []);
+                const targetTahun = ${JSON.stringify(config.tahunAjaran)};
+                const targetSemester = ${JSON.stringify(config.semester)};
+                const targetTemplateId = ${JSON.stringify(config.template.id)};
+                const rawRows = await fetchCloudRowsUniversal(url, {
+                    tahunAjaran: targetTahun,
+                    semester: targetSemester,
+                    templateId: targetTemplateId
+                });
                 const rows = [...rawRows].sort((a, b) => {
                     const ta = a && a.Timestamp ? new Date(a.Timestamp).getTime() : 0;
                     const tb = b && b.Timestamp ? new Date(b.Timestamp).getTime() : 0;
@@ -2170,9 +2294,6 @@ export const generateRaporFormHtml = (
                     return ta - tb;
                 });
                 const inputOnlySet = new Set(${JSON.stringify(inputOnlyKeys)});
-                const targetTahun = ${JSON.stringify(config.tahunAjaran)};
-                const targetSemester = ${JSON.stringify(config.semester)};
-                const targetTemplateId = ${JSON.stringify(config.template.id)};
                 const touchedStudents = new Set();
 
                 rows.forEach(item => {
@@ -2212,14 +2333,16 @@ export const generateRaporFormHtml = (
                 });
 
                 santriIds.forEach(id => calculateRow(id, true));
+                if (hasClassAvgFormula) santriIds.forEach(id => runRowFormulasOnce(id));
+                calculateRanks();
                 const appliedCount = touchedStudents.size;
                 if (appliedCount > 0) {
-                    showFormToast('Berhasil memuat nilai terbaru dari Cloud untuk ' + appliedCount + ' santri.', 'success');
+                    showFormToast('Berhasil memuat nilai terbaru dari ${providerMeta.name} untuk ' + appliedCount + ' santri.', 'success');
                 } else {
-                    showFormToast('Belum ada nilai tersimpan di Cloud untuk periode & template ini.', 'info');
+                    showFormToast('Belum ada nilai tersimpan di ${providerMeta.name} untuk periode & template ini.', 'info');
                 }
             } catch (err) {
-                showFormToast('Gagal memuat dari Cloud: ' + err.message, 'error');
+                showFormToast('Gagal memuat dari ${providerMeta.name}: ' + (err && err.message ? err.message : err), 'error');
             } finally {
                 if (btn) {
                     btn.disabled = false;
@@ -2231,7 +2354,7 @@ export const generateRaporFormHtml = (
         function fillColumnEmptyWithDash(key, label) {
             let filled = 0;
             santriList.forEach(s => {
-                const tr = document.getElementById('tr_' + s.id);
+                const tr = document.getElementById('row_santri_' + s.id);
                 if (tr && tr.style.display === 'none') return;
                 const el = document.getElementById('val_' + s.id + '_' + key);
                 const cardEl = document.getElementById('card_val_' + s.id + '_' + key);
@@ -2239,16 +2362,17 @@ export const generateRaporFormHtml = (
                 if (cur === '') {
                     if (el) el.value = '-';
                     if (cardEl) cardEl.value = '-';
-                    calculateRow(s.id);
+                    calculateRow(s.id, true);
                     filled++;
                 }
             });
             if (filled > 0) {
-                updateAllRankings();
+                if (hasClassAvgFormula) santriIds.forEach(id => runRowFormulasOnce(id));
+                calculateRanks();
                 saveDraft(true);
                 showFormToast(filled + ' sel kosong pada kolom "' + label + '" diisi tanda "-" (belum diajarkan).', 'success');
             } else {
-                showFormToast('Seluruh sel santri pada kolom "' + label + '" sudah terisi.', 'info');
+                showFormToast('Seluruh sel santri pada kelas aktif untuk kolom "' + label + '" sudah terisi.', 'info');
             }
         }
 
@@ -2375,7 +2499,6 @@ export const generateRaporFormHtml = (
             } else {
                 setViewMode('table');
             }
-            applyCardFilter();
         });
     </script>
 </head>
@@ -2404,28 +2527,28 @@ export const generateRaporFormHtml = (
                 <div class="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
                     <!-- Switch View Mode -->
                     <div class="bg-teal-900/90 p-1 rounded-xl flex items-center border border-white/20 shadow-inner">
-                        <button id="btn-mode-table" onclick="setViewMode('table')" class="bg-white text-teal-900 font-black px-3.5 py-1.5 rounded-lg text-xs shadow-sm transition-all">
+                        <button id="btn-mode-table" onclick="setViewMode('table')" class="bg-white text-teal-900 font-black px-3.5 py-1.5 rounded-lg text-xs shadow-sm transition-all cursor-pointer">
                             <i class="bi bi-table mr-1"></i> Tabel Leger
                         </button>
-                        <button id="btn-mode-card" onclick="setViewMode('card')" class="text-white font-semibold px-3.5 py-1.5 rounded-lg text-xs hover:bg-white/15 transition-all">
+                        <button id="btn-mode-card" onclick="setViewMode('card')" class="text-white font-semibold px-3.5 py-1.5 rounded-lg text-xs hover:bg-white/15 transition-all cursor-pointer">
                             <i class="bi bi-card-text mr-1"></i> Form Kartu
                         </button>
                     </div>
 
                     ${scriptUrl && config.submissionMethod !== 'whatsapp' ? `
-                    <button id="cloud-pull-btn" onclick="loadFromCloudGas()" class="bg-white/15 border border-white/30 text-white px-3 py-2 rounded-xl font-bold text-xs hover:bg-white/25 transition-all flex items-center gap-1.5" title="Tarik data nilai terakhir yang sudah masuk di Cloud Spreadsheet">
-                        <i class="bi bi-cloud-arrow-down"></i> Muat Cloud
+                    <button id="cloud-pull-btn" onclick="loadFromCloudGas()" class="bg-white/15 border border-white/30 text-white px-3 py-2 rounded-xl font-bold text-xs hover:bg-white/25 transition-all flex items-center gap-1.5 cursor-pointer" title="Tarik data nilai terakhir dari ${escHtml(providerMeta.name)}">
+                        <i class="bi bi-cloud-arrow-down"></i> Muat Cloud (${escHtml(providerMeta.shortName)})
                     </button>
                     ` : ''}
 
                     <!-- Draft & Action Buttons -->
-                    <button onclick="saveDraft()" class="bg-white/15 border border-white/30 text-white px-3 py-2 rounded-xl font-bold text-xs hover:bg-white/25 transition-all flex items-center gap-1.5">
+                    <button onclick="saveDraft()" class="bg-white/15 border border-white/30 text-white px-3 py-2 rounded-xl font-bold text-xs hover:bg-white/25 transition-all flex items-center gap-1.5 cursor-pointer">
                         <i class="bi bi-save"></i> Simpan Draft
                     </button>
-                    <button onclick="downloadBackupJson()" class="bg-white/15 border border-white/30 text-white px-3 py-2 rounded-xl font-bold text-xs hover:bg-white/25 transition-all flex items-center gap-1.5" title="Download file JSON cadangan">
+                    <button onclick="downloadBackupJson()" class="bg-white/15 border border-white/30 text-white px-3 py-2 rounded-xl font-bold text-xs hover:bg-white/25 transition-all flex items-center gap-1.5 cursor-pointer" title="Download file JSON cadangan">
                         <i class="bi bi-download"></i> Backup
                     </button>
-                    <button onclick="submitData()" id="submit-btn" class="bg-amber-400 hover:bg-amber-300 text-teal-950 px-4 py-2 rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-2 active:scale-95">
+                    <button onclick="submitData()" id="submit-btn" class="bg-amber-400 hover:bg-amber-300 text-teal-950 px-4 py-2 rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-2 active:scale-95 cursor-pointer">
                         <i class="bi bi-send-fill"></i> Kirim Nilai
                     </button>
                 </div>
@@ -2441,11 +2564,42 @@ export const generateRaporFormHtml = (
                 </div>
             </div>
         </div>
-        
-        <!-- TABLE VIEW -->
-        <div id="table-view-container" class="flex-grow overflow-auto p-2 bg-slate-50">
+
+        <!-- SHARED FILTER & SHEET TABS WORKSPACE BAR (Aktif di PC Tabel & HP Kartu) -->
+        <div class="px-3 pt-3 md:px-4 md:pt-3.5 bg-slate-50 border-b border-slate-200/80 shrink-0">
+            ${sharedFilterToolbarHtml}
             ${sheetTabsToolbarHtml}
-            <div class="border border-slate-300 rounded-xl overflow-x-auto shadow-xs bg-white">
+        </div>
+        
+        <!-- TABLE VIEW (1 Tabel Kelas Aktif per Filter) -->
+        <div id="table-view-container" class="flex-grow overflow-auto p-3 md:p-4 bg-slate-50 space-y-2.5">
+            <div id="table-active-class-bar" class="bg-teal-700 text-white px-3.5 py-2.5 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+                        <i class="bi bi-people-fill text-sm"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span id="table-active-class-title" class="text-xs sm:text-sm font-black truncate">${escHtml(contextName)}</span>
+                            <span id="table-active-class-badge" class="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-md whitespace-nowrap">1 Kelas Aktif</span>
+                        </div>
+                        <div id="table-active-class-sub" class="text-[11px] text-teal-100/90">Tabel Nilai Kelas Aktif</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <span id="table-visible-count" class="text-[11px] font-bold bg-teal-900/60 border border-white/15 px-2.5 py-1 rounded-lg tabular-nums">
+                        ${targetSantri.length} Santri Ditampilkan
+                    </span>
+                </div>
+            </div>
+
+            <div id="table-empty-state" style="display: none;" class="bg-white p-8 rounded-2xl border-2 border-dashed border-slate-300 text-center text-slate-500">
+                <div class="text-2xl mb-1.5">🔍</div>
+                <h4 class="font-bold text-slate-800 text-sm mb-1">Tidak ada santri yang cocok</h4>
+                <p class="text-xs text-slate-500">Ubah kata kunci pencarian atau pilih Rombel lain pada filter di atas.</p>
+            </div>
+
+            <div id="table-scroll-wrapper" class="border border-slate-300 rounded-xl overflow-auto max-h-[68vh] shadow-xs bg-white">
                 <table class="w-full text-sm border-collapse">
                     <thead class="sticky-header">${theadHtml}</thead>
                     <tbody class="divide-y divide-slate-200">${tbodyHtml}</tbody>
@@ -2455,20 +2609,14 @@ export const generateRaporFormHtml = (
 
         <!-- CARD / FORM VIEW (Mobile Friendly) -->
         <div id="card-view-container" class="flex-grow overflow-auto p-3 md:p-5 bg-slate-50/70" style="display: none;">
-            <!-- Filter Toolbar -->
-            ${filterToolbarHtml}
-
-            <!-- Sheet Tabs Toolbar if multi-sheet -->
-            ${sheetTabsToolbarHtml}
-
             <!-- Stepper Navigation Bar -->
             <div class="max-w-3xl mx-auto bg-white p-3 rounded-2xl border border-slate-200 shadow-sm mb-4 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-20">
                 <div class="flex items-center gap-2">
-                    <button id="card-btn-prev" onclick="prevCard()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs disabled:opacity-40 transition-colors flex items-center gap-1">
+                    <button id="card-btn-prev" onclick="prevCard()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs disabled:opacity-40 transition-colors flex items-center gap-1 cursor-pointer">
                         <i class="bi bi-chevron-left"></i> Sebelumnya
                     </button>
                     <span id="card-progress-text" class="text-xs font-black text-teal-900 bg-teal-50 px-3 py-2 rounded-xl border border-teal-200">1 / ${targetSantri.length}</span>
-                    <button id="card-btn-next" onclick="nextCard()" class="px-3.5 py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs disabled:opacity-40 transition-colors flex items-center gap-1">
+                    <button id="card-btn-next" onclick="nextCard()" class="px-3.5 py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs disabled:opacity-40 transition-colors flex items-center gap-1 cursor-pointer">
                         Berikutnya <i class="bi bi-chevron-right"></i>
                     </button>
                 </div>
@@ -2481,7 +2629,7 @@ export const generateRaporFormHtml = (
 
             <div class="max-w-3xl mx-auto">
                 <!-- Empty state if filter doesn't match -->
-                <div id="card-empty-state" class="hidden bg-white p-8 rounded-2xl border-2 border-dashed border-slate-300 text-center text-slate-500">
+                <div id="card-empty-state" style="display: none;" class="bg-white p-8 rounded-2xl border-2 border-dashed border-slate-300 text-center text-slate-500">
                     <div class="text-3xl mb-2">🔍</div>
                     <h4 class="font-bold text-slate-800 text-sm mb-1">Tidak ada santri yang cocok</h4>
                     <p class="text-xs text-slate-500">Silakan ubah pilihan filter Kelas / Rombel atau kata kunci pencarian Anda.</p>
@@ -2533,28 +2681,25 @@ export const generateRaporFormHtml = (
 
 export const fetchRaporFromCloud = async (
     scriptUrl: string,
-    filterOptions?: ParseRaporFilterOptions
+    filterOptions?: ParseRaporFilterOptions,
+    cloudOptions?: {
+        backendProvider?: RaporCloudProvider;
+        apiKey?: string;
+    }
 ): Promise<any[]> => {
     try {
-        let targetUrl = scriptUrl.trim();
-        if (filterOptions) {
-            const params = new URLSearchParams();
-            if (filterOptions.tahunAjaran) params.set('tahunAjaran', filterOptions.tahunAjaran);
-            if (filterOptions.semester) params.set('semester', filterOptions.semester);
-            if (filterOptions.templateId) params.set('templateId', filterOptions.templateId);
-            if (filterOptions.rombelId) params.set('rombelId', String(filterOptions.rombelId));
-            const qs = params.toString();
-            if (qs) {
-                targetUrl += (targetUrl.includes('?') ? '&' : '?') + qs;
-            }
-        }
-        const response = await fetch(targetUrl, { method: 'GET' });
-        if (!response.ok) throw new Error("Gagal mengambil data dari Google Sheet (HTTP " + response.status + ")");
-        const rawData = await response.json();
-        if (Array.isArray(rawData)) return rawData;
-        if (rawData && Array.isArray(rawData.records)) return rawData.records;
-        throw new Error("Format respons Google Script tidak valid.");
-    } catch (e) { console.error("Fetch Cloud Error:", e); throw e; }
+        return await fetchRaporFromCloudAdapter(
+            {
+                endpointUrl: scriptUrl,
+                backendProvider: cloudOptions?.backendProvider || 'gas',
+                apiKey: cloudOptions?.apiKey
+            },
+            filterOptions
+        );
+    } catch (e) {
+        console.error('Fetch Cloud Error:', e);
+        throw e;
+    }
 };
 
 const decodeBase64Utf8 = (b64: string): string => {
@@ -2779,13 +2924,14 @@ export const syncRaporStructuredData = async (
             const santriObj = santriLookup.get(santriIdNum);
             const existing = periodMap.get(santriIdNum);
 
+            const activeAcademicYear = getDefaultAcademicYear(settings);
+            const isHistoricalPeriod = Boolean(activeAcademicYear && metaTahun !== activeAcademicYear);
             const recRombelId = Number(rec.rombelId) || Number(payload.meta?.rombelId) || 0;
-            // Utamakan rombel aktif santri di DB lokal jika ada, atau fallback ke RombelID kiriman
-            const targetRombelId =
-                (santriObj && !santriObj.deleted && santriObj.rombelId ? Number(santriObj.rombelId) : 0) ||
-                recRombelId ||
-                existing?.rombelId ||
-                0;
+            // Untuk tahun ajaran aktif, prioritaskan rombel aktif santri saat ini.
+            // Untuk periode arsip (historis), prioritaskan snapshot rombel pada payload/record agar data alumni/kenaikan kelas tidak tertimpa kelas baru.
+            const targetRombelId = isHistoricalPeriod
+                ? (recRombelId || existing?.rombelId || (santriObj && !santriObj.deleted && santriObj.rombelId ? Number(santriObj.rombelId) : 0) || 0)
+                : ((santriObj && !santriObj.deleted && santriObj.rombelId ? Number(santriObj.rombelId) : 0) || recRombelId || existing?.rombelId || 0);
 
             if (filterOptions?.rombelId && filterOptions.rombelId > 0 && Number(targetRombelId) !== Number(filterOptions.rombelId)) {
                 continue;
@@ -2810,9 +2956,13 @@ export const syncRaporStructuredData = async (
             const rombelObj = settings.rombel.find(r => Number(r.id) === Number(targetRombelId));
             const resolvedSantriName = santriObj?.namaLengkap || String(rec.santriName || `Santri #${santriIdNum}`);
             const resolvedRombelName = rombelObj?.nama || String(rec.rombelName || (targetRombelId ? `Rombel #${targetRombelId}` : '-'));
-            const targetKelasId = santriObj?.kelasId || rombelObj?.kelasId || existing?.kelasId || 0;
+            const targetKelasId = isHistoricalPeriod
+                ? (rombelObj?.kelasId || existing?.kelasId || santriObj?.kelasId || 0)
+                : (rombelObj?.kelasId || santriObj?.kelasId || existing?.kelasId || 0);
             const kelasObj = settings.kelas.find(k => Number(k.id) === Number(targetKelasId));
-            const targetJenjangId = santriObj?.jenjangId || kelasObj?.jenjangId || existing?.jenjangId || 0;
+            const targetJenjangId = isHistoricalPeriod
+                ? (kelasObj?.jenjangId || existing?.jenjangId || santriObj?.jenjangId || 0)
+                : (kelasObj?.jenjangId || santriObj?.jenjangId || existing?.jenjangId || 0);
 
             let customData: Record<string, any> = {};
             if (existing && !existing.deleted && existing.customData) {
@@ -3264,36 +3414,18 @@ export const pushRaporGradesToCloud = async (
         records
     };
 
-    const res = await fetch(cleanUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-    }
-
-    let respJson: any = null;
-    try {
-        const rawText = await res.text();
-        if (rawText) respJson = JSON.parse(rawText);
-    } catch {
-        // non-json response fallback
-    }
-
-    if (respJson && respJson.result === 'error') {
-        throw new Error(respJson.error || 'Terjadi kendala saat memperbarui Google Sheet');
-    }
-
-    return {
-        pushedStudents: Number(respJson?.mergedStudents ?? records.length),
-        sheets: Array.isArray(respJson?.sheets) ? respJson.sheets : []
-    };
+    return await pushRaporPayloadToCloudAdapter(
+        {
+            endpointUrl: cleanUrl,
+            backendProvider: params.settings.raporCloudConfig?.backendProvider || 'gas',
+            apiKey: params.settings.raporCloudConfig?.apiKey
+        },
+        payload
+    );
 };
 
 /**
- * Menghapus baris rapor santri pada Google Sheet (GAS) ketika arsip rapor santri dihapus di aplikasi.
+ * Menghapus baris rapor santri pada Cloud Backend aktif (GAS / D1 / Supabase / R2) ketika arsip rapor santri dihapus di aplikasi.
  */
 export const deleteRaporRecordFromCloud = async (params: {
     settings: PondokSettings;
@@ -3316,6 +3448,9 @@ export const deleteRaporRecordFromCloud = async (params: {
             : (params.settings.raporTemplates || []).filter(
                   t => !t.jenjangId || !jObj || Number(t.jenjangId) === Number(jObj.id)
               );
+
+    const provider = params.settings.raporCloudConfig?.backendProvider || 'gas';
+    const apiKey = params.settings.raporCloudConfig?.apiKey;
 
     for (const tpl of candidateTemplates) {
         const payload = {
@@ -3342,10 +3477,13 @@ export const deleteRaporRecordFromCloud = async (params: {
             ]
         };
 
-        await fetch(cleanUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload)
-        });
+        await pushRaporPayloadToCloudAdapter(
+            {
+                endpointUrl: cleanUrl,
+                backendProvider: provider,
+                apiKey
+            },
+            payload
+        );
     }
 };

@@ -310,7 +310,7 @@ export async function executeMergeMapelDuplicates(
             // 4. Migrate Rapor Nilai
             const allRapor = await db.raporRecords.toArray();
             for (const rec of allRapor) {
-                if (!rec.nilai || !Array.isArray(rec.nilai)) continue;
+                if (rec.deleted || !rec.nilai || !Array.isArray(rec.nilai)) continue;
                 let hasDup = false;
                 const newNilai = rec.nilai.map(n => {
                     if (n.mapelId === dup.id) {

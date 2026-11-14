@@ -1200,6 +1200,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
         classAverages: Record<string, number>;
         classOverallAverage: number;
         rombelRecords: RaporRecord[];
+        totalSantri: number;
     }>>(new Map());
 
     // Preview and Batch Modals
@@ -1500,24 +1501,34 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
         return baseRombels.filter(r => kelasInJenjang.includes(r.kelasId));
     }, [filterJenjang, settings, isWaliKelas, allowedWaliRombelIds]);
 
-    // Base active students according to Jenjang, Rombel filter & RBAC (with Rombel -> Kelas -> Jenjang hierarchy fallback)
+    const isActiveAcademicYear = !defaultAcademicYear || filterTahun === defaultAcademicYear;
+
+    // Base period-scoped students according to Jenjang, Rombel filter & RBAC (including historical & Lulus cohorts)
     const baseSantriList = useMemo(() => {
         const targetJId = filterJenjang ? parseInt(filterJenjang, 10) : 0;
         const targetRId = printRombel ? parseInt(printRombel, 10) : 0;
         return santriList.filter(s => {
-            if (s.deleted || s.status !== 'Aktif') return false;
-            if (isWaliKelas && !allowedWaliRombelIds.has(s.rombelId)) return false;
+            if (s.deleted) return false;
+            const rec = periodRecordsMap.get(s.id);
+            if (!isActiveAcademicYear && !rec) return false;
+            if (isActiveAcademicYear && s.status !== 'Aktif' && !rec) return false;
+
+            const effRombelId = (!isActiveAcademicYear || s.status !== 'Aktif')
+                ? (rec?.rombelId || s.rombelId)
+                : s.rombelId;
+
+            if (isWaliKelas && !allowedWaliRombelIds.has(effRombelId)) return false;
             if (targetJId) {
-                const rm = s.rombelId ? settings.rombel.find(r => r.id === s.rombelId) : undefined;
-                const effKelasId = rm?.kelasId || s.kelasId || 0;
+                const rm = effRombelId ? settings.rombel.find(r => r.id === effRombelId) : undefined;
+                const effKelasId = rm?.kelasId || rec?.kelasId || s.kelasId || 0;
                 const kl = effKelasId ? settings.kelas.find(k => k.id === effKelasId) : undefined;
-                const effJenjangId = kl?.jenjangId || s.jenjangId || 0;
+                const effJenjangId = kl?.jenjangId || rec?.jenjangId || s.jenjangId || 0;
                 if (effJenjangId !== targetJId) return false;
             }
-            if (targetRId && s.rombelId !== targetRId) return false;
+            if (targetRId && effRombelId !== targetRId) return false;
             return true;
         });
-    }, [santriList, filterJenjang, printRombel, isWaliKelas, allowedWaliRombelIds, settings.rombel, settings.kelas]);
+    }, [santriList, periodRecordsMap, isActiveAcademicYear, filterJenjang, printRombel, isWaliKelas, allowedWaliRombelIds, settings.rombel, settings.kelas]);
 
     // Compute Leger Calculations per Rombel + Parallel Cohort Rankings (Tingkat Kelas, Marhalah/Jenjang, Global)
     useEffect(() => {
@@ -1527,16 +1538,26 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                 classAverages: Record<string, number>;
                 classOverallAverage: number;
                 rombelRecords: RaporRecord[];
+                totalSantri: number;
             }>();
 
-            // Gunakan seluruh santri aktif se-pondok agar rumus =RANK($TOTAL_NILAI, "kelas" | "jenjang") tetap akurat meskipun sedang memfilter 1 rombel
-            const allActiveSantri = santriList.filter(s => !s.deleted && s.status === 'Aktif');
+            // Gunakan seluruh santri pada periode tersebut agar rumus =RANK($TOTAL_NILAI, "kelas" | "jenjang") tetap akurat meskipun sedang memfilter 1 rombel atau periode arsip
+            const allCohortSantri = santriList.filter(s => {
+                if (s.deleted) return false;
+                const rec = periodRecordsMap.get(s.id);
+                if (!isActiveAcademicYear) return Boolean(rec);
+                return s.status === 'Aktif' || Boolean(rec);
+            });
             const studentsByRombel = new Map<number, Santri[]>();
 
-            allActiveSantri.forEach(s => {
-                const list = studentsByRombel.get(s.rombelId) || [];
+            allCohortSantri.forEach(s => {
+                const rec = periodRecordsMap.get(s.id);
+                const effRombelId = (!isActiveAcademicYear || s.status !== 'Aktif')
+                    ? (rec?.rombelId || s.rombelId)
+                    : s.rombelId;
+                const list = studentsByRombel.get(effRombelId) || [];
                 list.push(s);
-                studentsByRombel.set(s.rombelId, list);
+                studentsByRombel.set(effRombelId, list);
             });
 
             const allRows: StudentLegerRow[] = [];
@@ -1580,7 +1601,8 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
                 newCohortMetaMap.set(rId, {
                     classAverages: rombelData.classAverages,
                     classOverallAverage: rombelData.classAverage,
-                    rombelRecords
+                    rombelRecords,
+                    totalSantri: rombelStudents.length
                 });
 
                 rombelData.students.forEach(row => {
@@ -1600,10 +1622,14 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
 
             allRows.forEach(row => {
                 const s = row.santri;
-                const rombel = settings.rombel.find(r => r.id === s.rombelId);
-                const kelasId = s.kelasId || rombel?.kelasId || 0;
+                const rec = periodRecordsMap.get(s.id);
+                const effRombelId = (!isActiveAcademicYear || s.status !== 'Aktif')
+                    ? (rec?.rombelId || s.rombelId)
+                    : s.rombelId;
+                const rombel = settings.rombel.find(r => r.id === effRombelId);
+                const kelasId = rombel?.kelasId || ((!isActiveAcademicYear || s.status !== 'Aktif') ? (rec?.kelasId || s.kelasId) : (s.kelasId || 0)) || 0;
                 const kelas = kelasId ? settings.kelas.find(k => k.id === kelasId) : undefined;
-                const jenjangId = s.jenjangId || kelas?.jenjangId || 0;
+                const jenjangId = kelas?.jenjangId || ((!isActiveAcademicYear || s.status !== 'Aktif') ? (rec?.jenjangId || s.jenjangId) : (s.jenjangId || 0)) || 0;
 
                 if (kelasId) {
                     const kList = rowsByKelas.get(kelasId) || [];
@@ -1819,9 +1845,13 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, i
     // Helper to build batch data with ranking limit applied
     const buildBatchData = (targetSantri: Santri[], limit: RankingDisplayLimit) => {
         return targetSantri.map(santri => {
+            const rec = periodRecordsMap.get(santri.id) || null;
+            const effRombelId = (!isActiveAcademicYear || santri.status !== 'Aktif')
+                ? (rec?.rombelId || santri.rombelId)
+                : santri.rombelId;
             const row = studentLegerMap.get(santri.id);
-            const cohortMeta = rombelCohortMetaMap.get(santri.rombelId);
-            const rombelTotal = santriList.filter(s => !s.deleted && s.status === 'Aktif' && s.rombelId === santri.rombelId).length || 1;
+            const cohortMeta = rombelCohortMetaMap.get(effRombelId);
+            const rombelTotal = cohortMeta?.totalSantri || cohortMeta?.rombelRecords.length || santriList.filter(s => !s.deleted && s.status === 'Aktif' && s.rombelId === effRombelId).length || 1;
             const effectiveRank = getEffectiveRanking(row?.ranking, limit);
             const effectiveRankKelas = getEffectiveRanking(row?.rankingKelas, limit);
             const effectiveRankJenjang = getEffectiveRanking(row?.rankingJenjang, limit);

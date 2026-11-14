@@ -211,7 +211,7 @@ const buildTahfizhSummaryForSantri = (
     raporRecords?: RaporRecord[]
 ): TranscriptTahfizhSummary | null => {
     const list = (tahfizhRecords || [])
-        .filter(t => Number(t.santriId) === Number(santriId))
+        .filter(t => !t.deleted && Number(t.santriId) === Number(santriId))
         .sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || '') || (b.id || 0) - (a.id || 0));
 
     if (list.length > 0) {

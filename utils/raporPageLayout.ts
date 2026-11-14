@@ -857,6 +857,107 @@ export function getRenderableRowCellsForPage(
             }
         }
 
+        // Handle case where a vertical page split starts inside a rowSpan that began on an earlier page
+        if (rIdx === sliceRowStart && sliceRowStart > 0) {
+            let foundVertMaster: { cell: GridCell; mr: number; mc: number } | null = null;
+            for (let mr = sliceRowStart - 1; mr >= 0; mr--) {
+                const aboveRow = cells[mr];
+                if (!aboveRow) continue;
+                for (let mc = 0; mc <= c; mc++) {
+                    const cand = aboveRow[mc];
+                    if (cand && !cand.hidden) {
+                        const rEnd = mr + Math.max(1, cand.rowSpan || 1) - 1;
+                        const cEnd = mc + Math.max(1, cand.colSpan || 1) - 1;
+                        if (rEnd >= sliceRowStart && c >= mc && c <= cEnd) {
+                            foundVertMaster = { cell: cand, mr, mc };
+                            break;
+                        }
+                    }
+                }
+                if (foundVertMaster) break;
+            }
+
+            if (foundVertMaster) {
+                const blockStartC = Math.max(startCol, foundVertMaster.mc);
+                if (c === blockStartC) {
+                    const masterCell = foundVertMaster.cell;
+                    const spanEndRow = foundVertMaster.mr + Math.max(1, masterCell.rowSpan || 1) - 1;
+                    const spanEndCol = foundVertMaster.mc + Math.max(1, masterCell.colSpan || 1) - 1;
+                    const clampedRowSpan = Math.min(spanEndRow - sliceRowStart + 1, sliceRowEnd - sliceRowStart + 1);
+                    const clampedColSpan = Math.min(spanEndCol - c + 1, endCol - c + 1);
+                    const origB = masterCell.borders || { top: false, right: false, bottom: false, left: false };
+
+                    result.push({
+                        cell: { ...masterCell },
+                        masterR: foundVertMaster.mr,
+                        masterC: foundVertMaster.mc,
+                        renderCol: c,
+                        colSpan: clampedColSpan,
+                        rowSpan: clampedRowSpan,
+                        borders: {
+                            top: Boolean(origB.top),
+                            right: Boolean(origB.right),
+                            bottom: spanEndRow <= sliceRowEnd ? Boolean(origB.bottom) : false,
+                            left: Boolean(origB.left)
+                        }
+                    });
+                    c += clampedColSpan;
+                    continue;
+                } else {
+                    c++;
+                    continue;
+                }
+            }
+        }
+
+        // Check if this hidden cell is actually covered by a master cell above or to the left
+        let isCoveredByMaster = false;
+        // Check master to the left on this row
+        for (let mc = c - 1; mc >= 0; mc--) {
+            const cand = row[mc];
+            if (cand && !cand.hidden) {
+                if (mc + Math.max(1, cand.colSpan || 1) > c) {
+                    isCoveredByMaster = true;
+                }
+                break;
+            }
+        }
+        // Check master from rows above
+        if (!isCoveredByMaster) {
+            for (let mr = rIdx - 1; mr >= 0; mr--) {
+                const aboveRow = cells[mr];
+                if (!aboveRow) continue;
+                for (let mc = 0; mc <= c; mc++) {
+                    const cand = aboveRow[mc];
+                    if (cand && !cand.hidden && (cand.rowSpan || 1) > 1) {
+                        const rEnd = mr + (cand.rowSpan || 1) - 1;
+                        const cEnd = mc + (cand.colSpan || 1) - 1;
+                        if (rIdx >= mr && rIdx <= rEnd && c >= mc && c <= cEnd) {
+                            isCoveredByMaster = true;
+                            break;
+                        }
+                    }
+                }
+                if (isCoveredByMaster) break;
+            }
+        }
+
+        if (!isCoveredByMaster && directCell) {
+            // Orphan hidden cell! Recover and render as standard 1x1 cell to prevent table column shifting
+            const origBorders = directCell.borders || { top: false, right: false, bottom: false, left: false };
+            result.push({
+                cell: { ...directCell, hidden: false, rowSpan: 1, colSpan: 1 },
+                masterR: rIdx,
+                masterC: c,
+                renderCol: c,
+                colSpan: 1,
+                rowSpan: 1,
+                borders: { ...origBorders }
+            });
+            c++;
+            continue;
+        }
+
         // Hidden cell covered by an in-page rowSpan/colSpan above or to the left -> skip rendering <td>
         c++;
     }

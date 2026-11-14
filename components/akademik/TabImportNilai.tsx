@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { fetchRaporFromCloud, parseRaporDataV2, syncRaporStructuredData } from '../../services/academicService';
+import { RaporCloudProvider, getRaporCloudProviderMeta } from '../../services/raporCloudService';
 import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
 
 export const TabImportNilai: React.FC = () => {
@@ -14,20 +15,31 @@ export const TabImportNilai: React.FC = () => {
         settings.raporCloudConfig?.googleScriptUrl ? 'cloud' : 'wa'
     );
     const [waInput, setWaInput] = useState('');
+    const [backendProvider, setBackendProvider] = useState<RaporCloudProvider>(
+        settings.raporCloudConfig?.backendProvider || 'gas'
+    );
     const [cloudScriptUrl, setCloudScriptUrl] = useState(
         settings.raporCloudConfig?.googleScriptUrl || ''
     );
+    const [cloudApiKey, setCloudApiKey] = useState(settings.raporCloudConfig?.apiKey || '');
+    const providerMeta = useMemo(() => getRaporCloudProviderMeta(backendProvider), [backendProvider]);
     const [filterPeriodOnly, setFilterPeriodOnly] = useState<boolean>(false);
     const [targetTahun, setTargetTahun] = useState<string>(defaultYear);
     const [targetSemester, setTargetSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
     const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
+        if (settings.raporCloudConfig?.backendProvider) {
+            setBackendProvider(settings.raporCloudConfig.backendProvider);
+        }
         if (settings.raporCloudConfig?.googleScriptUrl && !cloudScriptUrl) {
             setCloudScriptUrl(settings.raporCloudConfig.googleScriptUrl);
         }
+        if (settings.raporCloudConfig?.apiKey && !cloudApiKey) {
+            setCloudApiKey(settings.raporCloudConfig.apiKey);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [settings.raporCloudConfig?.googleScriptUrl]);
+    }, [settings.raporCloudConfig?.googleScriptUrl, settings.raporCloudConfig?.backendProvider, settings.raporCloudConfig?.apiKey]);
 
     const handleProcessImport = async () => {
         if (!canWrite) return;
@@ -57,7 +69,10 @@ export const TabImportNilai: React.FC = () => {
                 }
             } else {
                 const cleanUrl = cloudScriptUrl.trim();
-                const cloudData = await fetchRaporFromCloud(cleanUrl, filterOpts);
+                const cloudData = await fetchRaporFromCloud(cleanUrl, filterOpts, {
+                    backendProvider,
+                    apiKey: cloudApiKey.trim()
+                });
                 const syncRes = await syncRaporStructuredData(cloudData, settings, filterOpts);
                 totalSuccess = syncRes.successCount;
                 totalErrors = syncRes.errors;
@@ -67,7 +82,9 @@ export const TabImportNilai: React.FC = () => {
                         ...settings,
                         raporCloudConfig: {
                             ...(settings.raporCloudConfig || {}),
+                            backendProvider,
                             googleScriptUrl: cleanUrl,
+                            apiKey: cloudApiKey.trim(),
                             submissionMethod: settings.raporCloudConfig?.submissionMethod || 'hybrid',
                             tabMode: settings.raporCloudConfig?.tabMode || 'per_rombel',
                             lastSyncedAt: new Date().toISOString(),
@@ -99,7 +116,7 @@ export const TabImportNilai: React.FC = () => {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-4">
-                <h3 className="font-bold text-gray-800">Impor Data Nilai (WhatsApp &amp; 1 Link Cloud GAS)</h3>
+                <h3 className="font-bold text-gray-800">Impor Data Nilai (WhatsApp &amp; Cloud {providerMeta.shortName})</h3>
 
                 {/* Source Selection */}
                 <div className="flex gap-2">
@@ -123,7 +140,7 @@ export const TabImportNilai: React.FC = () => {
                                 : 'bg-white border-gray-300 text-gray-600'
                         }`}
                     >
-                        <i className="bi bi-cloud-arrow-down mr-1"></i> Via Google Cloud (Multi-Tab)
+                        <i className="bi bi-cloud-arrow-down mr-1"></i> Via Cloud ({providerMeta.shortName})
                     </button>
                 </div>
 
@@ -138,16 +155,52 @@ export const TabImportNilai: React.FC = () => {
                     <div className="space-y-3">
                         <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg text-[11px] text-blue-800 leading-relaxed">
                             <i className="bi bi-info-circle-fill mr-1"></i>
-                            <b>1 Link GAS Multi-Tab:</b> Sistem menarik seluruh tab Rombel &amp; Template dari Spreadsheet Anda dan menggabungkannya secara otomatis berdasarkan ID Santri.
+                            <b>1 Endpoint Cloud Universal:</b> Sistem menarik seluruh kiriman nilai dari backend <strong>{providerMeta.name}</strong> Anda dan menggabungkannya otomatis per Santri.
                         </div>
-                        <label className="block text-xs font-bold text-gray-700">URL Web App (Google Script)</label>
-                        <input
-                            type="text"
-                            value={cloudScriptUrl}
-                            onChange={e => setCloudScriptUrl(e.target.value)}
-                            placeholder="https://script.google.com/macros/s/.../exec"
-                            className="w-full border rounded-lg p-2.5 text-xs font-mono"
-                        />
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                            {(['gas', 'cloudflare_d1', 'supabase', 'cloudflare_r2'] as RaporCloudProvider[]).map(pv => {
+                                const pm = getRaporCloudProviderMeta(pv);
+                                return (
+                                    <button
+                                        key={pv}
+                                        type="button"
+                                        onClick={() => setBackendProvider(pv)}
+                                        className={`py-1.5 px-2 rounded-lg border text-xs font-bold transition-all ${
+                                            backendProvider === pv
+                                                ? 'bg-teal-50 border-teal-500 text-teal-800'
+                                                : 'bg-white border-gray-300 text-gray-600'
+                                        }`}
+                                    >
+                                        {pm.shortName}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">{providerMeta.endpointLabel}</label>
+                            <input
+                                type="text"
+                                value={cloudScriptUrl}
+                                onChange={e => setCloudScriptUrl(e.target.value)}
+                                placeholder={providerMeta.endpointPlaceholder}
+                                className="w-full border rounded-lg p-2.5 text-xs font-mono"
+                            />
+                        </div>
+
+                        {providerMeta.supportsApiKey && (
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">{providerMeta.apiKeyLabel}</label>
+                                <input
+                                    type="password"
+                                    value={cloudApiKey}
+                                    onChange={e => setCloudApiKey(e.target.value)}
+                                    placeholder={providerMeta.apiKeyPlaceholder}
+                                    className="w-full border rounded-lg p-2.5 text-xs font-mono"
+                                />
+                            </div>
+                        )}
 
                         <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
                             <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
@@ -205,9 +258,9 @@ export const TabImportNilai: React.FC = () => {
 
             <div className="flex flex-col items-center justify-center text-center p-8 text-gray-500 border-2 border-dashed rounded-xl bg-gray-50">
                 <i className="bi bi-database-check text-5xl mb-4 text-gray-300"></i>
-                <h4 className="font-bold text-gray-700">1 Link GAS untuk Semua Rombel</h4>
+                <h4 className="font-bold text-gray-700">1 Endpoint Cloud untuk Semua Rombel</h4>
                 <p className="text-sm mt-2 max-w-xs">
-                    Link Google Apps Script otomatis tersimpan dan dipakai bersama oleh Formulir Ledger Guru, Portal Audit Tanpa Login, dan menu Impor Nilai.
+                    Konfigurasi backend (GAS, Cloudflare D1, Supabase, atau R2) otomatis tersimpan dan dipakai bersama oleh Formulir Ledger Guru, Portal Audit Tanpa Login, dan menu Impor Nilai.
                 </p>
             </div>
         </div>

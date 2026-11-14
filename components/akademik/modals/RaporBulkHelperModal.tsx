@@ -160,12 +160,12 @@ export const RaporBulkHelperModal: React.FC<RaporBulkHelperModalProps> = ({
     if (!isOpen) return null;
 
     const handleApplyCatatan = () => {
+        if (!catatanTargetKey) return;
         const updates: Record<number, Record<string, string>> = {};
         previewItems.forEach(item => {
             if (item.willUpdateCat) {
                 updates[item.santri.id] = {
-                    [catatanTargetKey]: item.generatedCat,
-                    CATATAN_WALI_KELAS: item.generatedCat
+                    [catatanTargetKey]: item.generatedCat
                 };
             }
         });
@@ -174,12 +174,12 @@ export const RaporBulkHelperModal: React.FC<RaporBulkHelperModalProps> = ({
     };
 
     const handleApplyKeputusan = () => {
+        if (!keputusanTargetKey) return;
         const updates: Record<number, Record<string, string>> = {};
         previewItems.forEach(item => {
             if (item.generatedKep !== null) {
                 updates[item.santri.id] = {
-                    [keputusanTargetKey]: item.generatedKep,
-                    KEPUTUSAN: item.generatedKep
+                    [keputusanTargetKey]: item.generatedKep
                 };
             }
         });

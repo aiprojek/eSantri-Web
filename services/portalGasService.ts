@@ -744,9 +744,9 @@ export const buildFullPortalPayload = async (settings: PondokSettings): Promise<
                 const rataRata = hasNumericScores
                     ? Math.round((mapelItems.reduce((acc, m) => acc + m.nilai, 0) / mapelItems.length) * 10) / 10
                     : 0;
-                const rawKep = candidateRapor.keputusan || (parsedCustom.KEPUTUSAN ? String(parsedCustom.KEPUTUSAN).trim() : '');
+                const rawKep = candidateRapor.keputusan || String(parsedCustom.KEPUTUSAN || parsedCustom.keputusan || parsedCustom.STATUS_NAIK || '').trim();
                 const resolvedKeputusan = rawKep && rawKep !== '-' ? rawKep : undefined;
-                const rawCat = candidateRapor.catatanWaliKelas || (parsedCustom.CATATAN_WALI_KELAS ? String(parsedCustom.CATATAN_WALI_KELAS).trim() : '');
+                const rawCat = candidateRapor.catatanWaliKelas || String(parsedCustom.CATATAN_WALI_KELAS || parsedCustom.catatanWaliKelas || parsedCustom.CATATAN_WALI || parsedCustom.catatan_wali || parsedCustom.CATATAN || '').trim();
                 const resolvedCatatan = rawCat && rawCat !== '-' ? rawCat : undefined;
 
                 if (hasNumericScores || resolvedKeputusan || resolvedCatatan) {

@@ -207,7 +207,7 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
             showToast('Data nilai tidak dapat dihapus karena rapor pada rombel ini sedang dikunci. Buka kunci terlebih dahulu di menu Cetak Rapor.', 'error');
             return;
         }
-        showConfirmation('Hapus Data Rapor?', 'Data nilai santri ini akan dihapus dari arsip aplikasi (serta dibersihkan dari Google Sheet GAS jika terhubung).', async () => {
+        showConfirmation('Hapus Data Rapor?', 'Data nilai santri ini akan dihapus dari arsip aplikasi (serta dibersihkan dari Cloud Server jika terhubung).', async () => {
             const now = Date.now();
             if (rec.santriId && rec.tahunAjaran && rec.semester) {
                 const siblings = await db.raporRecords
@@ -292,7 +292,7 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
             };
         });
 
-        let list = enriched.filter(item => !item.santri?.deleted);
+        let list = enriched.filter(item => item.santri && !item.santri.deleted);
 
         // Filter Jenjang
         if (filterJenjang) {
@@ -386,7 +386,7 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
             const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : (santri?.jenjangId ? settings.jenjang.find(j => j.id === santri.jenjangId) : null);
             return { rec, santri, rombel, kelas, jenjang, stats: getRecordStats(rec) };
         }).filter(item => {
-            if (item.santri?.deleted) return false;
+            if (!item.santri || item.santri.deleted) return false;
             if (filterJenjang && item.jenjang?.id !== parseInt(filterJenjang)) return false;
             if (targetMode === 'range') {
                 if (selectedRangeKelas.length > 0) {
@@ -1400,36 +1400,62 @@ export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) =>
                             </div>
 
                             {/* Kehadiran & Catatan */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                                    <h5 className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-                                        <i className="bi bi-clock-history text-indigo-500"></i> Rekap Presensi
-                                    </h5>
-                                    <div className="grid grid-cols-3 gap-2 text-center pt-1">
-                                        <div className="p-2.5 bg-white rounded-xl border border-slate-200">
-                                            <div className="text-xs text-slate-400 font-medium">Sakit</div>
-                                            <div className="text-lg font-black text-amber-600">{reviewRecord.sakit || 0}</div>
+                            {(() => {
+                                let cData: Record<string, any> = {};
+                                try {
+                                    if (reviewRecord.customData) cData = JSON.parse(reviewRecord.customData);
+                                } catch {}
+                                const findNum = (topVal: number | undefined, keys: string[]): number => {
+                                    if (typeof topVal === 'number' && topVal > 0) return topVal;
+                                    for (const k of keys) {
+                                        const raw = cData[k];
+                                        if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+                                            const n = Number(String(raw).trim().replace(',', '.'));
+                                            if (!isNaN(n) && isFinite(n)) return n;
+                                        }
+                                    }
+                                    return topVal || 0;
+                                };
+                                const sakitVal = findNum(reviewRecord.sakit, ['SAKIT', 'sakit', 'S', 'ABSENSI_SAKIT', 'JML_SAKIT']);
+                                const izinVal = findNum(reviewRecord.izin, ['IZIN', 'izin', 'I', 'ABSENSI_IZIN', 'JML_IZIN']);
+                                const alphaVal = findNum(reviewRecord.alpha, ['ALPHA', 'alpha', 'ALPA', 'alpa', 'A', 'ABSENSI_ALPHA', 'JML_ALPHA']);
+                                const catatanVal =
+                                    reviewRecord.catatanWaliKelas ||
+                                    String(cData.CATATAN_WALI_KELAS || cData.catatanWaliKelas || cData.CATATAN_WALI || cData.catatan_wali || cData.CATATAN || '').trim();
+
+                                return (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                                            <h5 className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                                                <i className="bi bi-clock-history text-indigo-500"></i> Rekap Presensi
+                                            </h5>
+                                            <div className="grid grid-cols-3 gap-2 text-center pt-1">
+                                                <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                                                    <div className="text-xs text-slate-400 font-medium">Sakit</div>
+                                                    <div className="text-lg font-black text-amber-600">{sakitVal}</div>
+                                                </div>
+                                                <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                                                    <div className="text-xs text-slate-400 font-medium">Izin</div>
+                                                    <div className="text-lg font-black text-blue-600">{izinVal}</div>
+                                                </div>
+                                                <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                                                    <div className="text-xs text-slate-400 font-medium">Alpha</div>
+                                                    <div className="text-lg font-black text-rose-600">{alphaVal}</div>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="p-2.5 bg-white rounded-xl border border-slate-200">
-                                            <div className="text-xs text-slate-400 font-medium">Izin</div>
-                                            <div className="text-lg font-black text-blue-600">{reviewRecord.izin || 0}</div>
-                                        </div>
-                                        <div className="p-2.5 bg-white rounded-xl border border-slate-200">
-                                            <div className="text-xs text-slate-400 font-medium">Alpha</div>
-                                            <div className="text-lg font-black text-rose-600">{reviewRecord.alpha || 0}</div>
+
+                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                                            <h5 className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                                                <i className="bi bi-chat-left-quote-fill text-teal-600"></i> Catatan Wali Kelas
+                                            </h5>
+                                            <p className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-slate-200 min-h-[58px] italic">
+                                                {catatanVal || 'Tidak ada catatan khusus dari wali kelas.'}
+                                            </p>
                                         </div>
                                     </div>
-                                </div>
-
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                                    <h5 className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-                                        <i className="bi bi-chat-left-quote-fill text-teal-600"></i> Catatan Wali Kelas
-                                    </h5>
-                                    <p className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-slate-200 min-h-[58px] italic">
-                                        {reviewRecord.catatanWaliKelas || 'Tidak ada catatan khusus dari wali kelas.'}
-                                    </p>
-                                </div>
-                            </div>
+                                );
+                            })()}
                         </div>
 
                         {/* Footer Modal */}

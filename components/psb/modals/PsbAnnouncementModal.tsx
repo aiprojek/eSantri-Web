@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Pendaftar, PondokSettings, PsbConfig } from '../../../types';
-import { calculatePsbAverageScore, getPsbRegistrationNumber, extractPonpesInitials } from '../utils/psbUtils';
+import { calculatePsbAverageScore, getPsbRegistrationNumber, extractPonpesInitials, matchesPsbTahunAjaran } from '../utils/psbUtils';
 import { printToPdfNative } from '../../../utils/pdfGenerator';
 import { exportPsbAnnouncementPdf } from '../../../utils/psbPdfExport';
 import { useAppContext } from '../../../AppContext';
 import { toRomanMonth } from '../../../data/suratPresets';
 import { savePsbArchive } from '../utils/psbArchiveService';
+import { generateSyncSafeId } from '../../../utils/idGenerator';
 import { db } from '../../../db';
 
 interface PsbAnnouncementModalProps {
@@ -173,16 +174,18 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
         setNotesDiterima(prev => prev.filter((_, i) => i !== idx));
     };
 
-    // Filter and sort candidates
+    const yearLabel = config.tahunAjaranAktif || `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`;
+
+    // Filter and sort candidates (scoped to active Tahun Ajaran PSB)
     const processedList = useMemo(() => {
-        let list = [...pendaftarList];
+        let list = pendaftarList.filter(p => matchesPsbTahunAjaran(p, yearLabel, yearLabel));
 
         if (selectedJenjang) {
             list = list.filter(p => String(p.jenjangId) === selectedJenjang);
         }
 
         if (selectedGelombang) {
-            list = list.filter(p => (p.gelombang || 'Gelombang 1') === selectedGelombang);
+            list = list.filter(p => String(p.gelombang || '1') === String(selectedGelombang).replace(/[^0-9]/g, '') || String(p.gelombang) === selectedGelombang);
         }
 
         // Sorting
@@ -330,10 +333,10 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
             
             // 1. Simpan ke Arsip Surat Keluar (Modul Surat) jika dicentang
             if (autoSyncToSuratKeluar) {
-                const exists = arsipSuratList.some(a => a.nomorSurat === suratNumber);
+                const exists = arsipSuratList.some(a => !a.deleted && a.nomorSurat === suratNumber);
                 if (!exists) {
-                    await db.arsipSurat.add({
-                        id: Date.now(),
+                    await db.arsipSurat.put({
+                        id: generateSyncSafeId(),
                         nomorSurat: suratNumber || 'PENGUMUMAN-PSB',
                         perihal: `SK Hasil Seleksi Penerimaan Santri Baru TA ${yearLabel} (${viewMode.toUpperCase()})`,
                         tujuan: 'Publikasi Posko & Calon Santri',
@@ -341,12 +344,14 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                         tanggalBuat: todayIso,
                         templateId: 0,
                         tempatCetak: tempatCetak || 'Pesantren',
-                        tanggalCetak: todayFormatted
+                        tanggalCetak: todayFormatted,
+                        deleted: false,
+                        lastModified: Date.now()
                     });
                 }
             }
 
-            // 2. Simpan ke Arsip Historis PSB
+            // 2. Simpan ke Arsip Historis PSB (serta config agar ikut backup & sync)
             const archiveId = `psb-sk-${yearLabel.replace(/[^a-zA-Z0-9]/g, '-')}-${viewMode}-${Date.now().toString().slice(-4)}`;
             const jenjangSummary = settings.jenjang.map(j => {
                 const inJenjang = displayedCandidates.filter(p => p.jenjangId === j.id);
@@ -359,7 +364,12 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                 };
             });
 
-            savePsbArchive({
+            const nextConfig: PsbConfig = {
+                ...config,
+                nomorSuratPengumumanPsb: suratNumber
+            };
+
+            await savePsbArchive({
                 id: archiveId,
                 type: 'pengumuman-sk',
                 tahunAjaran: yearLabel,
@@ -374,15 +384,7 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                 adminName: adminName,
                 pimpinanName: pimpinanName,
                 catatan: `Dokumen SK Pengumuman Status ${viewMode.toUpperCase()} diterbitkan pada ${todayFormatted}.`
-            });
-
-            // Simpan nomor surat ke config
-            if (onSaveConfig) {
-                onSaveConfig({
-                    ...config,
-                    nomorSuratPengumumanPsb: suratNumber
-                });
-            }
+            }, nextConfig, onSaveConfig);
 
             if (showNotification) {
                 showToast('Dokumen berhasil dicatat ke Arsip PSB & Agenda Surat Keluar TU.', 'success');
@@ -431,7 +433,7 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
             });
         } catch (error) {
             console.error('Gagal export PDF pengumuman PSB:', error);
-            alert('Terjadi kesalahan saat mengekspor pengumuman ke PDF. Silakan coba lagi.');
+            showToast('Terjadi kesalahan saat mengekspor pengumuman ke PDF. Silakan coba lagi.', 'error');
         } finally {
             setIsExportingPdf(false);
         }
@@ -457,7 +459,6 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
         return settings.jenjang.find(j => j.id === id)?.nama || '-';
     };
 
-    const yearLabel = config.tahunAjaranAktif || `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`;
     const todayFormatted = new Date().toLocaleDateString('id-ID', {
         day: 'numeric',
         month: 'long',

@@ -19,6 +19,12 @@ import { SectionCard } from './common/SectionCard';
 import { EmptyState } from './common/EmptyState';
 import { DispatchQueueModal, QueueRecipientItem } from './whatsapp/DispatchQueueModal';
 import { WaGatewayModal } from './whatsapp/WaGatewayModal';
+import {
+    healPendaftarRecord,
+    getPendaftarPhone,
+    getPendaftarWaliName,
+    getPsbRegistrationNumber,
+} from './psb/utils/psbUtils';
 
 type AudienceType = 'santri' | 'psb';
 
@@ -30,6 +36,10 @@ export const WhatsAppCenter: React.FC = () => {
     // Reactive DB queries
     const liveTagihan = useLiveQuery(() => db.tagihan.filter((t) => !t.deleted).toArray(), []) || [];
     const livePendaftar = useLiveQuery(() => db.pendaftar.filter((p) => !p.deleted).toArray(), []) || [];
+    const healedPendaftarList = useMemo(
+        () => (livePendaftar || []).map((p) => healPendaftarRecord(p, settings)),
+        [livePendaftar, settings]
+    );
     const liveAuditLogs = useLiveQuery(
         () => db.auditLogs.where('table_name').equals('whatsapp_logs').toArray(),
         []
@@ -149,7 +159,11 @@ export const WhatsAppCenter: React.FC = () => {
 
     // Helpers to get phone numbers
     const getSantriPhone = (santri: Santri) => santri.teleponAyah || santri.teleponIbu || santri.teleponWali;
-    const getPsbPhone = (p: Pendaftar) => p.nomorHpWali || p.teleponWali || p.teleponAyah || p.teleponIbu;
+    const getPsbPhone = (p: Pendaftar) => getPendaftarPhone(p);
+    const getPsbNoReg = (p: Pendaftar) => {
+        const jenjangNama = settings.jenjang.find((j) => j.id === p.jenjangId)?.nama;
+        return p.nomorRegistrasi || getPsbRegistrationNumber(p, jenjangNama);
+    };
 
     const getBerkasSummary = (b?: PsbBerkasFisik) => {
         if (!b) return 'Belum Lengkap (0/5)';
@@ -230,11 +244,12 @@ export const WhatsAppCenter: React.FC = () => {
 
     // Filtered PSB
     const filteredPsb = useMemo(() => {
-        return (livePendaftar || []).filter((p) => {
+        return healedPendaftarList.filter((p) => {
             const searchLower = psbFilters.search.toLowerCase();
+            const noReg = getPsbNoReg(p).toLowerCase();
             const matchesSearch =
                 p.namaLengkap.toLowerCase().includes(searchLower) ||
-                (p.nomorRegistrasi && p.nomorRegistrasi.toLowerCase().includes(searchLower));
+                noReg.includes(searchLower);
             const matchesStatus = !psbFilters.status || p.status === psbFilters.status;
             const matchesGelombang = !psbFilters.gelombang || String(p.gelombang) === psbFilters.gelombang;
             const matchesJalur = !psbFilters.jalur || p.jalurPendaftaran === psbFilters.jalur;
@@ -245,7 +260,7 @@ export const WhatsAppCenter: React.FC = () => {
             const matchesPhone = !onlyWithPhone || Boolean(normalizePhoneNumber(getPsbPhone(p)));
             return matchesSearch && matchesStatus && matchesGelombang && matchesJalur && matchesBerkas && matchesPhone;
         });
-    }, [livePendaftar, psbFilters, onlyWithPhone]);
+    }, [healedPendaftarList, psbFilters, onlyWithPhone, settings.jenjang]);
 
     // Message interpolation for Santri
     const formatMessageForSantri = (santri: Santri) => {
@@ -282,8 +297,8 @@ export const WhatsAppCenter: React.FC = () => {
     const formatMessageForPsb = (pendaftar: Pendaftar) => {
         return formatWAMessage(customMessage, {
             nama_santri: pendaftar.namaLengkap,
-            ortu: pendaftar.namaWali || pendaftar.namaAyah || pendaftar.namaIbu || 'Wali Calon Santri',
-            no_reg: pendaftar.nomorRegistrasi || `REG-${pendaftar.id}`,
+            ortu: getPendaftarWaliName(pendaftar) !== '-' ? getPendaftarWaliName(pendaftar) : 'Wali Calon Santri',
+            no_reg: getPsbNoReg(pendaftar),
             jalur: pendaftar.jalurPendaftaran || 'Reguler',
             gelombang: pendaftar.gelombang ? `Gelombang ${pendaftar.gelombang}` : 'Gelombang 1',
             status_psb: pendaftar.status,
@@ -406,7 +421,7 @@ export const WhatsAppCenter: React.FC = () => {
                 });
         } else {
             items = selectedPsbIds
-                .map((id) => (livePendaftar || []).find((p) => p.id === id))
+                .map((id) => healedPendaftarList.find((p) => p.id === id))
                 .filter((p): p is Pendaftar => Boolean(p && normalizePhoneNumber(getPsbPhone(p))))
                 .map((p) => {
                     const phone = normalizePhoneNumber(getPsbPhone(p));
@@ -415,7 +430,7 @@ export const WhatsAppCenter: React.FC = () => {
                         id: p.id,
                         name: p.namaLengkap,
                         phone,
-                        subtitle: `No. Reg: ${p.nomorRegistrasi || `REG-${p.id}`} | Status: ${p.status}`,
+                        subtitle: `No. Reg: ${getPsbNoReg(p)} | Status: ${p.status}`,
                         formattedMessage: message,
                         audience: 'psb' as const,
                     };
@@ -666,7 +681,7 @@ export const WhatsAppCenter: React.FC = () => {
                             audience === 'psb' ? 'bg-emerald-700 text-emerald-100' : 'bg-slate-200 text-slate-700'
                         }`}
                     >
-                        {(livePendaftar || []).length}
+                        {healedPendaftarList.length}
                     </span>
                 </button>
             </div>
@@ -1193,7 +1208,7 @@ export const WhatsAppCenter: React.FC = () => {
                                                         <td className="px-4 py-3">
                                                             <div className="font-bold text-slate-800">{pendaftar.namaLengkap}</div>
                                                             <div className="font-mono text-[10px] text-slate-400">
-                                                                {pendaftar.nomorRegistrasi || `REG-${pendaftar.id}`}
+                                                                {getPsbNoReg(pendaftar)}
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3">
@@ -1214,7 +1229,7 @@ export const WhatsAppCenter: React.FC = () => {
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <div className="text-slate-700">
-                                                                {pendaftar.namaWali || pendaftar.namaAyah || pendaftar.namaIbu || '-'}
+                                                                {getPendaftarWaliName(pendaftar)}
                                                             </div>
                                                             {cleanPhone ? (
                                                                 <span className="font-mono text-[11px] font-semibold text-emerald-700">
@@ -1293,7 +1308,7 @@ export const WhatsAppCenter: React.FC = () => {
                                                                 {pendaftar.namaLengkap}
                                                             </div>
                                                             <div className="font-mono text-[10px] text-slate-400">
-                                                                {pendaftar.nomorRegistrasi || `REG-${pendaftar.id}`}
+                                                                {getPsbNoReg(pendaftar)}
                                                             </div>
                                                         </div>
                                                         <input

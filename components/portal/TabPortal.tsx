@@ -12,6 +12,7 @@ import {
     syncPortalBridgeToGas,
 } from '../../services/portalGasService';
 import { downloadStandalonePortalHtml } from '../../utils/portalStandaloneGenerator';
+import { auth, isFirebaseClientConfigReady } from '../../firebase';
 
 interface TabPortalProps {
     localSettings: PondokSettings;
@@ -97,10 +98,20 @@ export const TabPortal: React.FC<TabPortalProps> = ({
               )
             : '';
 
+    const firebaseTenantId =
+        localSettings.cloudSyncConfig?.firebasePairedTenantId?.trim() ||
+        auth?.currentUser?.uid ||
+        portalConfig.portalId?.trim() ||
+        'default-portal';
+
     const originUrl = (portalConfig.baseUrl?.trim() || window.location.origin).replace(/\/+$/, '');
-    const encryptedPortalLink = encryptedKey
-        ? `${originUrl}/?portal=true&k=${encodeURIComponent(encryptedKey)}`
-        : `${originUrl}/?portal=true`;
+    const encryptedPortalLink = portalConfig.provider === 'firebase'
+        ? `${originUrl}/?portal=true&tenant=${encodeURIComponent(firebaseTenantId)}`
+        : encryptedKey
+            ? `${originUrl}/?portal=true&k=${encodeURIComponent(encryptedKey)}`
+            : portalConfig.portalId?.trim()
+                ? `${originUrl}/?portal=true&tenant=${encodeURIComponent(portalConfig.portalId.trim())}`
+                : `${originUrl}/?portal=true`;
 
     const standaloneUrl = (portalConfig as any).standalonePublicUrl?.trim() || '';
     const activeShareUrl = standaloneUrl || encryptedPortalLink;
@@ -126,6 +137,10 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                 showToast('Isi URL Supabase dan Public Anon Key di form pengaturan terlebih dahulu.', 'error');
                 return;
             }
+            if (provider === 'firebase' && !isFirebaseClientConfigReady) {
+                showToast('Konfigurasi Firebase belum aktif. Atur project Firebase di Pengaturan > Sinkronisasi Cloud terlebih dahulu.', 'error');
+                return;
+            }
             downloadStandalonePortalHtml(localSettings);
             showToast('File index.html Portal Wali Mandiri berhasil diunduh!', 'success');
         } catch (err) {
@@ -146,6 +161,10 @@ export const TabPortal: React.FC<TabPortalProps> = ({
         }
         if (provider === 'supabase' && (!portalConfig.supabaseUrl?.trim() || !portalConfig.supabaseAnonKey?.trim())) {
             showToast('Isi URL Supabase dan Public Anon Key terlebih dahulu.', 'error');
+            return;
+        }
+        if (provider === 'firebase' && (!isFirebaseClientConfigReady || (!localSettings.cloudSyncConfig?.firebasePairedTenantId?.trim() && !auth?.currentUser?.uid))) {
+            showToast('Firebase belum terhubung / admin belum login Firebase Sync di Pengaturan > Sinkronisasi Cloud.', 'error');
             return;
         }
         setIsSyncing(true);
@@ -532,6 +551,22 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                     </div>
                 </div>
 
+                {Boolean(localSettings.e2eeConfig?.enabled && localSettings.e2eeConfig?.modules?.portal) && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3.5 text-xs text-amber-950 flex items-start gap-2.5">
+                        <i className="bi bi-shield-exclamation text-amber-600 text-base shrink-0 mt-0.5"></i>
+                        <div className="leading-relaxed">
+                            <span className="font-bold">Catatan Keamanan E2EE Portal:</span>{' '}
+                            {(portalConfig.provider || 'gas') === 'firebase' ? (
+                                <>Mode <strong>Firebase Firestore</strong> kini mengisolasi setiap santri pada dokumen individual terenkripsi (<code>entries/{'{hash}'}</code>) sehingga wali hanya mengunduh data anaknya sendiri.</>
+                            ) : ['supabase', 'standalone'].includes(portalConfig.provider || 'gas') ? (
+                                <>Penyedia <strong>{portalConfig.provider === 'supabase' ? 'Supabase REST' : 'HTML Mandiri Statis'}</strong> mengunduh daftar terenkripsi ke browser pengakses sebelum dicocokkan dengan NIS + Tanggal Lahir. Meski dilindungi enkripsi AES-GCM &amp; PBKDF2 100.000 iterasi (v2), untuk isolasi server-side penuh gunakan <strong>GAS v2.0</strong>, <strong>Cloudflare Worker</strong>, atau <strong>Firebase</strong>.</>
+                            ) : (
+                                <>Enkripsi <strong>PBKDF2 100.000 iterasi (v2) + AES-GCM</strong> aktif. Pastikan Anda menekan tombol <strong>Sinkronkan Sekarang</strong> (dan generate ulang HTML jika memakai mode mandiri) setelah mengaktifkan/memperbarui E2EE Portal.</>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* Form Spesifik Provider */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
                     {/* Common Field: Portal ID & Tema Warna */}
@@ -720,22 +755,24 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                                        Koleksi Firestore Publik
+                                        Koleksi Firestore Publik (Terisolasi per Santri)
                                     </label>
                                     <input
                                         type="text"
                                         readOnly
-                                        value="publicPortals/{portalId}"
+                                        value={`publicPortals/${firebaseTenantId} (+ entries/{hash})`}
                                         className="app-input block w-full p-2.5 text-sm font-mono bg-slate-100"
                                     />
                                     <p className="text-[11px] text-slate-500 mt-1">
-                                        Data portal akan disimpan langsung di dokumen <code>publicPortals/{portalConfig.portalId || 'default-portal'}</code>.
+                                        Profil pondok disimpan di <code>publicPortals/{firebaseTenantId}</code> dan setiap santri diisolasi pada <code>entries/{'{hash}'}</code> agar tidak melebihi batas 1 MiB.
                                     </p>
                                 </div>
                                 <div className="flex items-center">
                                     <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-xs text-orange-950">
                                         <i className="bi bi-check-circle-fill text-orange-600 mr-1.5"></i>
-                                        Terkoneksi otomatis dengan project Firebase terkonfigurasi. Tidak memerlukan script perantara eksternal.
+                                        {isFirebaseClientConfigReady && (localSettings.cloudSyncConfig?.firebasePairedTenantId || auth?.currentUser?.uid)
+                                            ? 'Terkoneksi otomatis dengan project Firebase terkonfigurasi. Tidak memerlukan script perantara eksternal.'
+                                            : 'Hubungkan akun Firebase terlebih dahulu pada Pengaturan > Sinkronisasi Cloud sebelum melakukan Sinkronisasi Portal.'}
                                     </div>
                                 </div>
                             </div>

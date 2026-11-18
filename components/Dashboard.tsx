@@ -8,6 +8,7 @@ import { db } from '../db';
 import { PageHeader } from './common/PageHeader';
 import { HeaderTabs } from './common/HeaderTabs';
 import { isSantriPutra, isSantriPutri } from '../utils/formatters';
+import { matchesPsbTahunAjaran } from './psb/utils/psbUtils';
 
 const ExecutiveDashboard = lazy(() =>
   import('./dashboard/ExecutiveDashboard').then((module) => ({
@@ -151,6 +152,8 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
 
   const canViewSantri = hasPerm('santri');
   const canViewFinance = hasPerm('keuangan') || hasPerm('bukukas');
+  const canViewPsb = hasPerm('psb');
+  const activePsbTa = settings.psbConfig?.tahunAjaranAktif || '';
 
   const totalTunggakan = useLiveQuery(
       async () => {
@@ -164,6 +167,20 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
       },
       [canViewFinance],
       0
+  );
+
+  const psbSummary = useLiveQuery(
+      async () => {
+          if (!canViewPsb) return { total: 0, baru: 0 };
+          const all = await db.pendaftar.filter(p => !p.deleted).toArray();
+          const scoped = activePsbTa ? all.filter(p => matchesPsbTahunAjaran(p, activePsbTa, activePsbTa)) : all;
+          return {
+              total: scoped.length,
+              baru: scoped.filter(p => p.status === 'Baru').length,
+          };
+      },
+      [canViewPsb, activePsbTa],
+      { total: 0, baru: 0 }
   );
 
   // Total counts across entire database
@@ -316,7 +333,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                     )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 print:grid-cols-3 print:gap-4">
+                <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${canViewPsb ? 'xl:grid-cols-6' : 'xl:grid-cols-5'} gap-5 print:grid-cols-3 print:gap-4`}>
                     <StatCard 
                         title={viewScope === 'aktif' ? "Santri Aktif" : "Total Terdaftar"} 
                         value={currentTotal} 
@@ -361,6 +378,16 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                         icon={<i className="bi-building text-2xl text-white"></i>} 
                         color="bg-purple-500" 
                     />
+                    {canViewPsb && (
+                        <StatCard 
+                            title="Pendaftar PSB" 
+                            value={psbSummary.total} 
+                            subtitle={activePsbTa ? `TA ${activePsbTa} • ${psbSummary.baru} baru` : `${psbSummary.baru} menunggu seleksi`}
+                            icon={<i className="bi-person-vcard-fill text-2xl text-white"></i>} 
+                            color="bg-emerald-600" 
+                            onClick={() => navigateTo(Page.PSB)} 
+                        />
+                    )}
                 </div>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4">
@@ -388,6 +415,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                         <h2 className="mb-4 text-xl font-bold text-app-text">Aksi Cepat</h2>
                         <div className="grid grid-cols-2 gap-4 w-full">
                             {canViewSantri && <QuickActionButton icon="bi-person-plus-fill" label="Data Santri" onClick={() => navigateTo(Page.Santri)} />}
+                            {canViewPsb && <QuickActionButton icon="bi-person-vcard-fill" label="PSB" onClick={() => navigateTo(Page.PSB)} />}
                             {hasPerm('datamaster') && <QuickActionButton icon="bi-diagram-3-fill" label="Data Master" onClick={() => navigateTo(Page.DataMaster)} />}
                             {hasPerm('keuangan') && <QuickActionButton icon="bi-cash-coin" label="Keuangan" onClick={() => navigateTo(Page.Keuangan)} />}
                             {hasPerm('laporan') && <QuickActionButton icon="bi-printer-fill" label="Cetak Laporan" onClick={() => navigateTo(Page.Laporan)} />}

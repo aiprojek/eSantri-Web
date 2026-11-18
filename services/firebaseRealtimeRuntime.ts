@@ -1,9 +1,10 @@
 import { db } from '../db';
-import { PondokSettings } from '../types';
+import { E2eeConfig, PondokSettings } from '../types';
 import { migrateUserPermissions } from './permissionMigrationService';
 import { setAuditSyncMute } from './logService';
 import { encodePortalKey, mergePortalConfig } from './portalGasService';
 import { isFirebaseClientConfigReady } from '../firebaseApp';
+import { decryptAnyEnvelope, E2EE_CHANGED_EVENT, encryptObjectSym, isDeviceUnlockedForConfig, isE2eeEnvelope, tryParseE2eeEnvelope } from './e2eeService';
 import {
   db as fdb,
   collection,
@@ -66,6 +67,229 @@ const sanitizeForFirestore = (val: any): any => {
     return result;
 };
 
+const getLocalSyncE2eeConfig = async (): Promise<E2eeConfig | undefined> => {
+    const rows = await db.settings.toArray();
+    const cfg = rows[0]?.e2eeConfig;
+    return cfg?.enabled && cfg?.modules?.sync ? cfg : undefined;
+};
+
+const ESANTRI_FB_E2EE_PENDING_KEY = 'esantri_fb_e2ee_pending_v1';
+
+interface PendingFbQueueBucket {
+    upserts: Record<string, { tableName: string; docId: string }>;
+    deletes: Record<string, { tableName: string; docId: string }>;
+}
+
+const readPendingFbQueueMap = (): Record<string, PendingFbQueueBucket> => {
+    try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(ESANTRI_FB_E2EE_PENDING_KEY) : null;
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        return {};
+    }
+};
+
+const writePendingFbQueueMap = (map: Record<string, PendingFbQueueBucket>) => {
+    try {
+        if (typeof localStorage === 'undefined') return;
+        const cleanEntries = Object.entries(map).filter(([, bucket]) =>
+            Object.keys(bucket?.upserts || {}).length > 0 || Object.keys(bucket?.deletes || {}).length > 0
+        );
+        if (cleanEntries.length === 0) {
+            localStorage.removeItem(ESANTRI_FB_E2EE_PENDING_KEY);
+        } else {
+            localStorage.setItem(ESANTRI_FB_E2EE_PENDING_KEY, JSON.stringify(Object.fromEntries(cleanEntries)));
+        }
+    } catch {
+        // ignore quota errors
+    }
+};
+
+const hasPendingFbOps = (tenantId: string): boolean => {
+    const bucket = readPendingFbQueueMap()[tenantId];
+    if (!bucket) return false;
+    return Object.keys(bucket.upserts || {}).length > 0 || Object.keys(bucket.deletes || {}).length > 0;
+};
+
+const isPendingDeleteFbOp = (tenantId: string, tableName: string, docId: string): boolean => {
+    const bucket = readPendingFbQueueMap()[tenantId];
+    if (!bucket?.deletes) return false;
+    return Boolean(bucket.deletes[`${tableName}::${docId}`]);
+};
+
+const enqueuePendingFbOp = (tenantId: string, op: 'upsert' | 'delete', tableName: string, docId: string) => {
+    if (!tenantId || !tableName || !docId) return;
+    const map = readPendingFbQueueMap();
+    const bucket: PendingFbQueueBucket = map[tenantId] || { upserts: {}, deletes: {} };
+    const key = `${tableName}::${docId}`;
+    if (op === 'delete') {
+        delete bucket.upserts[key];
+        bucket.deletes[key] = { tableName, docId };
+    } else {
+        delete bucket.deletes[key];
+        bucket.upserts[key] = { tableName, docId };
+    }
+    map[tenantId] = bucket;
+    writePendingFbQueueMap(map);
+};
+
+const flushPendingFbE2eeQueue = async (tenantId: string): Promise<void> => {
+    const map = readPendingFbQueueMap();
+    const bucket = map[tenantId];
+    if (!bucket) return;
+
+    const e2eeCfg = await getLocalSyncE2eeConfig();
+    if (e2eeCfg && !isDeviceUnlockedForConfig(e2eeCfg)) return;
+
+    const remainingUpserts: Record<string, { tableName: string; docId: string }> = {};
+    const remainingDeletes: Record<string, { tableName: string; docId: string }> = {};
+
+    for (const [key, item] of Object.entries(bucket.deletes || {})) {
+        try {
+            await deleteDoc(doc(fdb, `tenants/${tenantId}/${item.tableName}/${item.docId}`));
+        } catch {
+            remainingDeletes[key] = item;
+        }
+    }
+
+    for (const [key, item] of Object.entries(bucket.upserts || {})) {
+        try {
+            let localDoc: any = null;
+            if (item.tableName === 'settings') {
+                const rows = await db.settings.toArray();
+                localDoc = rows[0] ? { ...rows[0] } : null;
+                if (localDoc) delete localDoc.cloudSyncConfig;
+            } else {
+                const isNum = isNumericKeyTable(item.tableName);
+                const lookupKey = isNum && !isNaN(Number(item.docId)) ? Number(item.docId) : item.docId;
+                localDoc = await (db as any)[item.tableName]?.get(lookupKey);
+            }
+            if (!localDoc) continue;
+            const prepared = await prepareFirestoreDocForPush(item.tableName, {
+                ...localDoc,
+                lastModified: localDoc.lastModified || Date.now(),
+            });
+            await setDoc(doc(fdb, `tenants/${tenantId}/${item.tableName}`, item.docId), prepared, { merge: false });
+            if (item.tableName === 'settings') {
+                const fullSettingsRows = await db.settings.toArray();
+                if (fullSettingsRows[0]) {
+                    await syncPublicPortalConfig(tenantId, fullSettingsRows[0] as PondokSettings);
+                }
+            }
+        } catch {
+            remainingUpserts[key] = item;
+        }
+    }
+
+    map[tenantId] = { upserts: remainingUpserts, deletes: remainingDeletes };
+    writePendingFbQueueMap(map);
+};
+
+const prepareFirestoreDocForPush = async (tableName: string, payload: any): Promise<any> => {
+    const e2eeCfg = await getLocalSyncE2eeConfig();
+    if (!e2eeCfg) {
+        return sanitizeForFirestore(payload);
+    }
+
+    const envelope = await encryptObjectSym(payload, e2eeCfg, `fs-${tableName}`);
+    if (tableName === 'settings') {
+        return sanitizeForFirestore({
+            id: 'main',
+            lastModified: payload.lastModified || Date.now(),
+            e2eeConfig: e2eeCfg,
+            ...envelope,
+        });
+    }
+
+    const topMeta: Record<string, any> = {
+        lastModified: payload.lastModified || Date.now(),
+        ...envelope,
+    };
+    if (tableName === 'saldoSantri' && payload.santriId !== undefined) {
+        topMeta.santriId = payload.santriId;
+    } else if (payload.id !== undefined) {
+        topMeta.id = payload.id;
+    }
+    return sanitizeForFirestore(topMeta);
+};
+
+const unwrapFirestoreDocFromCloud = async (
+    rawData: any
+): Promise<{ ok: true; data: any } | { ok: false; locked: true; e2eeConfig?: E2eeConfig }> => {
+    if (isE2eeEnvelope(rawData)) {
+        try {
+            const decrypted = await decryptAnyEnvelope(rawData);
+            return { ok: true, data: decrypted };
+        } catch {
+            return {
+                ok: false,
+                locked: true,
+                e2eeConfig: (rawData as any)?.e2eeConfig,
+            };
+        }
+    }
+
+    // Dekripsi hybrid biodata PSB publik (__e2ee_bio di dalam customData) bila berasal dari Portal PSB Firebase
+    if (rawData && typeof rawData.customData === 'string' && rawData.customData.includes('__e2ee_bio')) {
+        try {
+            const parsedCustom = JSON.parse(rawData.customData);
+            const env = tryParseE2eeEnvelope(parsedCustom?.__e2ee_bio);
+            if (env) {
+                try {
+                    const bio = await decryptAnyEnvelope<Record<string, any>>(env);
+                    const { __e2ee_bio: _removed, ...restCustom } = parsedCustom;
+                    const mergedCustom: Record<string, any> = { ...restCustom };
+                    const topKeys = new Set(Object.keys(rawData));
+                    for (const [bk, bv] of Object.entries(bio || {})) {
+                        if (!topKeys.has(bk) && mergedCustom[bk] === undefined && bk !== 'namaLengkap' && bk !== 'nomorRegistrasi') {
+                            mergedCustom[bk] = bv;
+                        }
+                    }
+                    return {
+                        ok: true,
+                        data: {
+                            ...rawData,
+                            ...bio,
+                            customData: JSON.stringify(mergedCustom),
+                        },
+                    };
+                } catch {
+                    return { ok: false, locked: true };
+                }
+            }
+        } catch {
+            // Biarkan rawData apa adanya jika JSON tidak valid
+        }
+    }
+
+    return { ok: true, data: rawData };
+};
+
+const syncLockedE2eeMetaToLocal = async (meta?: E2eeConfig) => {
+    if (!meta || !meta.enabled) return;
+    const local = await db.settings.toArray();
+    if (local.length > 0) {
+        const localCfg = local[0].e2eeConfig;
+        if (localCfg && localCfg.enabled === false && localCfg.keyId === meta.keyId) {
+            const remoteTs = Date.parse(meta.updatedAt || '') || 0;
+            const localTs = Date.parse(localCfg.disabledAt || localCfg.updatedAt || '') || 0;
+            if (remoteTs <= localTs) {
+                return;
+            }
+        }
+        if (!localCfg?.enabled || localCfg.keyId !== meta.keyId) {
+            await db.settings.update(local[0].id!, { e2eeConfig: meta });
+        }
+    } else {
+        await db.settings.add({ e2eeConfig: meta } as any);
+    }
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(E2EE_CHANGED_EVENT));
+    }
+};
+
 const applyDexieMods = (baseObj: any, mods: Record<string, any>) => {
     const cloned = baseObj ? JSON.parse(JSON.stringify(baseObj)) : {};
     if (!mods || typeof mods !== 'object') return cloned;
@@ -121,6 +345,17 @@ const buildPublicPortalPayload = (settings: PondokSettings) => {
                 : '',
         }
         : {};
+    const psbE2ee =
+        settings.e2eeConfig?.enabled &&
+        settings.e2eeConfig?.modules?.psb &&
+        settings.e2eeConfig?.publicKeySpki &&
+        settings.e2eeConfig?.keyId
+            ? {
+                enabled: true,
+                keyId: settings.e2eeConfig.keyId,
+                publicKeySpki: settings.e2eeConfig.publicKeySpki,
+            }
+            : null;
     return {
         namaPonpes: settings.namaPonpes,
         logoPonpesUrl: settings.logoPonpesUrl || '',
@@ -128,7 +363,10 @@ const buildPublicPortalPayload = (settings: PondokSettings) => {
         email: settings.email || '',
         website: settings.website || '',
         portalConfig: sanitizedPortal,
-        psbConfig: settings.psbConfig || {},
+        psbConfig: {
+            tahunAjaranAktif: settings.psbConfig?.tahunAjaranAktif || '',
+        },
+        psbE2ee,
         updatedAt: Date.now(),
     };
 };
@@ -159,8 +397,31 @@ export const startFirebaseSync = (tenantId: string) => {
 
     const activeTenantId = db.settings.toArray().then((settings) => settings[0]?.cloudSyncConfig?.firebasePairedTenantId || tenantId);
 
-    activeTenantId.then((actualId) => {
+    activeTenantId.then(async (actualId) => {
         if (sessionToken !== currentSyncSession) return;
+        let hadLockedDocs = false;
+
+        if (typeof window !== 'undefined') {
+            const onE2eeUnlock = async () => {
+                if (sessionToken !== currentSyncSession) return;
+                const needsFlush = hasPendingFbOps(actualId);
+                if (!hadLockedDocs && !needsFlush) return;
+                const rows = await db.settings.toArray();
+                const activeCfg = rows[0]?.e2eeConfig;
+                if (!activeCfg?.enabled || isDeviceUnlockedForConfig(activeCfg)) {
+                    hadLockedDocs = false;
+                    await flushPendingFbE2eeQueue(actualId).catch(() => {});
+                    await downloadAllFromFirebase(actualId).catch(() => {});
+                }
+            };
+            window.addEventListener(E2EE_CHANGED_EVENT, onE2eeUnlock);
+            unsubscribers.push(() => window.removeEventListener(E2EE_CHANGED_EVENT, onE2eeUnlock));
+        }
+
+        if (hasPendingFbOps(actualId)) {
+            await flushPendingFbE2eeQueue(actualId).catch(() => {});
+            if (sessionToken !== currentSyncSession) return;
+        }
 
         TABLES_TO_SYNC.forEach((tableName) => {
             const path = `tenants/${actualId}/${tableName}`;
@@ -173,7 +434,19 @@ export const startFirebaseSync = (tenantId: string) => {
                 try {
                     const isNum = isNumericKeyTable(tableName);
 
-                    const processDoc = async (docData: any, docId: string) => {
+                    const processDoc = async (rawDocData: any, docId: string) => {
+                        if (isPendingDeleteFbOp(actualId, tableName, docId)) {
+                            return null;
+                        }
+                        const unwrapped = await unwrapFirestoreDocFromCloud(rawDocData);
+                        if (!unwrapped.ok) {
+                            hadLockedDocs = true;
+                            if (unwrapped.e2eeConfig) {
+                                await syncLockedE2eeMetaToLocal(unwrapped.e2eeConfig);
+                            }
+                            return null;
+                        }
+                        const docData = unwrapped.data;
                         if (tableName === 'users' && docData.isDefaultAdmin) return null;
 
                         const rawId = docData.id ?? docData.santriId ?? docId;
@@ -371,6 +644,8 @@ export const startFirebaseSync = (tenantId: string) => {
 
 export const downloadAllFromFirebase = async (tenantId: string) => {
     beginCloudSync();
+    let lockedSkipCount = 0;
+    let discoveredLockedMeta: E2eeConfig | undefined;
     try {
         for (const tableName of TABLES_TO_SYNC) {
             const path = `tenants/${tenantId}/${tableName}`;
@@ -383,12 +658,35 @@ export const downloadAllFromFirebase = async (tenantId: string) => {
 
             if (tableName === 'users') {
                 const localUsers = await db.users.toArray();
-                const filteredItems = items.filter((user) => !user.isDefaultAdmin || !localUsers.some((localUser) => localUser.isDefaultAdmin));
-                const normalizedUsers = filteredItems.map(({ _docId, ...user }) => migrateUserPermissions(user as any).user);
-                await db.users.bulkPut(normalizedUsers);
+                const decryptedUsers: any[] = [];
+                for (const item of items) {
+                    const { _docId, ...rest } = item;
+                    const unwrapped = await unwrapFirestoreDocFromCloud(rest);
+                    if (unwrapped.ok) {
+                        decryptedUsers.push(unwrapped.data);
+                    } else {
+                        lockedSkipCount++;
+                        if (unwrapped.e2eeConfig) discoveredLockedMeta = unwrapped.e2eeConfig;
+                    }
+                }
+                const filteredItems = decryptedUsers.filter((user) => !user.isDefaultAdmin || !localUsers.some((localUser) => localUser.isDefaultAdmin));
+                const normalizedUsers = filteredItems.map((user) => migrateUserPermissions(user as any).user);
+                if (normalizedUsers.length > 0) {
+                    await db.users.bulkPut(normalizedUsers);
+                }
             } else if (tableName === 'settings') {
                 const localSettings = await db.settings.toArray();
-                const { _docId, ...cleanSetting } = items[0];
+                const { _docId, ...rawSetting } = items[0];
+                const unwrapped = await unwrapFirestoreDocFromCloud(rawSetting);
+                if (!unwrapped.ok) {
+                    lockedSkipCount++;
+                    if (unwrapped.e2eeConfig) {
+                        discoveredLockedMeta = unwrapped.e2eeConfig;
+                        await syncLockedE2eeMetaToLocal(unwrapped.e2eeConfig);
+                    }
+                    continue;
+                }
+                const cleanSetting = unwrapped.data;
                 if (localSettings.length > 0) {
                     const localPairedTenant = localSettings[0].cloudSyncConfig?.firebasePairedTenantId;
                     const localProvider = localSettings[0].cloudSyncConfig?.provider;
@@ -409,23 +707,47 @@ export const downloadAllFromFirebase = async (tenantId: string) => {
                 }
             } else {
                 const isNum = isNumericKeyTable(tableName);
-                const normalizedItems = items.map(({ _docId, ...item }) => {
+                const normalizedItems: any[] = [];
+                for (const rawItem of items) {
+                    const { _docId, ...rest } = rawItem;
+                    const unwrapped = await unwrapFirestoreDocFromCloud(rest);
+                    if (!unwrapped.ok) {
+                        lockedSkipCount++;
+                        if (unwrapped.e2eeConfig) discoveredLockedMeta = unwrapped.e2eeConfig;
+                        continue;
+                    }
+                    const item = unwrapped.data;
                     const rawId = item.id ?? item.santriId ?? _docId;
                     if (isNum && rawId !== undefined && !isNaN(Number(rawId))) {
                         if (tableName === 'saldoSantri') {
-                            return { ...item, santriId: Number(rawId) };
+                            normalizedItems.push({ ...item, santriId: Number(rawId) });
+                        } else {
+                            normalizedItems.push({ ...item, id: Number(rawId) });
                         }
-                        return { ...item, id: Number(rawId) };
+                    } else if (rawId !== undefined && item.id === undefined && tableName !== 'saldoSantri') {
+                        normalizedItems.push({ ...item, id: rawId });
+                    } else {
+                        normalizedItems.push(item);
                     }
-                    return rawId !== undefined && item.id === undefined && tableName !== 'saldoSantri'
-                        ? { ...item, id: rawId }
-                        : item;
-                });
-                await (db as any)[tableName].bulkPut(normalizedItems);
+                }
+                if (normalizedItems.length > 0) {
+                    await (db as any)[tableName].bulkPut(normalizedItems);
+                }
             }
         }
+
+        if (discoveredLockedMeta) {
+            await syncLockedE2eeMetaToLocal(discoveredLockedMeta);
+        }
+        if (lockedSkipCount > 0) {
+            throw new Error(
+                `E2EE_LOCKED: Konfigurasi E2EE dimuat ke perangkat ini (${lockedSkipCount} dokumen terenkripsi menunggu). Masukkan Master Password E2EE pada banner atas lalu sinkronkan ulang Firebase.`
+            );
+        }
     } catch (error) {
-        console.error('Error downloading all from Firebase:', error);
+        if (!(error as Error)?.message?.includes('E2EE_LOCKED')) {
+            console.error('Error downloading all from Firebase:', error);
+        }
         throw error;
     } finally {
         endCloudSync();
@@ -458,26 +780,45 @@ export const syncLocalToFirebase = async (tenantId: string, tableName: string, d
         }
     }
 
+    const e2eeCfg = await getLocalSyncE2eeConfig();
+    if (e2eeCfg && !isDeviceUnlockedForConfig(e2eeCfg)) {
+        enqueuePendingFbOp(tenantId, 'upsert', tableName, docId);
+        console.warn(`Sync Firebase untuk ${tableName}/${docId} diantrekan: perangkat E2EE masih terkunci.`);
+        return;
+    }
+
     try {
         const rawData = { ...data };
         if (tableName === 'settings') {
             delete rawData.cloudSyncConfig;
         }
-        const cleanPayload = sanitizeForFirestore({
+        const payloadWithTs = {
             ...rawData,
             lastModified: data.lastModified || Date.now(),
-        });
-        await setDoc(doc(fdb, path, docId), cleanPayload, { merge: true });
+        };
+        const prepared = await prepareFirestoreDocForPush(tableName, payloadWithTs);
+        await setDoc(doc(fdb, path, docId), prepared, { merge: false });
 
         if (tableName === 'settings') {
             await syncPublicPortalConfig(tenantId, data as PondokSettings);
         }
     } catch (error) {
+        if ((error as Error)?.message?.includes('E2EE_LOCKED')) {
+            enqueuePendingFbOp(tenantId, 'upsert', tableName, docId);
+            console.warn(`Sync Firebase untuk ${tableName}/${docId} diantrekan sementara karena E2EE terkunci.`);
+            return;
+        }
         handleFirestoreError(error, OperationType.WRITE, `${path}/${docId}`);
     }
 };
 
 export const deleteFromFirebase = async (tenantId: string, tableName: string, docId: string) => {
+    const e2eeCfg = await getLocalSyncE2eeConfig();
+    if (e2eeCfg && !isDeviceUnlockedForConfig(e2eeCfg)) {
+        enqueuePendingFbOp(tenantId, 'delete', tableName, docId);
+        console.warn(`Hapus Firebase untuk ${tableName}/${docId} diantrekan: perangkat E2EE masih terkunci.`);
+        return;
+    }
     const path = `tenants/${tenantId}/${tableName}/${docId}`;
     try {
         await deleteDoc(doc(fdb, path));
@@ -487,6 +828,13 @@ export const deleteFromFirebase = async (tenantId: string, tableName: string, do
 };
 
 export const pushAllToFirebase = async (tenantId: string) => {
+    const e2eeCfg = await getLocalSyncE2eeConfig();
+    if (e2eeCfg && !isDeviceUnlockedForConfig(e2eeCfg)) {
+        throw new Error(
+            'E2EE_LOCKED: Perangkat ini masih terkunci. Masukkan Master Password E2EE pada banner atas sebelum mengunggah data ke Firebase.'
+        );
+    }
+
     for (const tableName of TABLES_TO_SYNC) {
         if (tableName === 'settings') continue; // Handled explicitly below as 'main'
         const items = await (db as any)[tableName].toArray();
@@ -495,13 +843,14 @@ export const pushAllToFirebase = async (tenantId: string) => {
             const chunk = items.slice(i, i + 500);
             const subBatch = writeBatch(fdb);
 
-            chunk.forEach((item: any) => {
+            for (const item of chunk) {
                 const docId = item.id?.toString() || item.santriId?.toString();
                 if (docId) {
                     const ref = doc(fdb, `tenants/${tenantId}/${tableName}`, docId);
-                    subBatch.set(ref, sanitizeForFirestore(item));
+                    const prepared = await prepareFirestoreDocForPush(tableName, item);
+                    subBatch.set(ref, prepared);
                 }
-            });
+            }
 
             await subBatch.commit();
         }
@@ -511,7 +860,11 @@ export const pushAllToFirebase = async (tenantId: string) => {
     if (settings.length > 0) {
         const cleanSettings = { ...settings[0] };
         delete (cleanSettings as any).cloudSyncConfig;
-        await setDoc(doc(fdb, `tenants/${tenantId}/settings`, 'main'), sanitizeForFirestore({ ...cleanSettings, lastModified: Date.now() }), { merge: true });
+        const preparedSettings = await prepareFirestoreDocForPush('settings', {
+            ...cleanSettings,
+            lastModified: Date.now(),
+        });
+        await setDoc(doc(fdb, `tenants/${tenantId}/settings`, 'main'), preparedSettings, { merge: false });
         await syncPublicPortalConfig(tenantId, settings[0] as PondokSettings);
     }
 };
@@ -520,19 +873,38 @@ export const syncPsbWithFirebaseHub = async (tenantId: string) => {
     isSyncingFromCloud = true;
     let pulledCount = 0;
     let pushedCount = 0;
+    let lockedSkipCount = 0;
+    let discoveredLockedMeta: E2eeConfig | undefined;
 
     try {
         const path = `tenants/${tenantId}/pendaftar`;
         const snapshot = await getDocs(collection(fdb, path));
-        const cloudItems = snapshot.docs.map((d) => {
-            const data = d.data() as any;
+        const cloudItems: any[] = [];
+        for (const d of snapshot.docs) {
+            const rawData = d.data() as any;
+            const unwrapped = await unwrapFirestoreDocFromCloud(rawData);
+            if (!unwrapped.ok) {
+                lockedSkipCount++;
+                if (unwrapped.e2eeConfig) discoveredLockedMeta = unwrapped.e2eeConfig;
+                continue;
+            }
+            const data = unwrapped.data;
             const rawId = data.id ?? d.id;
             const parsedId = Number(rawId);
-            return {
+            cloudItems.push({
                 ...data,
                 id: !isNaN(parsedId) ? parsedId : rawId,
-            };
-        });
+            });
+        }
+        if (discoveredLockedMeta) {
+            await syncLockedE2eeMetaToLocal(discoveredLockedMeta);
+        }
+        if (lockedSkipCount > 0) {
+            throw new Error(
+                `E2EE_LOCKED: Terdapat ${lockedSkipCount} data pendaftar PSB terenkripsi. Buka kunci E2EE perangkat terlebih dahulu sebelum melakukan sinkronisasi.`
+            );
+        }
+
         const localItems = await db.pendaftar.toArray();
 
         const localMap = new Map(localItems.map((item) => [item.id, item]));
@@ -555,17 +927,28 @@ export const syncPsbWithFirebaseHub = async (tenantId: string) => {
         }
 
         // 2. Push any Local Items that are newer or missing in Cloud
-        for (const localItem of localItems) {
-            if (!localItem.id) continue;
+        const pendingPushes = localItems.filter((localItem) => {
+            if (!localItem.id) return false;
             const cloudItem = cloudMap.get(localItem.id);
             const localTime = getTime(localItem.lastModified);
             const cloudTime = cloudItem ? getTime(cloudItem.lastModified) : 0;
+            return !cloudItem || localTime > cloudTime;
+        });
 
-            if (!cloudItem || localTime > cloudTime) {
-                await setDoc(doc(fdb, path, localItem.id.toString()), {
+        if (pendingPushes.length > 0) {
+            const e2eeCfg = await getLocalSyncE2eeConfig();
+            if (e2eeCfg && !isDeviceUnlockedForConfig(e2eeCfg)) {
+                throw new Error(
+                    'E2EE_LOCKED: Perangkat ini masih terkunci. Masukkan Master Password E2EE sebelum mengunggah pendaftar PSB ke Firebase.'
+                );
+            }
+            for (const localItem of pendingPushes) {
+                const payload = {
                     ...localItem,
                     lastModified: localItem.lastModified || Date.now(),
-                }, { merge: true });
+                };
+                const prepared = await prepareFirestoreDocForPush('pendaftar', payload);
+                await setDoc(doc(fdb, path, localItem.id!.toString()), prepared, { merge: false });
                 pushedCount++;
             }
         }
@@ -573,7 +956,9 @@ export const syncPsbWithFirebaseHub = async (tenantId: string) => {
         const total = await db.pendaftar.count();
         return { pulledCount, pushedCount, total };
     } catch (error) {
-        console.error('Error syncing PSB with Firebase Hub:', error);
+        if (!(error as Error)?.message?.includes('E2EE_LOCKED')) {
+            console.error('Error syncing PSB with Firebase Hub:', error);
+        }
         throw error;
     } finally {
         isSyncingFromCloud = false;

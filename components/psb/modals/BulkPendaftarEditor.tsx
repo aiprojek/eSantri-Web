@@ -64,9 +64,11 @@ export const BulkPendaftarEditor: React.FC<BulkPendaftarEditorProps> = ({ isOpen
         
         namaWali: '',
         nomorHpWali: '',
-        jenjangId: 0,
+        jenjangId: settings.psbConfig?.targetJenjangId || settings.jenjang[0]?.id || 0,
         asalSekolah: '',
         jalurPendaftaran: 'Reguler',
+        gelombang: settings.psbConfig?.activeGelombang || 1,
+        tahunAjaran: settings.psbConfig?.tahunAjaranAktif || settings.tahunAjaranAktif || '',
         status: 'Baru',
         tanggalDaftar: new Date().toISOString()
     });

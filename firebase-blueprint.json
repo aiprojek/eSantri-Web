@@ -756,6 +756,22 @@
         "updatedAt": { "type": "number" }
       },
       "required": ["namaPonpes", "updatedAt"]
+    },
+    "PublicPortalEntry": {
+      "title": "PublicPortalEntry",
+      "description": "Data ringkasan per-santri Portal Wali (terenkripsi E2EE per-santri atau lookup hash)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nis": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "namaLengkap": { "type": "string", "maxLength": 200 },
+        "tanggalLahir": { "type": "string" },
+        "__e2eePortal": { "type": "number" },
+        "v": { "type": "number" },
+        "iv": { "type": "string" },
+        "ct": { "type": "string" }
+      },
+      "required": ["id", "nis", "namaLengkap"]
     }
   },
   "firestore": {
@@ -902,6 +918,10 @@
     "publicPortals/{tenantId}": {
       "schema": "PublicPortal",
       "description": "Dokumen konfigurasi publik Portal Wali Santri dan PSB per tenant"
+    },
+    "publicPortals/{tenantId}/entries/{entryId}": {
+      "schema": "PublicPortalEntry",
+      "description": "Dokumen terisolasi per santri pada Portal Wali (akses get memakai hash kredensial)"
     }
   }
 }

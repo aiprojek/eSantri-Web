@@ -1,7 +1,19 @@
 import { db } from '../db';
-import { PondokSettings, PortalConfig } from '../types';
+import { PondokSettings, PortalConfig, PsbConfig } from '../types';
 import { extractTemplateKeys } from './raporExcelService';
 import { calculatePredikat, isSubjectGradeKey } from './raporCalculationService';
+import {
+    decryptPortalSantriSummary,
+    deriveFirebasePortalPlainLookupKey,
+    derivePortalAuthHashCandidates,
+    encryptPortalSantriSummary,
+    EncryptedPortalSantriRecord,
+    isEncryptedPortalRecord,
+    normalizePortalDob,
+    normalizePortalNis,
+    sanitizeFirebasePortalEntryId,
+} from './e2eeService';
+import { isFirebaseClientConfigReady } from '../firebaseApp';
 
 interface PortalFetchResponse {
     success?: boolean;
@@ -385,11 +397,41 @@ export const loginPortalSantriViaGas = async (
     nis: string,
     dob: string,
     apiKey?: string,
-    fallbackSantriList?: PortalSantriSummary[]
+    fallbackSantriList?: Array<PortalSantriSummary | EncryptedPortalSantriRecord>
 ): Promise<PortalSantriSummary | null> => {
-    const cleanNis = (nis || '').replace(/\s+/g, '').toLowerCase();
-    const cleanDob = (dob || '').trim().slice(0, 10);
+    const cleanNis = normalizePortalNis(nis);
+    const cleanDob = normalizePortalDob(dob);
+    const authHashes = await derivePortalAuthHashCandidates(portalId, nis, dob);
 
+    // 1. Coba verifikasi Zero-Knowledge E2EE terlebih dahulu (PBKDF2 v2 lalu SHA-256 v1 legacy)
+    try {
+        for (const candidateHash of authHashes) {
+            const urlE2ee = new URL(gasEndpoint);
+            urlE2ee.searchParams.set('action', 'loginSantri');
+            urlE2ee.searchParams.set('portalId', portalId);
+            urlE2ee.searchParams.set('nis', candidateHash);
+            urlE2ee.searchParams.set('dob', 'e2ee');
+            if (apiKey) {
+                urlE2ee.searchParams.set('apiKey', apiKey);
+            }
+
+            const resE2ee = await fetch(urlE2ee.toString(), { method: 'GET' });
+            if (resE2ee.ok) {
+                const result: PortalFetchResponse = await resE2ee.json();
+                if (result.success && result.data?.santri) {
+                    const candidate = result.data.santri;
+                    if (isEncryptedPortalRecord(candidate)) {
+                        return await decryptPortalSantriSummary<PortalSantriSummary>(candidate, portalId, nis, dob);
+                    }
+                    return candidate as PortalSantriSummary;
+                }
+            }
+        }
+    } catch (err) {
+        console.warn('Server-side E2EE login check:', err);
+    }
+
+    // 2. Fallback ke query plaintext (kompatibilitas data lama sebelum E2EE diaktifkan)
     try {
         const url = new URL(gasEndpoint);
         url.searchParams.set('action', 'loginSantri');
@@ -404,9 +446,12 @@ export const loginPortalSantriViaGas = async (
         if (response.ok) {
             const result: PortalFetchResponse = await response.json();
             if (result.success && result.data?.santri) {
-                return result.data.santri as PortalSantriSummary;
+                const candidate = result.data.santri;
+                if (isEncryptedPortalRecord(candidate)) {
+                    return await decryptPortalSantriSummary<PortalSantriSummary>(candidate, portalId, nis, dob);
+                }
+                return candidate as PortalSantriSummary;
             }
-            // Jika GAS v2 merespons bahwa NIS/Tanggal lahir salah (bukan karena action tidak dikenal)
             if (result.success === false && result.message && !result.message.includes('Action GET tidak valid')) {
                 return null;
             }
@@ -415,14 +460,21 @@ export const loginPortalSantriViaGas = async (
         console.warn('Server-side login fallback check:', err);
     }
 
-    // Fallback kompatibilitas jika pengguna masih memakai script GAS v1 lama
+    // 3. Fallback kompatibilitas jika pengguna masih memakai script GAS v1 lama
     if (Array.isArray(fallbackSantriList) && fallbackSantriList.length > 0) {
         const matched = fallbackSantriList.find((santri) => {
-            const santriNis = (santri.nis || '').replace(/\s+/g, '').toLowerCase();
-            const santriDob = (santri.tanggalLahir || '').slice(0, 10);
+            if (isEncryptedPortalRecord(santri)) {
+                return authHashes.includes(santri.nis);
+            }
+            const santriNis = normalizePortalNis(santri.nis);
+            const santriDob = normalizePortalDob(santri.tanggalLahir);
             return santriNis === cleanNis && santriDob === cleanDob;
         });
-        return matched || null;
+        if (!matched) return null;
+        if (isEncryptedPortalRecord(matched)) {
+            return await decryptPortalSantriSummary<PortalSantriSummary>(matched, portalId, nis, dob);
+        }
+        return matched;
     }
 
     return null;
@@ -433,7 +485,18 @@ export const submitPortalPsbToGas = async (
     portalId: string,
     fields: Record<string, any>,
     apiKey?: string
-): Promise<void> => {
+): Promise<PortalFetchResponse> => {
+    // Hindari menggandakan payload base64 file (cukup dikirim sekali pada summary/payload utama)
+    const sanitizedSummaryFields: Record<string, any> = {};
+    Object.keys(fields || {}).forEach((k) => {
+        const val = fields[k];
+        if (val && typeof val === 'object' && val.isFile) {
+            sanitizedSummaryFields[k] = `[FILE_UPLOAD: ${val.name || k}]`;
+        } else {
+            sanitizedSummaryFields[k] = val;
+        }
+    });
+
     const response = await fetch(gasEndpoint, {
         method: 'POST',
         headers: {
@@ -444,7 +507,7 @@ export const submitPortalPsbToGas = async (
             portalId,
             apiKey,
             ...fields,
-            fields,
+            fields: sanitizedSummaryFields,
             submittedAt: new Date().toISOString(),
         }),
     });
@@ -471,6 +534,7 @@ export const submitPortalPsbToGas = async (
     if (result?.success === false) {
         throw new Error(result?.message || 'Gagal menyimpan pendaftaran ke GAS.');
     }
+    return result;
 };
 
 const BULAN_NAMES = [
@@ -863,6 +927,13 @@ export const buildFullPortalPayload = async (settings: PondokSettings): Promise<
         }),
     };
 
+    const portalE2eeActive = Boolean(settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.portal);
+    if (portalE2eeActive && Array.isArray(payload.santriSummary) && payload.santriSummary.length > 0) {
+        payload.santriSummary = (await Promise.all(
+            payload.santriSummary.map((item) => encryptPortalSantriSummary(item, portalId))
+        )) as any[];
+    }
+
     return {
         payload,
         activeSantri,
@@ -920,6 +991,150 @@ export const syncPortalBridgeToGas = async (settings: PondokSettings): Promise<{
     };
 };
 
+export const buildPublicPsbConfigPayload = (
+    settings: PondokSettings,
+    overridePsbConfig?: PsbConfig
+): { payload: any; syncedAt: string; portalId: string } => {
+    const portalId = settings.portalConfig?.portalId?.trim() || 'psb-online';
+    const syncedAt = new Date().toISOString();
+    const effectivePsbConfig = overridePsbConfig || settings.psbConfig;
+    const publicPortalConfig = settings.portalConfig
+        ? {
+            ...settings.portalConfig,
+            gasApiKey: '',
+        }
+        : undefined;
+
+    const psbE2ee =
+        settings.e2eeConfig?.enabled &&
+        settings.e2eeConfig?.modules?.psb &&
+        settings.e2eeConfig?.publicKeySpki &&
+        settings.e2eeConfig?.keyId
+            ? {
+                enabled: true,
+                keyId: settings.e2eeConfig.keyId,
+                publicKeySpki: settings.e2eeConfig.publicKeySpki,
+            }
+            : undefined;
+
+    const payload = {
+        metadata: {
+            updatedAt: syncedAt,
+            portalId,
+            source: 'esantri-psb-sync-v3',
+        },
+        settings: {
+            namaYayasan: settings.namaYayasan,
+            namaPonpes: settings.namaPonpes,
+            alamat: settings.alamat,
+            telepon: settings.telepon,
+            email: settings.email,
+            website: settings.website,
+            logoPonpesUrl: settings.logoPonpesUrl || '',
+            tahunAjaranAktif: settings.tahunAjaranAktif || '',
+            semesterAktif: settings.semesterAktif || 'Ganjil',
+            psbConfig: effectivePsbConfig,
+            portalConfig: publicPortalConfig,
+            jenjang: settings.jenjang,
+            kelas: settings.kelas,
+            rombel: settings.rombel,
+        },
+        ...(psbE2ee ? { psbE2ee } : {}),
+        santriSummary: [],
+    };
+
+    return { payload, syncedAt, portalId };
+};
+
+export const syncPsbPublicConfigToGas = async (
+    settings: PondokSettings,
+    overridePsbConfig?: PsbConfig,
+    overrideGasUrl?: string
+): Promise<{ syncedUrls: string[]; syncedAt: string; payloadSize: number }> => {
+    const effectivePsbConfig = overridePsbConfig || settings.psbConfig;
+    const portalGasUrl = settings.portalConfig?.gasEndpoint?.trim() || '';
+    const isValidGas = (u?: string) => Boolean(u && /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/i.test(u.trim()));
+
+    const candidateUrls = new Set<string>();
+    if (isValidGas(overrideGasUrl)) candidateUrls.add(overrideGasUrl!.trim());
+    if (isValidGas(effectivePsbConfig?.googleScriptUrl)) candidateUrls.add(effectivePsbConfig!.googleScriptUrl!.trim());
+    if (Array.isArray(effectivePsbConfig?.templates)) {
+        effectivePsbConfig.templates.forEach((tpl) => {
+            if (isValidGas(tpl.googleScriptUrl)) {
+                candidateUrls.add(tpl.googleScriptUrl!.trim());
+            }
+        });
+    }
+    if (candidateUrls.size === 0 && isValidGas(portalGasUrl)) {
+        candidateUrls.add(portalGasUrl);
+    }
+
+    if (candidateUrls.size === 0) {
+        throw new Error('URL Google Apps Script (GAS) PSB belum diisi atau belum valid (/exec).');
+    }
+
+    const { payload: publicPayload, syncedAt, portalId } = buildPublicPsbConfigPayload(settings, effectivePsbConfig);
+    const syncedUrls: string[] = [];
+    let lastSize = JSON.stringify(publicPayload).length;
+
+    for (const targetUrl of Array.from(candidateUrls)) {
+        // Jika target URL sama persis dengan Portal Wali GAS, pertahankan santriSummary agar Portal Wali tidak kosong!
+        let payloadToSend = publicPayload;
+        if (portalGasUrl && targetUrl === portalGasUrl) {
+            const mergedSettings: PondokSettings = {
+                ...settings,
+                psbConfig: effectivePsbConfig,
+            };
+            const fullBuilt = await buildFullPortalPayload(mergedSettings);
+            payloadToSend = fullBuilt.payload;
+        }
+        lastSize = JSON.stringify(payloadToSend).length;
+
+        const response = await fetch(targetUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain;charset=utf-8',
+            },
+            body: JSON.stringify({
+                action: 'upsertPortalConfig',
+                portalId,
+                apiKey: settings.portalConfig?.gasApiKey || '',
+                payload: payloadToSend,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Gagal sinkronisasi formulir PSB ke GAS (HTTP ${response.status}).`);
+        }
+
+        let result: PortalFetchResponse = {};
+        try {
+            result = await response.json();
+        } catch {
+            const text = await response.text();
+            if (!text) {
+                result = { success: true };
+            } else {
+                try {
+                    result = JSON.parse(text);
+                } catch {
+                    throw new Error(`Respon GAS tidak valid JSON: ${text.slice(0, 200)}`);
+                }
+            }
+        }
+        if (result?.success === false) {
+            throw new Error(result?.message || 'Sinkronisasi konfigurasi PSB ke GAS gagal.');
+        }
+        syncedUrls.push(targetUrl);
+    }
+
+    return {
+        syncedUrls,
+        syncedAt,
+        payloadSize: lastSize,
+    };
+};
+
 export const syncPortalToCloudflare = async (settings: PondokSettings): Promise<{ syncedCount: number; santriCount: number; syncedAt: string; payloadSize: number }> => {
     const workerUrl = settings.portalConfig?.cloudflareWorkerUrl?.trim();
     if (!workerUrl) {
@@ -956,9 +1171,102 @@ export const syncPortalToCloudflare = async (settings: PondokSettings): Promise<
 };
 
 export const syncPortalToFirebase = async (settings: PondokSettings): Promise<{ syncedCount: number; santriCount: number; syncedAt: string; payloadSize: number }> => {
+    if (!isFirebaseClientConfigReady) {
+        throw new Error('Konfigurasi Firebase belum lengkap. Pastikan project Firebase sudah diatur di Pengaturan > Sinkronisasi Cloud.');
+    }
+
+    const { auth, db: fdb, collection, doc, getDocs, setDoc, writeBatch } = await import('../firebase');
+    const targetTenantId = settings.cloudSyncConfig?.firebasePairedTenantId?.trim() || auth?.currentUser?.uid || '';
+    if (!targetTenantId) {
+        throw new Error('Tenant Firebase belum terhubung atau admin belum login Firebase Sync. Silakan hubungkan Firebase di Pengaturan > Sinkronisasi Cloud.');
+    }
+
     const { payload, activeSantri, syncedAt, portalId } = await buildFullPortalPayload(settings);
-    const { liteDb, doc, setDoc } = await import('../firebaseLite');
-    await setDoc(doc(liteDb, 'publicPortals', portalId), payload, { merge: true });
+    const santriList: any[] = Array.isArray(payload.santriSummary) ? payload.santriSummary : [];
+
+    const sanitizedPortalConfig = payload.settings?.portalConfig
+        ? {
+            ...payload.settings.portalConfig,
+            gasEndpoint: '',
+            gasApiKey: '',
+            encryptedKey: payload.settings.portalConfig.gasEndpoint
+                ? encodePortalKey(payload.settings.portalConfig.gasEndpoint, portalId, payload.settings.portalConfig.gasApiKey || '')
+                : '',
+        }
+        : {};
+
+    const psbE2ee =
+        settings.e2eeConfig?.enabled &&
+        settings.e2eeConfig?.modules?.psb &&
+        settings.e2eeConfig?.publicKeySpki &&
+        settings.e2eeConfig?.keyId
+            ? {
+                enabled: true,
+                keyId: settings.e2eeConfig.keyId,
+                publicKeySpki: settings.e2eeConfig.publicKeySpki,
+            }
+            : null;
+
+    const rootDoc = {
+        namaPonpes: settings.namaPonpes || 'Pondok Pesantren',
+        logoPonpesUrl: settings.logoPonpesUrl || '',
+        telepon: settings.telepon || '',
+        email: settings.email || '',
+        website: settings.website || '',
+        metadata: payload.metadata,
+        settings: {
+            ...payload.settings,
+            portalConfig: sanitizedPortalConfig,
+        },
+        portalConfig: sanitizedPortalConfig,
+        santriSummary: [], // Disimpan terisolasi di subkoleksi entries/{entryId} agar lolos batas 1 MiB & anti-enumeration
+        santriCount: santriList.length,
+        psbE2ee,
+        updatedAt: Date.now(),
+    };
+
+    await setDoc(doc(fdb, 'publicPortals', targetTenantId), rootDoc, { merge: true });
+
+    // Siapkan peta dokumen individual per santri pada publicPortals/{tenantId}/entries/{entryId}
+    const targetEntries = new Map<string, any>();
+    for (const rec of santriList) {
+        const entryId = isEncryptedPortalRecord(rec)
+            ? sanitizeFirebasePortalEntryId(rec.nis)
+            : await deriveFirebasePortalPlainLookupKey(portalId, rec.nis, rec.tanggalLahir);
+        if (!entryId) continue;
+        targetEntries.set(entryId, {
+            ...rec,
+            updatedAt: Date.now(),
+        });
+    }
+
+    const entriesColRef = collection(fdb, 'publicPortals', targetTenantId, 'entries');
+    const existingSnap = await getDocs(entriesColRef);
+
+    const ops: Array<{ type: 'set' | 'delete'; id: string; data?: any }> = [];
+    existingSnap.forEach((existingDoc) => {
+        if (!targetEntries.has(existingDoc.id)) {
+            ops.push({ type: 'delete', id: existingDoc.id });
+        }
+    });
+    targetEntries.forEach((entryData, entryId) => {
+        ops.push({ type: 'set', id: entryId, data: entryData });
+    });
+
+    const BATCH_LIMIT = 450;
+    for (let i = 0; i < ops.length; i += BATCH_LIMIT) {
+        const chunk = ops.slice(i, i + BATCH_LIMIT);
+        const batch = writeBatch(fdb);
+        for (const op of chunk) {
+            const ref = doc(fdb, 'publicPortals', targetTenantId, 'entries', op.id);
+            if (op.type === 'delete') {
+                batch.delete(ref);
+            } else {
+                batch.set(ref, op.data);
+            }
+        }
+        await batch.commit();
+    }
 
     const payloadStr = JSON.stringify(payload);
     return {
@@ -1083,32 +1391,49 @@ export default {
       }, { headers: corsHeaders });
     }
 
-    // 2. POST LOGIN SANTRI (Server-Side Verification)
-    if (request.method === "POST" && action === "loginSantri") {
-      const body = await request.json();
-      const nis = String(body.nis || "").trim().toLowerCase();
-      const dob = String(body.dob || "").trim();
+    // 2. GET / POST LOGIN SANTRI (Server-Side Verification, mendukung E2EE & plaintext)
+    if (action === "loginSantri" && (request.method === "GET" || request.method === "POST")) {
+      let body = {};
+      if (request.method === "POST") {
+        try { body = await request.json(); } catch {}
+      }
+      const nis = String((body.nis != null ? body.nis : url.searchParams.get("nis")) || "").replace(/\\s+/g, "").toLowerCase();
+      const dob = String((body.dob != null ? body.dob : url.searchParams.get("dob")) || "").trim().slice(0, 10);
+      const targetPortal = String((body.portalId != null ? body.portalId : reqPortalId) || "${portalId}");
 
-      const stored = await env.PORTAL_KV.get("portal_" + (body.portalId || reqPortalId), "json");
+      const stored = await env.PORTAL_KV.get("portal_" + targetPortal, "json");
       if (!stored || !stored.santriSummary) {
         return Response.json({ success: false, message: "Data santri belum tersedia." }, { headers: corsHeaders });
       }
 
-      const match = stored.santriSummary.find(s => 
-        String(s.nis || "").trim().toLowerCase() === nis &&
-        String(s.tanggalLahir || "").trim() === dob
+      const match = stored.santriSummary.find(s =>
+        String(s.nis || "").replace(/\\s+/g, "").toLowerCase() === nis &&
+        String(s.tanggalLahir || "").trim().slice(0, 10) === dob
       );
 
       if (!match) {
         return Response.json({ success: false, message: "NIS atau Tanggal Lahir tidak cocok." }, { headers: corsHeaders });
       }
 
-      return Response.json({ success: true, santri: match }, { headers: corsHeaders });
+      return Response.json({ success: true, version: 2, data: { santri: match }, santri: match }, { headers: corsHeaders });
     }
 
-    // 3. POST UPSERT FROM ESANTRI WEB ADMIN
+    function checkPostAuth(request, env, body) {
+      if (!env.API_KEY) return true;
+      const headerKey = request.headers.get("X-API-Key") || "";
+      const auth = request.headers.get("Authorization") || "";
+      const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+      const bodyKey = (body && body.apiKey) ? String(body.apiKey).trim() : "";
+      return headerKey === env.API_KEY || bearer === env.API_KEY || bodyKey === env.API_KEY;
+    }
+
+    // 3. POST UPSERT FROM ESANTRI WEB ADMIN (Wajib cek env.API_KEY jika diset)
     if (request.method === "POST") {
-      const body = await request.json();
+      let body = {};
+      try { body = await request.json(); } catch { body = {}; }
+      if (!checkPostAuth(request, env, body)) {
+        return Response.json({ success: false, message: "Unauthorized: API Key Worker tidak valid." }, { status: 401, headers: corsHeaders });
+      }
       if (body.action === "upsertPortalConfig" && body.payload) {
         await env.PORTAL_KV.put("portal_" + (body.portalId || reqPortalId), JSON.stringify(body.payload));
         return Response.json({ success: true, message: "Berhasil update data portal." }, { headers: corsHeaders });
@@ -1151,12 +1476,17 @@ export const getPortalFirebaseGuide = (): string => {
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Koleksi dokumen publik Portal Wali
-    match /publicPortals/{portalId} {
-      // Izinkan wali santri membaca profil & data portal
+    // Dokumen profil publik Portal Wali (tanpa daftar santri)
+    match /publicPortals/{tenantId} {
       allow read: if true;
-      // Hanya izinkan admin yang login mengupdate
       allow write: if request.auth != null;
+
+      // Subkoleksi entri per santri (Anti-Enumeration & Tanpa Batas 1 MiB)
+      match /entries/{entryId} {
+        allow get: if true;
+        allow list: if request.auth != null;
+        allow write: if request.auth != null;
+      }
     }
   }
 }`;
@@ -1200,7 +1530,8 @@ function doGet(e) {
     if (a === 'getPortalPublicInfo') return out(getPortalPublicInfo(e));
     if (a === 'loginSantri') return out(loginSantri(e));
     if (a === 'getPortalConfig') return out(getPortalPublicInfo(e)); // Diamankan: hanya profil publik
-    return out({ success: false, message: 'Portal eSantri v2.0 Aktif (Protected Endpoint).' });
+    if (a === 'getPsbSubmissions') return out(getPsbSubmissions(e));
+    return out({ success: false, message: 'Portal eSantri v2.1 Aktif (Protected Endpoint).' });
   } catch (err) {
     return out({ success: false, message: err.message || String(err) });
   }
@@ -1394,15 +1725,99 @@ function upsertPortalConfig(body) {
   return { success: true, version: 2, message: 'Portal config v2 tersimpan.' };
 }
 
+function extractCleanDriveFolderId(rawInput) {
+  if (!rawInput) return '';
+  const trimmed = String(rawInput).trim();
+  if (!trimmed) return '';
+  const folderMatch = trimmed.match(/\/folders\/([a-zA-Z0-9_-]{10,})/);
+  if (folderMatch && folderMatch[1]) return folderMatch[1];
+  const idParamMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+  if (idParamMatch && idParamMatch[1]) return idParamMatch[1];
+  const clean = trimmed.split('?')[0].split('#')[0].replace(/\/+$/, '');
+  if (/^[a-zA-Z0-9_-]{15,}$/.test(clean)) return clean;
+  return '';
+}
+
+function getPsbSubmissions(e) {
+  const apiKey = ((e && e.parameter && e.parameter.apiKey) || '').trim();
+  if (!authCheck(apiKey)) throw new Error('Token akses tidak valid.');
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName(SHEET_PSB);
+  if (!sh) return [];
+  const rows = sh.getDataRange().getValues();
+  if (rows.length < 2) return [];
+  const headers = rows[0];
+  const items = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const rec = {};
+    for (let j = 0; j < headers.length; j++) {
+      rec[headers[j]] = row[j];
+    }
+    if (rec.rawJson) {
+      try {
+        const parsed = JSON.parse(rec.rawJson);
+        for (const k in parsed) {
+          if (rec[k] === undefined || rec[k] === '') rec[k] = parsed[k];
+        }
+      } catch (err) {}
+    }
+    items.push(rec);
+  }
+  return items;
+}
+
 function submitPortalPsb(body) {
   const portalId = resolvePortalId(body.portalId);
   const apiKey = (body.apiKey || '').trim();
-  const fields = body.fields || {};
-  const submittedAt = body.submittedAt || new Date().toISOString();
   if (!authCheck(apiKey)) throw new Error('API key tidak valid.');
-  const sh = ensureSheet(SHEET_PSB, ['submittedAt', 'portalId', 'namaLengkap', 'nisn', 'nik', 'jenisKelamin', 'tanggalLahir', 'namaWali', 'teleponWali', 'rawJson']);
-  sh.appendRow([submittedAt, portalId, fields.namaLengkap || '', fields.nisn || '', fields.nik || '', fields.jenisKelamin || '', fields.tanggalLahir || '', fields.namaWali || '', fields.teleponWali || '', JSON.stringify(fields)]);
-  return { success: true, message: 'Pendaftaran berhasil tersimpan.' };
+
+  const fields = (body.fields && typeof body.fields === 'object') ? body.fields : {};
+  const merged = {};
+  for (const fk in fields) { merged[fk] = fields[fk]; }
+  for (const bk in body) {
+    if (['action', 'portalId', 'apiKey', 'fields', 'submittedAt'].indexOf(bk) === -1) {
+      merged[bk] = body[bk];
+    }
+  }
+
+  const targetFolderId = extractCleanDriveFolderId(merged.driveFolderId || merged.folderId || body.driveFolderId || '');
+  let targetFolder = null;
+  if (targetFolderId) {
+    try { targetFolder = DriveApp.getFolderById(targetFolderId); } catch (err) { targetFolder = null; }
+  }
+
+  for (const key in merged) {
+    const val = merged[key];
+    if (val && typeof val === 'object' && val.isFile && val.data) {
+      const base64Part = String(val.data).indexOf(',') !== -1 ? String(val.data).split(',')[1] : String(val.data);
+      const safeNama = String(merged.namaLengkap || 'santri').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd-HHmmss');
+      const fileName = String(key).toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + safeNama + '-' + stamp + '-' + (val.name || 'berkas');
+      const blob = Utilities.newBlob(Utilities.base64Decode(base64Part), val.mime || 'application/octet-stream', fileName);
+      const uploaded = targetFolder ? targetFolder.createFile(blob) : DriveApp.createFile(blob);
+      uploaded.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      merged[key] = uploaded.getUrl();
+    }
+  }
+
+  const submittedAt = body.submittedAt || new Date().toISOString();
+  const sh = ensureSheet(SHEET_PSB, ['submittedAt', 'portalId', 'jenjangId', 'targetJenjangNama', 'namaLengkap', 'nisn', 'nik', 'jenisKelamin', 'tanggalLahir', 'namaWali', 'nomorHpWali', 'rawJson']);
+  sh.appendRow([
+    submittedAt,
+    portalId,
+    merged.jenjangId || '',
+    merged.targetJenjangNama || merged.namaJenjang || '',
+    merged.namaLengkap || '',
+    merged.nisn || '',
+    merged.nik || '',
+    merged.jenisKelamin || '',
+    merged.tanggalLahir || '',
+    merged.namaWali || merged.namaAyah || merged.namaIbu || '',
+    merged.nomorHpWali || merged.teleponAyah || merged.teleponIbu || merged.telepon || '',
+    JSON.stringify(merged)
+  ]);
+  return { success: true, message: 'Pendaftaran & berkas berhasil tersimpan.', folderUsed: targetFolderId || 'root' };
 }`;
 
 export const getLocalSantriSummary = async (
@@ -1413,35 +1828,26 @@ export const getLocalSantriSummary = async (
     try {
         const sett = settings || (await db.settings.toCollection().first());
         if (!sett) return null;
-        const { payload } = await buildFullPortalPayload(sett);
-        const list: PortalSantriSummary[] = payload?.santriSummary || [];
-        const cleanTargetNis = (normalizedNis || '').replace(/\s+/g, '').toLowerCase();
-        const cleanTargetDob = (dob || '').trim();
+        const { payload, portalId } = await buildFullPortalPayload(sett);
+        const list: Array<PortalSantriSummary | EncryptedPortalSantriRecord> = payload?.santriSummary || [];
+        const cleanTargetNis = normalizePortalNis(normalizedNis);
+        const targetDobNorm = normalizePortalDob(dob);
+        const authHashes = targetDobNorm ? await derivePortalAuthHashCandidates(portalId, normalizedNis, targetDobNorm) : [];
 
-        const normalizeDob = (val?: string) => {
-            if (!val) return '';
-            const trimmed = val.trim();
-            if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-            const parts = trimmed.split(/[-/]/);
-            if (parts.length === 3) {
-                if (parts[0].length === 2 && parts[2].length === 4) {
-                    return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        for (const item of list) {
+            if (isEncryptedPortalRecord(item)) {
+                if (authHashes.length > 0 && authHashes.includes(item.nis)) {
+                    return await decryptPortalSantriSummary<PortalSantriSummary>(item, portalId, normalizedNis, targetDobNorm);
                 }
+                continue;
             }
-            return trimmed;
-        };
-
-        const targetDobNorm = normalizeDob(cleanTargetDob);
-
-        return (
-            list.find((s) => {
-                const sNis = (s.nis || '').replace(/\s+/g, '').toLowerCase();
-                if (sNis !== cleanTargetNis) return false;
-                if (!cleanTargetDob) return true;
-                const sDobNorm = normalizeDob(s.tanggalLahir);
-                return sDobNorm === targetDobNorm;
-            }) || null
-        );
+            const sNis = normalizePortalNis(item.nis);
+            if (sNis !== cleanTargetNis) continue;
+            if (!targetDobNorm) return item;
+            const sDobNorm = normalizePortalDob(item.tanggalLahir);
+            if (sDobNorm === targetDobNorm) return item;
+        }
+        return null;
     } catch (err) {
         console.error('Error getting local santri summary:', err);
         return null;

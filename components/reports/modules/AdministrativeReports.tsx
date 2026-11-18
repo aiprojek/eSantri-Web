@@ -5,6 +5,7 @@ import { PrintHeader } from '../../common/PrintHeader';
 import { ReportFooter, formatDate, formatRupiah, formatAlamat } from './Common';
 import { getDefaultAcademicYear } from '../../../utils/academicYear';
 import { isSantriPutra, isSantriPutri } from '../../../utils/formatters';
+import { matchesPsbTahunAjaran } from '../../psb/utils/psbUtils';
 
 // --- DASHBOARD SUMMARY ---
 export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings: PondokSettings }> = ({ santriList, settings }) => {
@@ -656,19 +657,22 @@ export const KepatuhanAdministrasiTemplate: React.FC<{ settings: PondokSettings;
 
 // --- EFEKTIVITAS PSB ---
 export const EfektivitasPSBTemplate: React.FC<{ settings: PondokSettings; pendaftarList: Pendaftar[] }> = ({ settings, pendaftarList }) => {
-    const total = pendaftarList.length;
-    const baru = pendaftarList.filter(p => p.status === 'Baru').length;
-    const diterima = pendaftarList.filter(p => p.status === 'Diterima').length;
-    const cadangan = pendaftarList.filter(p => p.status === 'Cadangan').length;
-    const ditolak = pendaftarList.filter(p => p.status === 'Ditolak').length;
+    const activePsbTa = settings.psbConfig?.tahunAjaranAktif || getDefaultAcademicYear(settings);
+    const scopedPendaftar = pendaftarList.filter(p => !p.deleted && matchesPsbTahunAjaran(p, activePsbTa, activePsbTa));
+
+    const total = scopedPendaftar.length;
+    const baru = scopedPendaftar.filter(p => p.status === 'Baru').length;
+    const diterima = scopedPendaftar.filter(p => p.status === 'Diterima').length;
+    const cadangan = scopedPendaftar.filter(p => p.status === 'Cadangan').length;
+    const ditolak = scopedPendaftar.filter(p => p.status === 'Ditolak').length;
     const conversion = total > 0 ? Math.round((diterima / total) * 100) : 0;
 
-    const byJalur = pendaftarList.reduce<Record<string, number>>((acc, p) => {
+    const byJalur = scopedPendaftar.reduce<Record<string, number>>((acc, p) => {
         const key = p.jalurPendaftaran || 'Tanpa Jalur';
         acc[key] = (acc[key] || 0) + 1;
         return acc;
     }, {});
-    const byGelombang = pendaftarList.reduce<Record<string, number>>((acc, p) => {
+    const byGelombang = scopedPendaftar.reduce<Record<string, number>>((acc, p) => {
         const key = p.gelombang ? `Gelombang ${p.gelombang}` : 'Tanpa Gelombang';
         acc[key] = (acc[key] || 0) + 1;
         return acc;
@@ -678,6 +682,7 @@ export const EfektivitasPSBTemplate: React.FC<{ settings: PondokSettings; pendaf
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
             <div>
                 <PrintHeader settings={settings} title="LAPORAN EFEKTIVITAS PSB" />
+                <p className="print-meta text-center text-sm mb-4">Tahun Ajaran PSB: {activePsbTa}</p>
                 <div className="grid grid-cols-5 gap-3 mb-5">
                     <div className="p-2 border rounded border-black text-center"><div className="text-xs text-gray-600">Total</div><div className="text-xl font-bold">{total}</div></div>
                     <div className="p-2 border rounded border-black text-center"><div className="text-xs text-gray-600">Baru</div><div className="text-xl font-bold">{baru}</div></div>

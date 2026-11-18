@@ -1,11 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
-import { PsbConfig, PondokSettings, PsbDesignStyle, PsbFormTemplate, PsbSubmissionMethod } from '../../types';
+import { PsbConfig, PondokSettings, PsbDesignStyle, PsbFormTemplate, PsbSubmissionMethod, PsbCloudProvider } from '../../types';
 import { CustomFieldEditor } from './common/CustomFieldEditor';
-import { getStandaloneDocumentStyles, getStandaloneDocumentStylesSync } from '../../utils/standaloneStyles';
+import { getStandaloneDocumentStylesSync } from '../../utils/standaloneStyles';
 import { PSB_STANDARD_FIELD_GROUPS, PSB_DEFAULT_FIELD_HINTS, extractDriveFolderId, isPhoneFieldKey, getPsbAcademicYearOptions } from './utils/psbUtils';
-import { PsbShareLinkModal } from './modals/PsbShareLinkModal';
-import { syncPortalBridgeToGas } from '../../services/portalGasService';
+import {
+    buildPsbGasScriptV31,
+    buildPsbStandaloneCloudHelperJs,
+    getPsbCloudProviderMeta,
+    isPsbCloudEndpointValid,
+    PSB_CLOUDFLARE_D1_WORKER_SCRIPT,
+    PSB_CLOUDFLARE_R2_WORKER_SCRIPT,
+    PSB_SUPABASE_SQL_SETUP,
+    testPsbCloudConnection
+} from '../../services/psbCloudService';
+import { buildStandaloneHybridEncryptJsHelper } from '../../services/e2eeService';
 
 interface PsbFormBuilderProps {
     config: PsbConfig;
@@ -13,15 +22,14 @@ interface PsbFormBuilderProps {
     onSave: (c: PsbConfig) => void;
 }
 
+const CLOUD_PROVIDERS: PsbCloudProvider[] = ['gas', 'cloudflare_d1', 'cloudflare_r2', 'supabase'];
+
 export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings, onSave }) => {
     const { showToast, showConfirmation } = useAppContext();
     const normalizeSubmissionMethod = (method?: PsbSubmissionMethod): PsbSubmissionMethod => {
         if (method === 'portal') return 'hybrid';
         return method || 'whatsapp';
     };
-    const isScriptUrlValid = (url: string) => /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(url.trim());
-    const [isShareLinkModalOpen, setIsShareLinkModalOpen] = useState(false);
-    const [isSyncingGas, setIsSyncingGas] = useState(false);
     const [localConfig, setLocalConfig] = useState<PsbConfig>({
         ...config,
         // Backward compatibility: If undefined, assume all active fields are required (old behavior) or init empty
@@ -47,13 +55,18 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
     const [newDoc, setNewDoc] = useState('');
     
-    // State for submission method
+    // State for submission method & cloud backend
     const [submissionMethod, setSubmissionMethod] = useState<PsbSubmissionMethod>(normalizeSubmissionMethod(config.submissionMethod));
+    const [backendProvider, setBackendProvider] = useState<PsbCloudProvider>(config.backendProvider || 'gas');
     const [googleScriptUrl, setGoogleScriptUrl] = useState(config.googleScriptUrl || '');
+    const [cloudApiKey, setCloudApiKey] = useState(config.cloudApiKey || '');
     const [driveFolderId, setDriveFolderId] = useState(config.driveFolderId || '');
+    const [supabaseBucket, setSupabaseBucket] = useState(config.supabaseBucket || 'psb-berkas');
     const cleanDriveFolderId = extractDriveFolderId(driveFolderId);
     const [showScriptHelper, setShowScriptHelper] = useState(false);
     const [copiedScript, setCopiedScript] = useState(false);
+    const [isTestingCloud, setIsTestingCloud] = useState(false);
+    const [cloudTestResult, setCloudTestResult] = useState<{ ok: boolean; message: string } | null>(null);
     const [manualZoom, setManualZoom] = useState(1);
     const [printPaperSize, setPrintPaperSize] = useState<'A4' | 'F4'>('A4');
     const [printScaleMode, setPrintScaleMode] = useState<'auto' | 'fit_1_page' | '95' | '90' | '85' | '80' | '75'>('fit_1_page');
@@ -112,30 +125,61 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
         setLocalConfig({ ...localConfig, requiredDocuments: updated });
     };
 
+    const providerMeta = useMemo(() => getPsbCloudProviderMeta(backendProvider), [backendProvider]);
+
+    const cloudSetupScriptCode = useMemo(() => {
+        switch (backendProvider) {
+            case 'cloudflare_d1':
+                return PSB_CLOUDFLARE_D1_WORKER_SCRIPT;
+            case 'cloudflare_r2':
+                return PSB_CLOUDFLARE_R2_WORKER_SCRIPT;
+            case 'supabase':
+                return PSB_SUPABASE_SQL_SETUP;
+            case 'gas':
+            default:
+                return buildPsbGasScriptV31(cleanDriveFolderId);
+        }
+    }, [backendProvider, cleanDriveFolderId]);
+
+    const validateCloudFields = (): boolean => {
+        if (submissionMethod === 'whatsapp') return true;
+        if (!isPsbCloudEndpointValid(googleScriptUrl, backendProvider)) {
+            showToast(
+                backendProvider === 'gas'
+                    ? 'URL Google Apps Script belum valid. Gunakan link deployment yang berakhiran /exec.'
+                    : 'URL Endpoint Cloud belum valid. Pastikan diawali https://',
+                'error'
+            );
+            return false;
+        }
+        if (backendProvider === 'supabase' && !cloudApiKey.trim()) {
+            showToast('Supabase Anon / Public Key wajib diisi untuk mode Supabase.', 'error');
+            return false;
+        }
+        return true;
+    };
+
     // Save Logic wrapper to include new fields
     const handleFinalSave = () => {
-        if (submissionMethod !== 'whatsapp' && !isScriptUrlValid(googleScriptUrl)) {
-            showToast('URL Google Script belum valid. Gunakan link deployment yang berakhiran /exec.', 'error');
-            return;
-        }
-        const configToSave = {
+        if (!validateCloudFields()) return;
+        const configToSave: PsbConfig = {
             ...localConfig,
             submissionMethod: normalizeSubmissionMethod(submissionMethod),
+            backendProvider,
             googleScriptUrl: googleScriptUrl.trim(),
-            driveFolderId: cleanDriveFolderId
+            cloudApiKey: cloudApiKey.trim(),
+            driveFolderId: cleanDriveFolderId,
+            supabaseBucket: supabaseBucket.trim() || 'psb-berkas'
         };
         onSave(configToSave);
-    }
+    };
 
     const handleSaveTemplate = () => {
         if (!templateName.trim()) {
             showToast('Nama formulir/template tidak boleh kosong.', 'error');
             return;
         }
-        if (submissionMethod !== 'whatsapp' && !isScriptUrlValid(googleScriptUrl)) {
-            showToast('URL Google Script belum valid. Simpan template dibatalkan.', 'error');
-            return;
-        }
+        if (!validateCloudFields()) return;
 
         const isNew = !activeTemplateId;
         const newTemplate: PsbFormTemplate = {
@@ -149,8 +193,11 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
             requiredDocuments: localConfig.requiredDocuments,
             customFields: localConfig.customFields || [],
             submissionMethod: normalizeSubmissionMethod(submissionMethod),
+            backendProvider,
             googleScriptUrl: googleScriptUrl.trim(),
+            cloudApiKey: cloudApiKey.trim(),
             driveFolderId: cleanDriveFolderId,
+            supabaseBucket: supabaseBucket.trim() || 'psb-berkas',
             fieldHints: localConfig.fieldHints ? { ...localConfig.fieldHints } : {}
         };
 
@@ -184,11 +231,14 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
                     fieldHints: tpl.fieldHints ? { ...tpl.fieldHints } : prev.fieldHints,
                     templates: prev.templates
                 }));
-                // Update specific states for method
                 setSubmissionMethod(normalizeSubmissionMethod(tpl.submissionMethod));
+                setBackendProvider(tpl.backendProvider || localConfig.backendProvider || 'gas');
                 setGoogleScriptUrl(tpl.googleScriptUrl || '');
+                setCloudApiKey(tpl.cloudApiKey ?? localConfig.cloudApiKey ?? '');
                 setDriveFolderId(tpl.driveFolderId || localConfig.driveFolderId || '');
-                
+                setSupabaseBucket(tpl.supabaseBucket || localConfig.supabaseBucket || 'psb-berkas');
+                setCloudTestResult(null);
+
                 setTemplateName(tpl.name);
                 setActiveTemplateId(tpl.id);
                 showToast(`Formulir "${tpl.name}" dimuat.`, 'success');
@@ -213,232 +263,32 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     const handleResetSelection = () => {
         setActiveTemplateId(null);
         setTemplateName('');
-        // We keep the current config values so user can "Clone" or "Save As" easily
         showToast('Mode template baru. Silakan beri nama baru untuk menyimpan sebagai salinan.', 'info');
     };
 
-    const handleSyncToGas = async () => {
-        const activeUrl = googleScriptUrl.trim() || settings.psbConfig?.googleScriptUrl || settings.portalConfig?.gasEndpoint;
-        if (!activeUrl) {
-            showToast('URL Google Apps Script (GAS) belum diisi. Silakan isi URL Script terlebih dahulu.', 'error');
-            return;
-        }
-        setIsSyncingGas(true);
+    const handleTestCloudConnection = async () => {
+        setIsTestingCloud(true);
+        setCloudTestResult(null);
         try {
-            const updatedSettings: PondokSettings = {
-                ...settings,
-                psbConfig: localConfig
-            };
-            await syncPortalBridgeToGas(updatedSettings);
-            showToast('Desain formulir & data jenjang berhasil disinkronkan ke Cloud GAS!', 'success');
-        } catch (e: any) {
-            console.error('Gagal sinkronisasi:', e);
-            showToast(`Gagal sinkron ke GAS: ${e?.message || 'Periksa koneksi internet'}`, 'error');
+            const res = await testPsbCloudConnection({
+                endpointUrl: googleScriptUrl,
+                backendProvider,
+                apiKey: cloudApiKey
+            });
+            setCloudTestResult({ ok: true, message: res.message });
+        } catch (err: any) {
+            setCloudTestResult({ ok: false, message: err?.message || 'Gagal menguji koneksi server Cloud.' });
         } finally {
-            setIsSyncingGas(false);
+            setIsTestingCloud(false);
         }
     };
 
-    const handleCopyGasScript = () => {
-        navigator.clipboard.writeText(googleAppsScriptCode.trim());
+    const handleCopyCloudScript = () => {
+        navigator.clipboard.writeText(cloudSetupScriptCode.trim());
         setCopiedScript(true);
-        showToast('Kode Script GAS (Code.gs) berhasil disalin ke clipboard!', 'success');
+        showToast(`Kode ${providerMeta.name} berhasil disalin ke clipboard!`, 'success');
         setTimeout(() => setCopiedScript(false), 2500);
     };
-
-    const googleAppsScriptCode = `/* GOOGLE APPS SCRIPT FOR ESANTRI WEB - SMART VERSION v2.5 */
-function doGet(e) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheets = ss.getSheets();
-  var combinedData = [];
-  for (var s = 0; s < sheets.length; s++) {
-    var sheet = sheets[s];
-    var rows = sheet.getDataRange().getValues();
-    if (rows.length < 2) continue;
-    var headers = rows[0];
-    for (var i = 1; i < rows.length; i++) {
-      var row = rows[i];
-      var record = {};
-      for (var j = 0; j < headers.length; j++) {
-        var val = row[j];
-        if (typeof val === 'string' && val.charAt(0) === "'") val = val.substring(1);
-        record[headers[j]] = val;
-      }
-      combinedData.push(record);
-    }
-  }
-  return ContentService.createTextOutput(JSON.stringify(combinedData)).setMimeType(ContentService.MimeType.JSON);
-}
-
-function doPost(e) {
-  var lock = LockService.getScriptLock();
-  lock.tryLock(30000);
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var data;
-    
-    // Handle text/plain or application/json
-    if (e.postData.type === "application/json" || e.postData.type === "text/plain") {
-      data = JSON.parse(e.postData.contents);
-    } else {
-      data = e.parameter;
-    }
-    
-    var sheetName = data.sheetName || "Pendaftar Baru";
-    var sheet = ss.getSheetByName(sheetName);
-    
-    if (!sheet) {
-      sheet = ss.insertSheet(sheetName);
-      var headers = [
-        "Timestamp", "namaLengkap", "nisn", "nik", "jenisKelamin", "tempatLahir", "tanggalLahir", "alamat",
-        "namaAyah", "nikAyah", "statusAyah", "pekerjaanAyah", "pendidikanAyah", "penghasilanAyah", "teleponAyah",
-        "namaIbu", "nikIbu", "statusIbu", "pekerjaanIbu", "pendidikanIbu", "penghasilanIbu", "teleponIbu",
-        "namaWali", "nikWali", "statusWali", "hubunganWali", "pekerjaanWali", "pendidikanWali", "penghasilanWali", "nomorHpWali",
-        "jenjangId", "asalSekolah", "jalurPendaftaran", "catatan", "status"
-      ];
-      for (var key in data) {
-         if (headers.indexOf(key) === -1 && key !== 'sheetName' && key !== 'driveFolderId' && key !== 'folderId') headers.push(key);
-      }
-      sheet.appendRow(headers);
-      sheet.setFrozenRows(1);
-    }
-    
-    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    var newRow = [];
-    var nextRow = sheet.getLastRow() + 1;
-    
-    // ID Folder Drive otomatis diambil dari input "ID atau Link Folder Google Drive" di Desain Formulir
-    var folderId = "${cleanDriveFolderId}";
-    
-    function extractCleanFolderId(rawInput) {
-      if (!rawInput) return "";
-      var trimmed = String(rawInput).trim();
-      if (!trimmed) return "";
-      var folderMatch = trimmed.match(/\\/folders\\/([a-zA-Z0-9_-]{10,})/);
-      if (folderMatch && folderMatch[1]) return folderMatch[1];
-      var idParamMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
-      if (idParamMatch && idParamMatch[1]) return idParamMatch[1];
-      var clean = trimmed.split('?')[0].split('#')[0].replace(/\\/+$/, '');
-      if (/^[a-zA-Z0-9_-]{15,}$/.test(clean)) return clean;
-      return "";
-    }
-    
-    function sanitizePhone(rawPhone) {
-      if (!rawPhone) return "";
-      var digits = String(rawPhone).replace(/[^0-9]/g, "");
-      if (!digits) return "";
-      if (digits.indexOf("62") === 0) return "0" + digits.substring(2);
-      if (digits.indexOf("8") === 0) return "0" + digits;
-      return digits;
-    }
-    
-    function toSlug(value) {
-      return String(value || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .replace(/-{2,}/g, '-');
-    }
-    
-    function detectDocPrefix(fieldKey, originalName, fieldLabel) {
-      var source = String(fieldKey || '') + ' ' + String(originalName || '') + ' ' + String(fieldLabel || '');
-      source = source.toLowerCase();
-      if (source.indexOf('kartu keluarga') !== -1 || source.indexOf(' kk') !== -1 || source.indexOf('kk ') !== -1 || source === 'kk') return 'kk';
-      if (source.indexOf('akta') !== -1) return 'akta';
-      if (source.indexOf('ijazah') !== -1) return 'ijazah';
-      if (source.indexOf('rapor') !== -1 || source.indexOf('raport') !== -1) return 'rapor';
-      if (source.indexOf('pasfoto') !== -1 || source.indexOf('foto') !== -1) return 'foto';
-      if (source.indexOf('kip') !== -1) return 'kip';
-      if (source.indexOf('ktp') !== -1) return 'ktp';
-      return 'dokumen';
-    }
-    
-    function extractExtension(fileName, mimeType) {
-      var original = String(fileName || '');
-      var dotIndex = original.lastIndexOf('.');
-      if (dotIndex > -1 && dotIndex < original.length - 1) {
-        return original.substring(dotIndex).toLowerCase();
-      }
-      if (mimeType === 'application/pdf') return '.pdf';
-      if (mimeType === 'image/jpeg') return '.jpg';
-      if (mimeType === 'image/png') return '.png';
-      return '';
-    }
-    
-    function buildSmartFileName(fieldKey, fileData, payload) {
-      var santriName = payload.namaLengkap || payload.namaSantri || payload.nama || 'santri';
-      var prefix = detectDocPrefix(fieldKey, fileData.name, fileData.fieldLabel);
-      var safeName = toSlug(santriName) || 'santri';
-      var ext = extractExtension(fileData.name, fileData.mime);
-      var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd-HHmmss');
-      return prefix + '-' + safeName + '-' + stamp + ext;
-    }
-    
-    var targetFolderId = extractCleanFolderId(data.driveFolderId || data.folderId || folderId);
-    var targetFolder = null;
-    if (targetFolderId) {
-      try {
-        targetFolder = DriveApp.getFolderById(targetFolderId);
-      } catch (folderErr) {
-        targetFolder = null;
-      }
-    }
-    
-    var phoneKeys = ['telepon', 'noHp', 'teleponAyah', 'teleponIbu', 'nomorHpWali', 'teleponWali'];
-    for (var pk = 0; pk < phoneKeys.length; pk++) {
-      var pKey = phoneKeys[pk];
-      if (data[pKey]) {
-        data[pKey] = sanitizePhone(data[pKey]);
-      }
-    }
-    
-    for (var key in data) {
-        if (typeof data[key] === 'object' && data[key] !== null && data[key].isFile) {
-            var fileData = data[key];
-            var smartName = buildSmartFileName(key, fileData, data);
-            var blob = Utilities.newBlob(Utilities.base64Decode(fileData.data.split(',')[1]), fileData.mime, smartName);
-            var file;
-            if (targetFolder) {
-                 file = targetFolder.createFile(blob);
-            } else {
-                 file = DriveApp.createFile(blob);
-            }
-            file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-            data[key] = file.getUrl();
-        }
-    }
-    data.Timestamp = new Date();
-
-    function formatCellForSheet(colKey, rawVal) {
-        if (rawVal === undefined || rawVal === null) return "";
-        var strVal = String(rawVal);
-        // Prevent Google Sheets from stripping leading zero on phone numbers, NIK, NISN, kodePos
-        if (/^0[0-9]+$/.test(strVal) || phoneKeys.indexOf(colKey) !== -1) {
-            return "'" + strVal;
-        }
-        return rawVal;
-    }
-
-    for (var i = 0; i < headers.length; i++) {
-        newRow.push(formatCellForSheet(headers[i], data[headers[i]]));
-    }
-    
-    for (var key in data) {
-        if (headers.indexOf(key) === -1 && key !== 'sheetName' && key !== 'driveFolderId' && key !== 'folderId') {
-            var newCol = headers.length + 1;
-            sheet.getRange(1, newCol).setValue(key);
-            newRow[newCol-1] = formatCellForSheet(key, data[key]); 
-            headers.push(key); 
-        }
-    }
-    
-    sheet.getRange(nextRow, 1, 1, newRow.length).setValues([newRow]);
-    return ContentService.createTextOutput(JSON.stringify({result: "success", row: nextRow, folderUsed: targetFolderId || "root"})).setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({result: "error", error: err.toString()})).setMimeType(ContentService.MimeType.JSON);
-  } finally { lock.releaseLock(); }
-}
-`;
 
     const generateHtml = (
         isForPreview = false,
@@ -671,7 +521,10 @@ function doPost(e) {
             if (field.type === 'radio' || field.type === 'checkbox') {
                 const opts = field.options?.filter(o => o.trim() !== '') || [];
                 const optionsHtml = opts.map(opt => `<label class="flex items-center gap-2 cursor-pointer p-1"><input type="${field.type}" name="custom_${field.id}${field.type==='checkbox'?'[]':''}" value="${opt}" class="w-4 h-4 text-teal-600" ${field.required && field.type === 'radio' ? 'required' : ''}> <span class="text-sm">${opt}</span></label>`).join('');
-                return `<div class="mb-4 break-inside-avoid"><label class="block text-gray-600 text-sm font-bold mb-0.5 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${field.label} ${field.required ? '<span class="text-red-500">*</span>' : ''}</label>${hintHtml}<div class="space-y-1 mt-1 ${style === 'classic' ? 'font-serif' : ''}">${optionsHtml}</div></div>`;
+                const cbReqAttrs = field.type === 'checkbox' && field.required && opts.length > 0
+                    ? `data-required-checkbox-group="true" data-group-label="${field.label.replace(/"/g, '&quot;')}"`
+                    : '';
+                return `<div class="mb-4 break-inside-avoid"><label class="block text-gray-600 text-sm font-bold mb-0.5 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${field.label} ${field.required ? '<span class="text-red-500">*</span>' : ''}</label>${hintHtml}<div ${cbReqAttrs} class="space-y-1 mt-1 ${style === 'classic' ? 'font-serif' : ''}">${optionsHtml}</div></div>`;
             }
             return '';
         }).join('') || '';
@@ -792,6 +645,11 @@ function doPost(e) {
         const obfuscatedEp = obfuscateParam(googleScriptUrl);
         const obfuscatedDf = obfuscateParam(cleanDriveFolderId);
 
+        const e2eePsbActive = Boolean(settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.psb);
+        const waE2eeHelperJs = e2eePsbActive && settings.e2eeConfig?.publicKeySpki && settings.e2eeConfig?.keyId
+            ? buildStandaloneHybridEncryptJsHelper(settings.e2eeConfig.publicKeySpki, settings.e2eeConfig.keyId)
+            : '';
+
         if (submissionMethod === 'whatsapp') {
              modalHtml = `
              <div id="waModal" class="no-print print:hidden fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
@@ -835,11 +693,19 @@ function doPost(e) {
              </div>`;
 
              submitScript = `<script>
+${waE2eeHelperJs}
 function submitForm(){
     const form=document.getElementById('psbForm');
     if(!form.checkValidity()){
         form.reportValidity();
         return;
+    }
+    const reqGroups=form.querySelectorAll('[data-required-checkbox-group="true"]');
+    for(let i=0;i<reqGroups.length;i++){
+        if(reqGroups[i].querySelectorAll('input[type="checkbox"]:checked').length===0){
+            alert('Harap pilih minimal satu opsi pada: '+(reqGroups[i].getAttribute('data-group-label')||'Pilihan wajib'));
+            return;
+        }
     }
     const modal=document.getElementById('waModal');
     if(modal){
@@ -854,7 +720,7 @@ function closeWaModal(){
         modal.classList.remove('flex');
     }
 }
-function proceedWaSubmit(){
+async function proceedWaSubmit(){
     const FIELD_LABEL_MAP=${fieldLabelMapJson};
     function resolveCustomKey(rawKey){
         if(FIELD_LABEL_MAP[rawKey]) return FIELD_LABEL_MAP[rawKey];
@@ -868,42 +734,57 @@ function proceedWaSubmit(){
     btn.disabled=true;
     btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Membuka WhatsApp...';
 
-    const formData=new FormData(form);
-    const data={tanggalDaftar:new Date().toISOString(),status:'Baru'};
-    const customData={};
-    formData.forEach((value,key)=>{
-        if(value instanceof File) return;
-        if(key.startsWith('custom_')){
-            const labelKey=resolveCustomKey(key);
-            if(customData[labelKey]){
-                customData[labelKey]=customData[labelKey]+', '+value;
+    try {
+        const formData=new FormData(form);
+        const data={tanggalDaftar:new Date().toISOString(),tahunAjaranAktif:${JSON.stringify(localConfig.tahunAjaranAktif || '')},status:'Baru'};
+        const customData={};
+        formData.forEach((value,key)=>{
+            if(value instanceof File) return;
+            if(key.startsWith('custom_')){
+                const labelKey=resolveCustomKey(key);
+                if(customData[labelKey]){
+                    customData[labelKey]=customData[labelKey]+', '+value;
+                }else{
+                    customData[labelKey]=value;
+                }
+            }else if(key==='docs[]'){
+                const docLabel='Checklist Berkas Persyaratan';
+                customData[docLabel]=customData[docLabel]?(customData[docLabel]+', '+value):value;
             }else{
-                customData[labelKey]=value;
+                data[key]=value;
             }
-        }else if(key==='docs[]'){
-            const docLabel='Checklist Berkas Persyaratan';
-            customData[docLabel]=customData[docLabel]?(customData[docLabel]+', '+value):value;
-        }else{
-            data[key]=value;
+        });
+        data.customData=JSON.stringify(customData);
+
+        let payloadBlock=data;
+        const isE2ee=(typeof window.__esantriEncryptHybrid==='function');
+        if(isE2ee){
+            payloadBlock=await window.__esantriEncryptHybrid(data);
         }
-    });
-    data.customData=JSON.stringify(customData);
 
-    let message="*Pendaftaran Santri Baru*\\n*${settings.namaPonpes}*\\n\\n";
-    message+="Nama: "+data.namaLengkap+"\\n";
-    message+="Jenjang: "+"${jenjangName}"+"\\n";
-    message+="Wali: "+(data.namaWali||data.namaAyah||'-')+"\\n";
-    message+="\\n--------------------------------\\n";
-    message+="PSB_START\\n"+JSON.stringify(data)+"\\nPSB_END";
-    message+="\\n--------------------------------\\n";
-    message+="\\n_Harap lampirkan foto/dokumen pendukung secara manual di chat ini._";
+        const displayNama=isE2ee?'[TERENKRIPSI E2EE]':data.namaLengkap;
+        const displayWali=isE2ee?'[TERENKRIPSI E2EE]':(data.namaWali||data.namaAyah||'-');
 
-    setTimeout(()=>{
-        window.open('https://wa.me/${adminPhone}?text='+encodeURIComponent(message),'_blank');
+        let message="*Pendaftaran Santri Baru*\\n*${settings.namaPonpes}*\\n\\n";
+        message+="Nama: "+displayNama+"\\n";
+        message+="Jenjang: "+"${jenjangName}"+"\\n";
+        message+="Wali: "+displayWali+"\\n";
+        message+="\\n--------------------------------\\n";
+        message+="PSB_START\\n"+JSON.stringify(payloadBlock)+"\\nPSB_END";
+        message+="\\n--------------------------------\\n";
+        message+="\\n_Harap lampirkan foto/dokumen pendukung secara manual di chat ini._";
+
+        setTimeout(()=>{
+            window.open('https://wa.me/${adminPhone}?text='+encodeURIComponent(message),'_blank');
+            btn.disabled=false;
+            btn.innerHTML=originalText;
+            closeWaModal();
+        },600);
+    } catch (err) {
+        alert("Gagal mengenkripsi/menyiapkan pesan: " + (err && err.message ? err.message : "Error"));
         btn.disabled=false;
         btn.innerHTML=originalText;
-        closeWaModal();
-    },600);
+    }
 }
 </script>`;
         } else if (submissionMethod === 'google_sheet') {
@@ -929,87 +810,32 @@ function proceedWaSubmit(){
                  </div>
              </div>`;
 
-              submitScript = `<script>
-const FIELD_LABEL_MAP=${fieldLabelMapJson};
-function _dParam(str){
-    if(!str) return '';
-    try{
-        return decodeURIComponent(atob(str.split('').reverse().join('')));
-    }catch(e){
-        return str;
-    }
-}
-const _SEC_TARGET_EP = _dParam(${obfuscatedEp});
-const _SEC_DRIVE_ID = _dParam(${obfuscatedDf});
+             const e2eePsbActive = Boolean(settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.psb);
+             const cloudHelperJs = buildPsbStandaloneCloudHelperJs({
+                 provider: backendProvider,
+                 endpointObfuscatedExpr: obfuscatedEp,
+                 driveFolderObfuscatedExpr: obfuscatedDf,
+                 apiKey: cloudApiKey,
+                 supabaseBucket,
+                 tahunAjaranAktif: localConfig.tahunAjaranAktif || settings.psbConfig?.tahunAjaranAktif || '',
+                 jenjangId: localConfig.targetJenjangId,
+                 sheetName: targetSheetName,
+                 fieldLabelMapJson,
+                 e2eePublicKey: e2eePsbActive ? settings.e2eeConfig?.publicKeySpki : undefined,
+                 e2eeKeyId: e2eePsbActive ? settings.e2eeConfig?.keyId : undefined,
+             });
 
-// Proteksi inspeksi kasual di file HTML standalone
-try{
-    document.addEventListener('contextmenu', function(e){
-        if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
-        e.preventDefault();
-    });
-    document.addEventListener('keydown', function(e){
-        if(e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74)) || (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83))){
-            e.preventDefault();
-        }
-    });
-}catch(e){}
-
-function resolveFieldKey(rawKey){
-    if(FIELD_LABEL_MAP[rawKey]) return FIELD_LABEL_MAP[rawKey];
-    const noBracket=rawKey.replace(/\\[\\]$/,'');
-    if(FIELD_LABEL_MAP[noBracket]) return FIELD_LABEL_MAP[noBracket];
-    if(rawKey.startsWith('custom_')) return rawKey.replace(/^custom_/,'').replace(/\\[\\]$/,'');
-    return rawKey;
-}
-function readFile(file, fieldLabel){
-    return new Promise((resolve,reject)=>{
-        const reader=new FileReader();
-        reader.onload=()=>resolve({name:file.name,mime:file.type,data:reader.result,isFile:true,fieldLabel:fieldLabel||''});
-        reader.onerror=reject;
-        reader.readAsDataURL(file);
-    });
-}
+             submitScript = `<script>
+${cloudHelperJs}
 async function submitForm(){
     const form=document.getElementById('psbForm');
-    if(!form.checkValidity()){
-        form.reportValidity();
-        return;
-    }
+    if(!validatePsbForm(form)) return;
     const btn=document.getElementById('submit-btn');
     const originalContent=btn.innerHTML;
     btn.disabled=true;
-    btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Mengirim Formulir...';
+    btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Mengirim Formulir &amp; Berkas...';
     try{
-        const formData=new FormData(form);
-        const data={};
-        const filePromises=[];
-        for(const [key,value] of formData.entries()){
-            const targetKey=resolveFieldKey(key);
-            if(value instanceof File){
-                if(value.size>0){
-                    if(value.size>5*1024*1024){
-                        alert('File '+value.name+' terlalu besar (Maksimal 5MB)');
-                        throw new Error('File too large');
-                    }
-                    const inputEl=form.querySelector('[name="'+key+'"]');
-                    const fieldLabel=FIELD_LABEL_MAP[key]||inputEl?.closest('div')?.querySelector('label')?.textContent?.replace('*','')?.trim()||targetKey;
-                    filePromises.push(readFile(value,fieldLabel).then(fileObj=>{data[targetKey]=fileObj;}));
-                }
-            }else{
-                if(data[targetKey]){
-                    data[targetKey]=data[targetKey]+", "+value;
-                }else{
-                    data[targetKey]=value;
-                }
-            }
-        }
-        await Promise.all(filePromises);
-        data.tanggalDaftar=new Date().toISOString();
-        data.jenjangId="${localConfig.targetJenjangId||''}";
-        data.sheetName="${targetSheetName}";
-        if(_SEC_DRIVE_ID) data.driveFolderId=_SEC_DRIVE_ID;
-        await fetch(_SEC_TARGET_EP,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});
+        await dispatchPsbToCloud(form);
         const modal=document.getElementById('gsSuccessModal');
         if(modal){
             modal.classList.remove('hidden');
@@ -1020,8 +846,8 @@ async function submitForm(){
         }
     }catch(error){
         console.error('Error!',error);
-        if(error.message!=='File too large'){
-            alert("Terjadi kesalahan koneksi saat mengirim formulir. Silakan coba kembali.");
+        if(error && error.message!=='File too large'){
+            alert("Gagal mengirim formulir: " + (error.message || "Terjadi kesalahan koneksi. Silakan coba kembali."));
         }
     }finally{
         btn.disabled=false;
@@ -1039,6 +865,7 @@ function closeGsSuccessModal(){
 }
 </script>`;
         } else {
+             const storageDesc = providerMeta.attachmentLabel;
              modalHtml = `
              <div id="hybridModal" class="no-print print:hidden fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
                  <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-left border border-gray-100 my-8">
@@ -1058,9 +885,9 @@ function closeGsSuccessModal(){
                              <div class="p-3 bg-teal-50/80 border border-teal-200 rounded-xl space-y-1">
                                  <div class="flex items-center gap-2 text-xs font-bold text-teal-900">
                                      <span class="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] shrink-0">1</span>
-                                     <span>Langkah 1: Penyimpanan Otomatis ke Cloud &amp; Drive</span>
+                                     <span>Langkah 1: Penyimpanan Otomatis ke Cloud (${storageDesc})</span>
                                  </div>
-                                 <p class="text-xs text-teal-800 pl-7 leading-relaxed">Seluruh isian formulir dan berkas/dokumen persyaratan Anda akan otomatis diunggah dan disimpan aman ke Google Drive &amp; Cloud database panitia.</p>
+                                 <p class="text-xs text-teal-800 pl-7 leading-relaxed">Seluruh isian formulir dan berkas/dokumen persyaratan Anda akan otomatis diunggah ke sistem Cloud (${storageDesc}) panitia.</p>
                              </div>
                              <div class="p-3 bg-green-50/80 border border-green-200 rounded-xl space-y-1">
                                  <div class="flex items-center gap-2 text-xs font-bold text-green-900">
@@ -1089,8 +916,8 @@ function closeGsSuccessModal(){
                              <i class="bi bi-check-circle-fill"></i>
                          </div>
                          <h4 class="text-base font-bold text-gray-800">Pendaftaran Berhasil Diproses!</h4>
-                         <p class="text-xs text-gray-600 mt-2 leading-relaxed">
-                             Data dan berkas telah tersimpan di Cloud server. Chat WhatsApp Admin telah dibuka dengan kode konfirmasi pendaftaran.
+                         <p id="hybridDoneDesc" class="text-xs text-gray-600 mt-2 leading-relaxed">
+                             Data dan berkas telah diproses ke Cloud server. Chat WhatsApp Admin telah dibuka dengan kode konfirmasi pendaftaran.
                          </p>
                          <div class="bg-amber-50 border border-amber-200 text-amber-900 text-xs p-3 rounded-xl mt-3 text-left">
                              <strong>Pengingat Penting:</strong> Pastikan Anda telah menekan tombol <strong>KIRIM</strong> di WhatsApp agar Admin langsung menerima konfirmasi Anda.
@@ -1102,53 +929,26 @@ function closeGsSuccessModal(){
                  </div>
              </div>`;
 
-              submitScript = `<script>
-const FIELD_LABEL_MAP=${fieldLabelMapJson};
-function _dParam(str){
-    if(!str) return '';
-    try{
-        return decodeURIComponent(atob(str.split('').reverse().join('')));
-    }catch(e){
-        return str;
-    }
-}
-const _SEC_TARGET_EP = _dParam(${obfuscatedEp});
-const _SEC_DRIVE_ID = _dParam(${obfuscatedDf});
+             const e2eePsbActive = Boolean(settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.psb);
+             const cloudHelperJs = buildPsbStandaloneCloudHelperJs({
+                 provider: backendProvider,
+                 endpointObfuscatedExpr: obfuscatedEp,
+                 driveFolderObfuscatedExpr: obfuscatedDf,
+                 apiKey: cloudApiKey,
+                 supabaseBucket,
+                 tahunAjaranAktif: localConfig.tahunAjaranAktif || settings.psbConfig?.tahunAjaranAktif || '',
+                 jenjangId: localConfig.targetJenjangId,
+                 sheetName: targetSheetName,
+                 fieldLabelMapJson,
+                 e2eePublicKey: e2eePsbActive ? settings.e2eeConfig?.publicKeySpki : undefined,
+                 e2eeKeyId: e2eePsbActive ? settings.e2eeConfig?.keyId : undefined,
+             });
 
-// Proteksi inspeksi kasual di file HTML standalone
-try{
-    document.addEventListener('contextmenu', function(e){
-        if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
-        e.preventDefault();
-    });
-    document.addEventListener('keydown', function(e){
-        if(e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74)) || (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83))){
-            e.preventDefault();
-        }
-    });
-}catch(e){}
-
-function resolveFieldKey(rawKey){
-    if(FIELD_LABEL_MAP[rawKey]) return FIELD_LABEL_MAP[rawKey];
-    const noBracket=rawKey.replace(/\\[\\]$/,'');
-    if(FIELD_LABEL_MAP[noBracket]) return FIELD_LABEL_MAP[noBracket];
-    if(rawKey.startsWith('custom_')) return rawKey.replace(/^custom_/,'').replace(/\\[\\]$/,'');
-    return rawKey;
-}
-function readFile(file, fieldLabel){
-    return new Promise((resolve,reject)=>{
-        const reader=new FileReader();
-        reader.onload=()=>resolve({name:file.name,mime:file.type,data:reader.result,isFile:true,fieldLabel:fieldLabel||''});
-        reader.onerror=reject;
-        reader.readAsDataURL(file);
-    });
-}
+             submitScript = `<script>
+${cloudHelperJs}
 function submitForm(){
     const form=document.getElementById('psbForm');
-    if(!form.checkValidity()){
-        form.reportValidity();
-        return;
-    }
+    if(!validatePsbForm(form)) return;
     const modal=document.getElementById('hybridModal');
     if(modal){
         document.getElementById('hybridInitialContent').classList.remove('hidden');
@@ -1172,6 +972,7 @@ async function proceedHybridSubmit(){
     const doneBox=document.getElementById('hybridDoneContent');
     const statusTitle=document.getElementById('hybridStatusTitle');
     const statusDesc=document.getElementById('hybridStatusDesc');
+    const doneDesc=document.getElementById('hybridDoneDesc');
 
     initBox.classList.add('hidden');
     progBox.classList.remove('hidden');
@@ -1179,69 +980,55 @@ async function proceedHybridSubmit(){
     statusDesc.textContent="Sedang mengunggah data dan berkas persyaratan...";
 
     try{
-        const formData=new FormData(form);
-        const data={};
-        const filePromises=[];
-        for(const [key,value] of formData.entries()){
-            const targetKey=resolveFieldKey(key);
-            if(value instanceof File){
-                if(value.size>0){
-                    if(value.size>5*1024*1024){
-                        alert('File '+value.name+' terlalu besar (Maksimal 5MB)');
-                        throw new Error('File too large');
-                    }
-                    const inputEl=form.querySelector('[name="'+key+'"]');
-                    const fieldLabel=FIELD_LABEL_MAP[key]||inputEl?.closest('div')?.querySelector('label')?.textContent?.replace('*','')?.trim()||targetKey;
-                    filePromises.push(readFile(value,fieldLabel).then(fileObj=>{data[targetKey]=fileObj;}));
-                }
-            }else{
-                if(data[targetKey]){
-                    data[targetKey]=data[targetKey]+", "+value;
-                }else{
-                    data[targetKey]=value;
-                }
-            }
+        const collected=await collectPsbFormPayload(form);
+        const textOnlyData={...collected.data};
+        for(let i=0;i<collected.pendingFiles.length;i++){
+            textOnlyData[collected.pendingFiles[i].targetKey+'_status']="[File di Cloud/HP User]";
         }
-        await Promise.all(filePromises);
-        data.tanggalDaftar=new Date().toISOString();
-        data.jenjangId="${localConfig.targetJenjangId||''}";
-        data.sheetName="${targetSheetName}";
-        if(_SEC_DRIVE_ID) data.driveFolderId=_SEC_DRIVE_ID;
-
-        const textOnlyData={...data};
-        for(let key in textOnlyData){
-            if(typeof textOnlyData[key]==='object'&&textOnlyData[key]!==null&&textOnlyData[key].isFile){
-                delete textOnlyData[key];
-                textOnlyData[key+'_status']="[File di Cloud/HP User]";
-            }
+        let waBackupObj=textOnlyData;
+        if(typeof window.__esantriEncryptHybrid==='function'){
+            waBackupObj=await window.__esantriEncryptHybrid(textOnlyData);
         }
-        const jsonString=JSON.stringify(textOnlyData);
+        const jsonString=JSON.stringify(waBackupObj);
         const encodedBackup=btoa(unescape(encodeURIComponent(jsonString)));
+
         let cloudSuccess=false;
+        let cloudErrMsg='';
         try{
-            await fetch(_SEC_TARGET_EP,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});
+            await dispatchPsbToCloud(form);
             cloudSuccess=true;
         }catch(err){
             console.error("Cloud Upload Failed",err);
+            cloudErrMsg=err && err.message ? err.message : '';
         }
 
         statusTitle.textContent="Langkah 2: Membuka WhatsApp...";
-        statusDesc.textContent="Menyiapkan pesan konfirmasi otomatis...";
+        statusDesc.textContent=cloudSuccess
+            ? "Data Cloud tersimpan! Menyiapkan pesan konfirmasi otomatis..."
+            : "Upload Cloud terkendala ("+(cloudErrMsg||"jaringan")+"). Membuka WA dengan kode backup lengkap...";
 
-        let message="Assalamu'alaikum Admin,\\nSaya sudah mengisi formulir pendaftaran santri baru.\\n\\n*Data Santri*\\nNama: "+data.namaLengkap+"\\nJenjang: "+"${jenjangName}"+"\\nWali: "+(data.namaWali||data.namaAyah||'-')+"\\nStatus Upload: "+(cloudSuccess?"✅ Sukses ke Server":"⚠️ Gagal/Pending")+"\\n\\n*KODE BACKUP DATA (JANGAN DIHAPUS):*\\nPSB_BACKUP_START\\n"+encodedBackup+"\\nPSB_BACKUP_END\\n\\n_Jika server error, Admin dapat menyalin pesan ini ke menu 'Impor WA'._";
+        if(doneDesc){
+            doneDesc.textContent=cloudSuccess
+                ? "Data dan berkas berhasil disimpan ke server Cloud. Chat WhatsApp Admin telah dibuka dengan kode konfirmasi pendaftaran."
+                : "Upload Cloud mengalami kendala ("+(cloudErrMsg||"cek koneksi")+"), namun data lengkap telah disiapkan melalui pesan WhatsApp agar tetap diterima Admin.";
+        }
+
+        let displayNama=(typeof window.__esantriEncryptHybrid==='function') ? '[TERENKRIPSI E2EE]' : textOnlyData.namaLengkap;
+        let displayWali=(typeof window.__esantriEncryptHybrid==='function') ? '[TERENKRIPSI E2EE]' : (textOnlyData.namaWali||textOnlyData.namaAyah||'-');
+        let message="Assalamu'alaikum Admin,\\nSaya sudah mengisi formulir pendaftaran santri baru.\\n\\n*Data Santri*\\nNama: "+displayNama+"\\nJenjang: "+"${jenjangName}"+"\\nWali: "+displayWali+"\\nStatus Upload: "+(cloudSuccess?"✅ Sukses ke Server":"⚠️ Gagal/Pending ("+(cloudErrMsg||"cek server")+")")+"\\n\\n*KODE BACKUP DATA (JANGAN DIHAPUS):*\\nPSB_BACKUP_START\\n"+encodedBackup+"\\nPSB_BACKUP_END\\n\\n_Jika server error, Admin dapat menyalin pesan ini ke menu 'Impor WA'._";
 
         setTimeout(()=>{
             window.open('https://wa.me/${adminPhone}?text='+encodeURIComponent(message),'_blank');
             progBox.classList.add('hidden');
             doneBox.classList.remove('hidden');
-        },800);
+        },700);
 
     }catch(error){
         console.error('Error!',error);
         initBox.classList.remove('hidden');
         progBox.classList.add('hidden');
-        if(error.message!=='File too large'){
-            alert("Terjadi kesalahan. Pastikan koneksi internet stabil dan ukuran file tidak melebihi 5MB.");
+        if(error && error.message!=='File too large'){
+            alert("Terjadi kesalahan: "+(error.message||"Pastikan koneksi internet stabil dan ukuran file tidak melebihi 5MB."));
         }
     }
 }
@@ -1284,6 +1071,13 @@ function finishHybridSubmit(){
                             form.insertBefore(banner, form.firstChild);
                         }
                     }
+                }
+            })();
+            (function() {
+                var warnEl = document.getElementById('psb-e2ee-crypto-warning');
+                var e2eeActive = ${Boolean(settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.psb && settings.e2eeConfig?.publicKeySpki)};
+                if (warnEl && e2eeActive && (!window.crypto || !window.crypto.subtle)) {
+                    warnEl.style.display = 'flex';
                 }
             })();
         </script>
@@ -1431,7 +1225,7 @@ function finishHybridSubmit(){
     </style>
 </head>
 <body class="${bodyClass}">
-<div class="psb-vector-fit-page"><div class="psb-vector-fit-viewport"><div id="psb-standalone-sheet" class="${wrapperClass}">${headerHtml}<form id="psbForm" onsubmit="event.preventDefault();"><div class="mb-6 break-inside-avoid"><label class="block font-bold mb-1 text-gray-700 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenjang Pendidikan</label><div class="font-bold text-lg p-2 bg-gray-50 border-b border-gray-300 print:border-none print:bg-transparent print:p-0 print:text-black ${style === 'classic' ? 'bg-transparent border-b-2 border-gray-300' : ''}">${jenjangName}</div><input type="hidden" name="jenjangId" value="${localConfig.targetJenjangId||''}" /></div>${activeFieldsHtml}${localConfig.requiredDocuments.length>0?`<div class="mt-8 mb-6 p-4 border rounded-lg break-inside-avoid print:border-black print:bg-white ${style === 'classic' ? 'border-[#1B4D3E]/30 bg-[#f0fdf4]/30' : ''}"><h4 class="font-bold mb-3 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Checklist Persyaratan Berkas (Bawa Fisik)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${docsHtml}</div></div>`:''}${customFieldsHtml}<div class="mt-8 no-print space-y-3"><button type="button" id="submit-btn" onclick="submitForm()" class="w-full flex justify-center items-center gap-2 ${buttonColor} text-white font-bold py-3 rounded-lg transition shadow-md"><i class="${buttonIcon} text-xl"></i> ${buttonText}</button><p class="text-xs text-center text-gray-500 mt-2">${buttonSubtext}</p></div><div class="mt-8 pt-4 border-t border-gray-300 text-center text-xs text-gray-600"><div>Tahun Ajaran ${localConfig.tahunAjaranAktif || new Date().getFullYear()}</div><div class="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div></div></form>${closeDiv}</div></div></div><script>
+<div class="psb-vector-fit-page"><div class="psb-vector-fit-viewport"><div id="psb-standalone-sheet" class="${wrapperClass}">${headerHtml}<div id="psb-e2ee-crypto-warning" style="display:none;" class="no-print mb-5 bg-amber-50 border border-amber-300 text-amber-900 rounded-lg p-3.5 text-xs flex items-start gap-2.5"><i class="bi bi-shield-exclamation text-amber-600 text-lg shrink-0"></i><div><p class="font-bold">Fitur Enkripsi E2EE Tidak Didukung di Konteks Ini</p><p class="mt-0.5 leading-relaxed">Browser memblokir enkripsi Web Crypto karena halaman tidak dibuka melalui koneksi aman (<strong>HTTPS</strong>) atau file lokal penuh. Pendaftaran Cloud/Hybrid akan gagal kecuali dibuka lewat tautan HTTPS resmi.</p></div></div><form id="psbForm" onsubmit="event.preventDefault();"><div class="mb-6 break-inside-avoid"><label class="block font-bold mb-1 text-gray-700 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenjang Pendidikan</label><div class="font-bold text-lg p-2 bg-gray-50 border-b border-gray-300 print:border-none print:bg-transparent print:p-0 print:text-black ${style === 'classic' ? 'bg-transparent border-b-2 border-gray-300' : ''}">${jenjangName}</div><input type="hidden" name="jenjangId" value="${localConfig.targetJenjangId||''}" /></div>${activeFieldsHtml}${localConfig.requiredDocuments.length>0?`<div class="mt-8 mb-6 p-4 border rounded-lg break-inside-avoid print:border-black print:bg-white ${style === 'classic' ? 'border-[#1B4D3E]/30 bg-[#f0fdf4]/30' : ''}"><h4 class="font-bold mb-3 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Checklist Persyaratan Berkas (Bawa Fisik)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${docsHtml}</div></div>`:''}${customFieldsHtml}<div class="mt-8 no-print space-y-3"><button type="button" id="submit-btn" onclick="submitForm()" class="w-full flex justify-center items-center gap-2 ${buttonColor} text-white font-bold py-3 rounded-lg transition shadow-md"><i class="${buttonIcon} text-xl"></i> ${buttonText}</button><p class="text-xs text-center text-gray-500 mt-2">${buttonSubtext}</p></div><div class="mt-8 pt-4 border-t border-gray-300 text-center text-xs text-gray-600"><div>Tahun Ajaran ${localConfig.tahunAjaranAktif || new Date().getFullYear()}</div><div class="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div></div></form>${closeDiv}</div></div></div><script>
 function insertMd(elemId, before, after) {
     after = after || '';
     var el = document.getElementById(elemId);
@@ -1642,7 +1436,7 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                 }
             };
         }
-    }, [localConfig, settings, templateName, submissionMethod, googleScriptUrl, driveFolderId]);
+    }, [localConfig, settings, templateName, submissionMethod, backendProvider, googleScriptUrl, cloudApiKey, driveFolderId, supabaseBucket]);
 
 
     return (
@@ -1812,62 +1606,156 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Metode Pengiriman</label>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Metode Pengiriman Formulir HTML</label>
                             <select value={submissionMethod} onChange={e => setSubmissionMethod(e.target.value as any)} className="w-full border rounded p-2 text-sm bg-blue-50 border-blue-200">
                                 <option value="whatsapp">WhatsApp (Teks Langsung)</option>
-                                <option value="google_sheet">Google Sheet (Web App)</option>
-                                <option value="hybrid">Hybrid (Sheet + WA Backup)</option>
+                                <option value="google_sheet">Cloud Backend Langsung (GAS / Cloudflare / Supabase)</option>
+                                <option value="hybrid">Hybrid (Cloud Backend + WA Backup)</option>
                             </select>
-                            <p className="mt-1 text-[10px] text-gray-500">Gunakan <strong>Hybrid</strong> untuk upload berkas langsung ke cloud dengan backup WA otomatis.</p>
+                            <p className="mt-1 text-[10px] text-gray-500">Gunakan <strong>Hybrid</strong> agar formulir HTML menyimpan data &amp; berkas ke Cloud sekaligus mengirim konfirmasi WA Admin.</p>
                         </div>
 
                         {submissionMethod !== 'whatsapp' && (
-                            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-2.5">
+                            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-3">
                                 <div>
-                                    <label className="font-bold block text-gray-700 mb-1">
-                                        URL Google Apps Script (Web App)
+                                    <label className="font-bold block text-gray-700 mb-1.5">
+                                        Pilih Server Backend &amp; Penyimpanan Lampiran
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={googleScriptUrl}
-                                        onChange={e => setGoogleScriptUrl(e.target.value)}
-                                        placeholder="https://script.google.com/macros/s/.../exec"
-                                        className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden"
-                                    />
-                                    {googleScriptUrl.trim() && !isScriptUrlValid(googleScriptUrl) && (
-                                        <p className="text-[10px] text-red-600 mt-1">
-                                            ⚠️ URL belum valid. Gunakan URL deployment Web App yang berakhiran <code>/exec</code>.
-                                        </p>
-                                    )}
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        {CLOUD_PROVIDERS.map((pid) => {
+                                            const m = getPsbCloudProviderMeta(pid);
+                                            const active = backendProvider === pid;
+                                            return (
+                                                <button
+                                                    key={pid}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setBackendProvider(pid);
+                                                        setCloudTestResult(null);
+                                                    }}
+                                                    className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                                                        active
+                                                            ? 'border-teal-600 bg-teal-50 text-teal-950 ring-1 ring-teal-500'
+                                                            : 'border-gray-200 bg-white hover:bg-gray-100 text-gray-700'
+                                                    }`}
+                                                >
+                                                    <div className="font-bold text-[11px] truncate">{m.shortName}</div>
+                                                    <div className="text-[10px] text-gray-500 truncate">{m.attachmentLabel}</div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-[10px] text-slate-600 mt-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1.5 leading-snug">
+                                        <i className="bi bi-info-circle-fill text-teal-700 mr-1"></i>
+                                        {providerMeta.helperSummary}
+                                    </p>
                                 </div>
 
                                 <div>
                                     <label className="font-bold block text-gray-700 mb-1">
-                                        ID atau Link Folder Google Drive Tujuan Berkas (Opsional)
+                                        {providerMeta.endpointLabel}
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={driveFolderId}
-                                        onChange={e => setDriveFolderId(e.target.value)}
-                                        placeholder="Tempel Link Folder Drive atau ID Folder (cth: 1a2B3c4D5e...)"
-                                        className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden"
-                                    />
-                                    {driveFolderId.trim() ? (
-                                        cleanDriveFolderId ? (
-                                            <p className="text-[10px] text-teal-700 mt-1 flex items-center gap-1 font-medium">
-                                                <i className="bi bi-check-circle-fill"></i> ID Folder Terdeteksi: <code className="bg-teal-100 px-1 rounded font-bold">{cleanDriveFolderId}</code> (Otomatis disematkan ke Formulir &amp; Kode Script di bawah)
-                                            </p>
-                                        ) : (
-                                            <p className="text-[10px] text-amber-700 mt-1">
-                                                ⚠️ Format ID Folder belum dikenali. Salin link folder dari browser (<code>drive.google.com/drive/folders/ID_FOLDER</code>).
-                                            </p>
-                                        )
-                                    ) : (
-                                        <p className="text-[10px] text-gray-500 mt-1">
-                                            Jika diisi, berkas pendaftar otomatis masuk ke folder ini (tidak tercecer di Drive utama).
+                                    <div className="flex gap-1.5">
+                                        <input
+                                            type="text"
+                                            value={googleScriptUrl}
+                                            onChange={e => {
+                                                setGoogleScriptUrl(e.target.value);
+                                                setCloudTestResult(null);
+                                            }}
+                                            placeholder={providerMeta.endpointPlaceholder}
+                                            className="flex-1 min-w-0 border border-gray-300 rounded-lg p-2 font-mono text-xs bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleTestCloudConnection}
+                                            disabled={isTestingCloud || !googleScriptUrl.trim()}
+                                            className="shrink-0 px-2.5 py-1.5 rounded-lg border border-teal-300 bg-teal-50 hover:bg-teal-100 text-teal-900 font-bold text-[11px] disabled:opacity-50 transition-colors cursor-pointer"
+                                            title="Uji koneksi ke endpoint server ini"
+                                        >
+                                            {isTestingCloud ? <i className="bi bi-arrow-repeat animate-spin"></i> : 'Tes Link'}
+                                        </button>
+                                    </div>
+                                    {googleScriptUrl.trim() && !isPsbCloudEndpointValid(googleScriptUrl, backendProvider) && (
+                                        <p className="text-[10px] text-red-600 mt-1">
+                                            ⚠️ {backendProvider === 'gas'
+                                                ? 'URL belum valid. Gunakan URL deployment Web App yang berakhiran /exec.'
+                                                : 'Format URL belum valid. Pastikan diawali https://'}
+                                        </p>
+                                    )}
+                                    {cloudTestResult && (
+                                        <p className={`text-[10px] mt-1 font-medium ${cloudTestResult.ok ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                            {cloudTestResult.ok ? '✅ ' : '❌ '}{cloudTestResult.message}
                                         </p>
                                     )}
                                 </div>
+
+                                {providerMeta.supportsApiKey && (
+                                    <div>
+                                        <label className="font-bold block text-gray-700 mb-1">
+                                            {providerMeta.apiKeyLabel}
+                                        </label>
+                                        <input
+                                            type="password"
+                                            value={cloudApiKey}
+                                            onChange={e => {
+                                                setCloudApiKey(e.target.value);
+                                                setCloudTestResult(null);
+                                            }}
+                                            placeholder={providerMeta.apiKeyPlaceholder}
+                                            className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden"
+                                        />
+                                        <p className="text-[10px] text-gray-500 mt-1">{providerMeta.apiKeyHelp}</p>
+                                    </div>
+                                )}
+
+                                {providerMeta.usesDriveFolder && (
+                                    <div>
+                                        <label className="font-bold block text-gray-700 mb-1">
+                                            ID atau Link Folder Google Drive Tujuan Berkas (Opsional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={driveFolderId}
+                                            onChange={e => setDriveFolderId(e.target.value)}
+                                            placeholder="Tempel Link Folder Drive atau ID Folder (cth: 1a2B3c4D5e...)"
+                                            className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden"
+                                        />
+                                        {driveFolderId.trim() ? (
+                                            cleanDriveFolderId ? (
+                                                <p className="text-[10px] text-teal-700 mt-1 flex items-center gap-1 font-medium">
+                                                    <i className="bi bi-check-circle-fill"></i> ID Folder Induk: <code className="bg-teal-100 px-1 rounded font-bold">{cleanDriveFolderId}</code> (Subfolder <code>berkas-psb-{String(localConfig.tahunAjaranAktif || new Date().getFullYear()).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}</code> otomatis dibuat di dalamnya)
+                                                </p>
+                                            ) : (
+                                                <p className="text-[10px] text-amber-700 mt-1">
+                                                    ⚠️ Format ID Folder belum dikenali. Salin link folder dari browser (<code>drive.google.com/drive/folders/ID_FOLDER</code>).
+                                                </p>
+                                            )
+                                        ) : (
+                                            <p className="text-[10px] text-gray-500 mt-1">
+                                                Jika dikosongkan, GAS otomatis membuat folder <code>berkas-psb-{String(localConfig.tahunAjaranAktif || new Date().getFullYear()).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}</code> di Drive utama. Jika diisi link folder induk, subfolder per tahun ajaran otomatis dibuat di dalamnya.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {providerMeta.usesSupabaseBucket && (
+                                    <div>
+                                        <label className="font-bold block text-gray-700 mb-1">
+                                            Nama Bucket Supabase Storage
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={supabaseBucket}
+                                            onChange={e => setSupabaseBucket(e.target.value)}
+                                            placeholder="psb-berkas"
+                                            className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden"
+                                        />
+                                        <p className="text-[10px] text-gray-500 mt-1">
+                                            Default: <code>psb-berkas</code> (otomatis terbuat di SQL Setup di bawah).
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div className="pt-1">
                                     <button
@@ -1877,31 +1765,55 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                                     >
                                         <span className="flex items-center gap-1.5">
                                             <i className="bi bi-code-slash text-teal-700"></i>
-                                            <span>Kode Script GAS (Code.gs) &amp; Panduan Alur</span>
+                                            <span>{providerMeta.scriptButtonLabel}</span>
                                         </span>
                                         <i className={`bi ${showScriptHelper ? 'bi-chevron-up' : 'bi-chevron-down'} text-teal-600`}></i>
                                     </button>
 
                                     {showScriptHelper && (
                                         <div className="mt-2.5 space-y-3 bg-white p-3 rounded-xl border border-teal-200 shadow-2xs">
-                                            {/* Panduan Singkat Alur */}
-                                            <div className="bg-teal-50/60 p-2.5 rounded-lg border border-teal-200/70 text-[11px] text-teal-950 space-y-1.5">
-                                                <div className="font-bold flex items-center gap-1 text-teal-900 text-xs">
-                                                    <i className="bi bi-lightning-charge-fill text-amber-500"></i>
-                                                    Panduan Singkat Alur Integrasi Google Sheets:
+                                            {backendProvider === 'gas' ? (
+                                                <div className="bg-teal-50/60 p-2.5 rounded-lg border border-teal-200/70 text-[11px] text-teal-950 space-y-1.5">
+                                                    <div className="font-bold flex items-center gap-1 text-teal-900 text-xs">
+                                                        <i className="bi bi-lightning-charge-fill text-amber-500"></i>
+                                                        Panduan Google Sheets &amp; Drive (Otomatis Per Tahun Ajaran):
+                                                    </div>
+                                                    <ol className="list-decimal pl-4 space-y-1 text-gray-700">
+                                                        <li>Di Google Spreadsheet panitia, buka <strong>Ekstensi &gt; Apps Script</strong>, hapus isi <code>Code.gs</code>, lalu tempel kode v3.1 di bawah.</li>
+                                                        <li><strong>Folder Otomatis Per Tahun:</strong> Setiap pendaftar mengunggah dokumen, GAS otomatis membuat &amp; mengelompokkan ke folder <code>berkas-psb-&lt;tahun-ajaran&gt;</code> (baik di Drive utama maupun di dalam Folder Induk jika link foldernya diisi di atas).</li>
+                                                        <li>Anda juga bebas membuat Spreadsheet &amp; URL GAS baru di tahun ajaran berikutnya bila ingin memisahkan file Sheet-nya.</li>
+                                                        <li>Klik <strong>Deploy &gt; Deployment Baru &gt; Aplikasi Web</strong> &gt; Akses: <strong>Siapa Saja (Anyone)</strong>, lalu salin URL <code>/exec</code>.</li>
+                                                        <li>Bila mengubah isi <code>Code.gs</code>, wajib deploy via <strong>Kelola Deployment &gt; Edit &gt; Versi Baru</strong>.</li>
+                                                    </ol>
                                                 </div>
-                                                <ol className="list-decimal pl-4 space-y-1 text-gray-700">
-                                                    <li>Buka Google Spreadsheet baru panitia &gt; klik menu <strong>Ekstensi &gt; Apps Script</strong>.</li>
-                                                    <li>Hapus kode default di file <code>Code.gs</code>, lalu tempelkan seluruh kode script di bawah ini.</li>
-                                                    <li><strong>Folder Drive Otomatis:</strong> Cukup isi kotak <em>"ID atau Link Folder Google Drive Tujuan Berkas"</em> di atas. ID Folder otomatis tertanam ke dalam script <code>Code.gs</code> dan file HTML formulir tanpa perlu mengedit isi kodenya secara manual.</li>
-                                                    <li><strong>PENTING Saat Update Script / Ganti Folder ID:</strong> Setiap kali Anda mengubah isi <code>Code.gs</code> di Apps Script, wajib klik <strong>Deploy &gt; Kelola Deployment &gt; Ikon Pensil (Edit) &gt; Versi: "Versi Baru" &gt; Deploy</strong> agar perubahan Folder ID aktif!</li>
-                                                    <li><strong>Deploy Web App:</strong> Klik tombol biru <strong>Deploy &gt; Deployment Baru</strong> &gt; pilih jenis <strong>Aplikasi Web</strong> &gt; atur Akses: <strong>Siapa Saja (Anyone)</strong>.</li>
-                                                    <li>Salin URL hasil deployment (berakhiran <code>/exec</code>) ke kotak input URL di atas.</li>
-                                                </ol>
-                                                <p className="text-[10px] text-teal-800 italic pt-0.5">
-                                                    * Panduan komprehensif, tutorial bergambar &amp; hak akses Drive lengkap tersedia di menu <strong>Sistem &gt; Panduan Sistem &gt; Penerimaan Santri Baru (PSB)</strong>.
-                                                </p>
-                                            </div>
+                                            ) : backendProvider === 'cloudflare_d1' ? (
+                                                <div className="bg-teal-50/60 p-2.5 rounded-lg border border-teal-200/70 text-[11px] text-teal-950 space-y-1.5">
+                                                    <div className="font-bold text-teal-900 text-xs">Panduan Cloudflare Workers (D1 + R2):</div>
+                                                    <ol className="list-decimal pl-4 space-y-1 text-gray-700">
+                                                        <li>Buat <strong>D1 Database</strong> (<code>db_psb</code>) dan jalankan query SQL di baris atas kode Worker.</li>
+                                                        <li>Buat <strong>R2 Bucket</strong> (<code>psb-berkas</code>) untuk menyimpan lampiran foto/PDF pendaftar.</li>
+                                                        <li>Di Worker Settings &gt; Bindings, pasang <code>DB</code> ke D1 dan <code>R2_BUCKET</code> ke R2 Bucket.</li>
+                                                        <li>Deploy Worker lalu tempel URL <code>*.workers.dev</code> ke kolom endpoint di atas.</li>
+                                                    </ol>
+                                                </div>
+                                            ) : backendProvider === 'cloudflare_r2' ? (
+                                                <div className="bg-teal-50/60 p-2.5 rounded-lg border border-teal-200/70 text-[11px] text-teal-950 space-y-1.5">
+                                                    <div className="font-bold text-teal-900 text-xs">Panduan Cloudflare Workers (R2 Only):</div>
+                                                    <ol className="list-decimal pl-4 space-y-1 text-gray-700">
+                                                        <li>Buat 1 <strong>R2 Bucket</strong> baru di Cloudflare Dashboard (Gratis 10 GB/bulan).</li>
+                                                        <li>Buat Worker, tempel kode di bawah, lalu pasang binding <code>R2_BUCKET</code> ke bucket tersebut.</li>
+                                                        <li>Deploy Worker dan salin URL <code>*.workers.dev</code> ke kolom endpoint di atas.</li>
+                                                    </ol>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-teal-50/60 p-2.5 rounded-lg border border-teal-200/70 text-[11px] text-teal-950 space-y-1.5">
+                                                    <div className="font-bold text-teal-900 text-xs">Panduan Supabase PostgreSQL + Storage:</div>
+                                                    <ol className="list-decimal pl-4 space-y-1 text-gray-700">
+                                                        <li>Buka Project Supabase &gt; <strong>SQL Editor</strong> &gt; jalankan script SQL di bawah untuk membuat tabel <code>psb_submissions</code> &amp; bucket <code>psb-berkas</code>.</li>
+                                                        <li>Buka <strong>Project Settings &gt; API</strong>, salin Project URL &amp; <code>anon public</code> key ke kolom di atas.</li>
+                                                    </ol>
+                                                </div>
+                                            )}
 
                                             {/* Kode Script Lengkap (Rapi & Responsif) */}
                                             <div className="rounded-xl border border-slate-700/80 overflow-hidden bg-slate-900 shadow-sm mt-2">
@@ -1911,16 +1823,15 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                                                             <i className="bi bi-file-earmark-code-fill text-xs"></i>
                                                         </span>
                                                         <div className="min-w-0">
-                                                            <div className="font-bold text-slate-100 text-xs flex items-center gap-1.5 truncate">
-                                                                <span>Kode Backend</span>
-                                                                <code className="text-amber-300 font-mono text-[11px] bg-amber-500/10 px-1 rounded">Code.gs</code>
+                                                            <div className="font-bold text-slate-100 text-xs truncate">
+                                                                {providerMeta.name}
                                                             </div>
-                                                            <div className="text-[10px] text-slate-400">Google Apps Script Siap Pakai</div>
+                                                            <div className="text-[10px] text-slate-400">{providerMeta.scriptBadge}</div>
                                                         </div>
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        onClick={handleCopyGasScript}
+                                                        onClick={handleCopyCloudScript}
                                                         className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs ${
                                                             copiedScript
                                                                 ? 'bg-emerald-600 text-white'
@@ -1934,14 +1845,14 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                                                 </div>
                                                 <textarea
                                                     readOnly
-                                                    value={googleAppsScriptCode}
+                                                    value={cloudSetupScriptCode}
                                                     rows={8}
                                                     className="w-full bg-slate-950 text-emerald-300 font-mono text-[11px] p-3 border-0 focus:ring-0 focus:outline-hidden resize-y leading-relaxed"
-                                                    placeholder="// Kode script Google Apps Script..."
+                                                    placeholder="// Kode backend PSB..."
                                                 />
                                                 <div className="bg-slate-900/90 px-3 py-1.5 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
                                                     <span>💡 Klik textarea lalu tekan Ctrl+A jika ingin memilih manual</span>
-                                                    <span className="text-teal-400 font-mono font-semibold">v2.4 Smart Multi-Sheet</span>
+                                                    <span className="text-teal-400 font-mono font-semibold">{providerMeta.scriptBadge}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -2177,25 +2088,6 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
 
                         <button
                             type="button"
-                            disabled={isSyncingGas}
-                            onClick={handleSyncToGas}
-                            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-xs flex items-center gap-1.5 transition cursor-pointer"
-                            title="Sinkronkan Desain Formulir ini ke Cloud GAS agar calon santri langsung melihat desain formulir Anda"
-                        >
-                            <i className={`bi ${isSyncingGas ? 'bi-arrow-repeat animate-spin' : 'bi-cloud-arrow-up-fill'}`}></i>
-                            <span className="hidden sm:inline">{isSyncingGas ? 'Menyinkronkan...' : 'Sinkron ke GAS'}</span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setIsShareLinkModalOpen(true)}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-xs flex items-center gap-1.5 transition cursor-pointer"
-                            title="Bagikan Tautan Pendaftaran Online (PSB)"
-                        >
-                            <i className="bi bi-link-45deg text-base"></i>
-                            <span className="hidden sm:inline">Bagikan Link</span>
-                        </button>
-                        <button
-                            type="button"
                             onClick={handleDownloadPdf}
                             className="bg-gray-700 hover:bg-gray-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition cursor-pointer"
                             title="Cetak atau Simpan PDF Vektor Tajam"
@@ -2210,7 +2102,7 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                             title="Unduh Formulir HTML Mandiri"
                         >
                             <i className="bi bi-download"></i>
-                            <span className="hidden sm:inline">Unduh Formulir</span>
+                            <span className="hidden sm:inline">Unduh Formulir HTML</span>
                         </button>
                     </div>
                 </div>
@@ -2230,15 +2122,6 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                 </div>
             </div>
         </div>
-
-        {isShareLinkModalOpen && (
-            <PsbShareLinkModal
-                isOpen={isShareLinkModalOpen}
-                onClose={() => setIsShareLinkModalOpen(false)}
-                settings={settings}
-                config={localConfig}
-            />
-        )}
     </div>
     );
 };

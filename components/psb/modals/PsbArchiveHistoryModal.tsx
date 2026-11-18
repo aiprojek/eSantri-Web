@@ -9,6 +9,7 @@ interface PsbArchiveHistoryModalProps {
     onClose: () => void;
     settings: PondokSettings;
     config: PsbConfig;
+    onSaveConfig?: (newConfig: PsbConfig) => Promise<void> | void;
     onArchivesUpdated?: () => void;
 }
 
@@ -17,9 +18,10 @@ export const PsbArchiveHistoryModal: React.FC<PsbArchiveHistoryModalProps> = ({
     onClose,
     settings,
     config,
+    onSaveConfig,
     onArchivesUpdated
 }) => {
-    const { showToast, arsipSuratList = [] } = useAppContext();
+    const { showToast, showConfirmation, arsipSuratList = [] } = useAppContext();
     const [archives, setArchives] = useState<PsbArchiveRecord[]>([]);
     const [selectedType, setSelectedType] = useState<'all' | 'pengumuman-sk' | 'laporan-rekapitulasi'>('all');
     const [searchTerm, setSearchTerm] = useState('');
@@ -38,7 +40,7 @@ export const PsbArchiveHistoryModal: React.FC<PsbArchiveHistoryModalProps> = ({
     const [manualCatatan, setManualCatatan] = useState('Data arsip manual tahun ajaran sebelumnya.');
 
     const loadData = () => {
-        const data = getPsbArchives();
+        const data = getPsbArchives(config);
         setArchives(data);
     };
 
@@ -46,7 +48,7 @@ export const PsbArchiveHistoryModal: React.FC<PsbArchiveHistoryModalProps> = ({
         if (isOpen) {
             loadData();
         }
-    }, [isOpen]);
+    }, [isOpen, config]);
 
     const filteredArchives = useMemo(() => {
         return archives.filter(item => {
@@ -59,18 +61,23 @@ export const PsbArchiveHistoryModal: React.FC<PsbArchiveHistoryModalProps> = ({
     }, [archives, selectedType, searchTerm]);
 
     const handleDelete = (id: string, label: string) => {
-        if (window.confirm(`Yakin ingin menghapus arsip ${label}? Tindakan ini tidak dapat dibatalkan.`)) {
-            deletePsbArchive(id);
-            loadData();
-            if (selectedArchive?.id === id) {
-                setSelectedArchive(null);
-            }
-            if (onArchivesUpdated) onArchivesUpdated();
-            showToast('Arsip berhasil dihapus.', 'info');
-        }
+        showConfirmation(
+            'Hapus Arsip PSB?',
+            `Yakin ingin menghapus arsip ${label}? Tindakan ini tidak dapat dibatalkan.`,
+            async () => {
+                const updated = await deletePsbArchive(id, config, onSaveConfig);
+                setArchives(updated);
+                if (selectedArchive?.id === id) {
+                    setSelectedArchive(null);
+                }
+                if (onArchivesUpdated) onArchivesUpdated();
+                showToast('Arsip berhasil dihapus.', 'info');
+            },
+            { confirmColor: 'red', confirmText: 'Hapus Arsip' }
+        );
     };
 
-    const handleSaveManualSnapshot = (e: React.FormEvent) => {
+    const handleSaveManualSnapshot = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!manualYear.trim()) {
             showToast('Tahun Ajaran wajib diisi.', 'error');
@@ -78,7 +85,7 @@ export const PsbArchiveHistoryModal: React.FC<PsbArchiveHistoryModalProps> = ({
         }
 
         const id = `psb-arch-manual-${manualYear.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now().toString().slice(-4)}`;
-        const sampleJenjangSummary = settings.jenjang.map((j, idx) => {
+        const sampleJenjangSummary = settings.jenjang.map((j) => {
             const count = Math.round(manualTotal / (settings.jenjang.length || 1));
             return {
                 id: j.id,
@@ -105,8 +112,8 @@ export const PsbArchiveHistoryModal: React.FC<PsbArchiveHistoryModalProps> = ({
             pimpinanName: config.namaPimpinanPsb || 'Pimpinan Pondok'
         };
 
-        savePsbArchive(newRecord);
-        loadData();
+        const updated = await savePsbArchive(newRecord, config, onSaveConfig);
+        setArchives(updated);
         setIsAddManualOpen(false);
         if (onArchivesUpdated) onArchivesUpdated();
         showToast('Snapshot arsip historis berhasil ditambahkan.', 'success');

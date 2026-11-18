@@ -18,6 +18,7 @@ import { Page, UserPermissions, SantriFilters } from './types';
 import { APP_VERSION } from './version';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LoadingFallback } from './components/common/LoadingFallback';
+import { E2eeUnlockBanner } from './components/common/E2eeUnlockBanner';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 
 // --- Lazy Load Pages with Retry ---
@@ -962,6 +963,7 @@ const AppContent: React.FC = () => {
 
                 <main className="app-canvas min-h-screen overflow-y-auto px-4 pb-8 pt-28 md:pl-[calc(17.5rem+1.5rem)] md:pr-6 md:pt-28 lg:pr-8">
                     <div className="w-full">
+                    <E2eeUnlockBanner />
                     <ErrorBoundary>
                         {renderContent()}
                     </ErrorBoundary>

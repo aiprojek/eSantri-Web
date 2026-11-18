@@ -15,7 +15,8 @@ import {
     RAPOR_CLOUDFLARE_D1_WORKER_SCRIPT,
     RAPOR_CLOUDFLARE_R2_WORKER_SCRIPT,
     RAPOR_SUPABASE_SQL_SETUP,
-    getRaporCloudProviderMeta
+    getRaporCloudProviderMeta,
+    purgeRaporCloudStaging
 } from '../../services/raporCloudService';
 import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
 
@@ -82,6 +83,8 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
 
     const [isProcessing, setIsProcessing] = useState(false);
     const [isInspecting, setIsInspecting] = useState(false);
+    const [isPurgingBloated, setIsPurgingBloated] = useState(false);
+    const [confirmPurgeBloated, setConfirmPurgeBloated] = useState(false);
     const [cloudPreview, setCloudPreview] = useState<RaporCloudInspectionSummary | null>(null);
     const [showGasScriptHelper, setShowGasScriptHelper] = useState(false);
     const [pendingDiffReview, setPendingDiffReview] = useState<{
@@ -186,6 +189,7 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
             });
             const summary = inspectRaporCloudSummary(rows, settings);
             setCloudPreview(summary);
+            setConfirmPurgeBloated(false);
             if (summary.totalRows === 0) {
                 showToast(`Terhubung ke ${providerMeta.name}, tetapi belum ada baris nilai pada filter tersebut.`, 'info');
             } else {
@@ -198,6 +202,37 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
             showAlert(`Gagal Membaca ${providerMeta.name}`, (err as Error).message);
         } finally {
             setIsInspecting(false);
+        }
+    };
+
+    const handlePurgeBloatedCloud = async () => {
+        const cleanUrl = cloudScriptUrl.trim();
+        if (!cleanUrl) return;
+        setIsPurgingBloated(true);
+        try {
+            const res = await purgeRaporCloudStaging(
+                {
+                    endpointUrl: cleanUrl,
+                    backendProvider,
+                    apiKey: cloudApiKey.trim()
+                },
+                filterPeriodOnly
+                    ? {
+                          tahunAjaran: targetTahun,
+                          semester: targetSemester
+                      }
+                    : undefined
+            );
+            setConfirmPurgeBloated(false);
+            setCloudPreview(null);
+            showToast(
+                res.message || `Berhasil membersihkan ${res.deletedCount || 0} baris staging dari ${providerMeta.name}.`,
+                'success'
+            );
+        } catch (err) {
+            showAlert(`Gagal Membersihkan ${providerMeta.name}`, (err as Error).message);
+        } finally {
+            setIsPurgingBloated(false);
         }
     };
 
@@ -295,6 +330,16 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                     `Berhasil menarik & menggabungkan nilai ${totalSuccess} santri${tabSuffix}${modeNote}.`,
                     'success'
                 );
+                if (importSource === 'cloud' && cachedPayload?.cloudData) {
+                    const skippedChunksTotal = cachedPayload.cloudData.reduce((acc, r) => acc + (Number(r?._e2eeSkippedChunks) || 0), 0);
+                    const bloatedRowsCount = cachedPayload.cloudData.filter((r) => (Number(r?._e2eeChunkCount) || 0) >= 4).length;
+                    if (skippedChunksTotal > 0) {
+                        showToast(`${skippedChunksTotal} paket nilai E2EE usang/beda kunci dilewati; nilai valid lainnya berhasil ditarik.`, 'info');
+                    }
+                    if (bloatedRowsCount > 0) {
+                        showToast(`${bloatedRowsCount} baris santri di cloud menumpuk >=4 paket E2EE. Disarankan bersihkan staging lewat Cek Data Cloud.`, 'info');
+                    }
+                }
                 setWaInput('');
                 onSuccess?.();
                 onClose();
@@ -729,6 +774,52 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                                             Belum ada tab nilai yang cocok dengan filter saat ini.
                                         </div>
                                     )}
+
+                                    {(cloudPreview.bloatedRowCount || 0) > 0 && (
+                                        <div className="p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-950 space-y-2">
+                                            <div className="flex items-start gap-2">
+                                                <i className="bi bi-exclamation-triangle-fill text-amber-600 shrink-0 mt-0.5"></i>
+                                                <div className="text-[11px] leading-relaxed">
+                                                    <strong>Penumpukan Chunk E2EE Terdeteksi:</strong> {cloudPreview.bloatedRowCount} baris santri memiliki &ge;4 potongan enkripsi (maks {cloudPreview.maxChunksPerRow} chunk/baris). Tarik &amp; simpan nilai terlebih dahulu ke lokal, lalu bersihkan staging agar kuota Cloud tetap ringan.
+                                                </div>
+                                            </div>
+                                            {isAdminOrGlobalWrite && (
+                                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                                    {!confirmPurgeBloated ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setConfirmPurgeBloated(true)}
+                                                            disabled={isPurgingBloated}
+                                                            className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-md font-bold text-[11px] transition-colors"
+                                                        >
+                                                            <i className="bi bi-trash3 mr-1"></i>
+                                                            Bersihkan Staging Cloud
+                                                        </button>
+                                                    ) : (
+                                                        <>
+                                                            <span className="text-[10px] font-semibold text-amber-800">Pastikan nilai sudah ditarik dulu:</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setConfirmPurgeBloated(false)}
+                                                                disabled={isPurgingBloated}
+                                                                className="px-2 py-1 bg-white text-slate-700 border border-slate-300 rounded-md font-bold text-[11px]"
+                                                            >
+                                                                Batal
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handlePurgeBloatedCloud}
+                                                                disabled={isPurgingBloated}
+                                                                className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-md font-bold text-[11px] flex items-center gap-1"
+                                                            >
+                                                                {isPurgingBloated ? 'Membersihkan...' : 'Ya, Bersihkan Cloud'}
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -1049,6 +1140,14 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
                     }${modeNote}.`,
                     'success'
                 );
+                const skippedChunksTotal = cloudData.reduce((acc, r) => acc + (Number(r?._e2eeSkippedChunks) || 0), 0);
+                const bloatedRowsCount = cloudData.filter((r) => (Number(r?._e2eeChunkCount) || 0) >= 4).length;
+                if (skippedChunksTotal > 0) {
+                    showToast(`${skippedChunksTotal} paket nilai E2EE lama/beda kunci dilewati; data valid tetap disimpan.`, 'info');
+                }
+                if (bloatedRowsCount > 0) {
+                    showToast(`${bloatedRowsCount} baris cloud menumpuk >=4 paket E2EE. Buka ikon pengaturan (⚙) > Cek Data untuk membersihkan staging.`, 'info');
+                }
                 onSyncComplete?.();
             } else if (result.errors.length === 0) {
                 showToast(

@@ -23,6 +23,12 @@ import {
     buildStandaloneCloudHelperJs,
     obfuscateSecretToCodeArray
 } from './raporCloudService';
+import {
+    buildStandaloneHybridEncryptJsHelper,
+    decryptAnyEnvelope,
+    encryptObjectHybridWithPublicKey,
+    tryParseE2eeEnvelope
+} from './e2eeService';
 
 // --- HELPER: FILTER NON-MEANINGFUL LABELS (SKIP NUMBERS, KKM, BULLETS, FORMULAS) ---
 const isMeaningfulCellLabel = (raw?: string): boolean => {
@@ -1247,7 +1253,7 @@ export const generateRaporFormHtml = (
     let submissionScript = '';
     if (config.submissionMethod === 'whatsapp') {
         submissionScript = `
-            const jsonString = JSON.stringify(payload);
+            const jsonString = JSON.stringify(wirePayload);
             const encoded = btoa(unescape(encodeURIComponent(jsonString)));
             let message = "*Setoran Data Rapor (Grid V2)*\\nKelas: " + ${JSON.stringify(contextName)} + "\\nTemplate: " + ${JSON.stringify(config.template.name)} + "\\n\\n*KODE DATA:*\\nRAPOR_V2_START\\n" + encoded + "\\nRAPOR_V2_END";
             
@@ -1272,7 +1278,7 @@ export const generateRaporFormHtml = (
         `;
     } else {
         submissionScript = `
-            pushCloudPayloadUniversal(${JSON.stringify(scriptUrl)}, payload)
+            pushCloudPayloadUniversal(${JSON.stringify(scriptUrl)}, wirePayload)
             .then(() => {
                  records.forEach(r => {
                      if (Array.isArray(r.clearedKeys) && loadedBaselineBySantri[r.santriId]) {
@@ -1283,7 +1289,7 @@ export const generateRaporFormHtml = (
                      });
                  });
                  ${config.submissionMethod === 'google_sheet' ? `showFormToast('Data nilai berhasil dikirim ke ${providerMeta.storageLabel}!', 'success'); btn.disabled = false; btn.innerHTML = originalText;` : `
-                    const jsonString = JSON.stringify(payload);
+                    const jsonString = JSON.stringify(wirePayload);
                     const encoded = btoa(unescape(encodeURIComponent(jsonString)));
                     let message = "*Setoran Data Rapor (Hybrid)*\\nKelas: " + ${JSON.stringify(contextName)} + "\\nStatus: Terupload ke ${providerMeta.storageLabel}\\n\\n*BACKUP DATA:*\\nRAPOR_V2_START\\n" + encoded + "\\nRAPOR_V2_END";
                     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1408,6 +1414,9 @@ export const generateRaporFormHtml = (
         let currentActiveSheet = 'all';
         let toastTimer = null;
         const loadedBaselineBySantri = {};
+        ${settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.rapor && settings.e2eeConfig?.publicKeySpki
+            ? buildStandaloneHybridEncryptJsHelper(settings.e2eeConfig.publicKeySpki, settings.e2eeConfig.keyId)
+            : ''}
         ${buildStandaloneCloudHelperJs({
             providerVar: backendProvider,
             urlExpr: JSON.stringify(scriptUrl),
@@ -2222,20 +2231,38 @@ export const generateRaporFormHtml = (
             } catch (e) { console.warn('Draft tidak dapat dimuat', e); } 
         }
 
-        function downloadBackupJson() {
+        async function downloadBackupJson() {
             try {
                 const inputKeys = ${JSON.stringify(inputKeysToSave)};
+                const useE2ee = typeof window.__esantriEncryptHybrid === 'function';
                 const records = [];
-                santriList.forEach(s => {
-                    const santriRecord = { santriId: s.id, santriName: s.nama, data: {} };
+                for (let i = 0; i < santriList.length; i++) {
+                    const s = santriList[i];
+                    const plainData = {};
                     inputKeys.forEach(key => {
                         const el = document.getElementById('val_' + s.id + '_' + key) || document.getElementById('card_val_' + s.id + '_' + key);
                         if (el && el.value !== "" && el.value !== null) {
-                            santriRecord.data[key] = el.value;
+                            plainData[key] = el.value;
                         }
                     });
-                    records.push(santriRecord);
-                });
+                    if (useE2ee) {
+                        const env = await window.__esantriEncryptHybrid({
+                            santriName: s.nama,
+                            nis: s.nis || '',
+                            data: plainData,
+                            clearedKeys: []
+                        });
+                        const chunkKey = '__e2ee_' + Date.now() + '_bkp_' + i;
+                        records.push({
+                            santriId: s.id,
+                            nis: '',
+                            santriName: '[E2EE]',
+                            data: { [chunkKey]: JSON.stringify(env) }
+                        });
+                    } else {
+                        records.push({ santriId: s.id, nis: s.nis || '', santriName: s.nama, data: plainData });
+                    }
+                }
                 const payload = {
                     meta: {
                         rombelId: ${config.rombelId},
@@ -2244,6 +2271,7 @@ export const generateRaporFormHtml = (
                         tahunAjaran: ${JSON.stringify(config.tahunAjaran)},
                         semester: ${JSON.stringify(config.semester)},
                         templateId: ${JSON.stringify(config.template.id)},
+                        encrypted: useE2ee,
                         exportedAt: new Date().toISOString()
                     },
                     records
@@ -2255,9 +2283,14 @@ export const generateRaporFormHtml = (
                 a.download = ${JSON.stringify(`backup-nilai-${contextName.replace(/[^a-zA-Z0-9]/g, '-')}.json`)};
                 a.click();
                 URL.revokeObjectURL(url);
-                showFormToast('File cadangan JSON berhasil diunduh.', 'success');
+                showFormToast(
+                    useE2ee
+                        ? 'File cadangan JSON terenkripsi E2EE berhasil diunduh.'
+                        : 'File cadangan JSON berhasil diunduh.',
+                    'success'
+                );
             } catch(err) {
-                showFormToast('Gagal mengunduh cadangan: ' + err.message, 'error');
+                showFormToast('Gagal mengunduh cadangan: ' + (err && err.message ? err.message : err), 'error');
             }
         }
 
@@ -2295,6 +2328,7 @@ export const generateRaporFormHtml = (
                 });
                 const inputOnlySet = new Set(${JSON.stringify(inputOnlyKeys)});
                 const touchedStudents = new Set();
+                let sawEncryptedChunks = false;
 
                 rows.forEach(item => {
                     if (item.TahunAjaran && String(item.TahunAjaran) !== targetTahun) return;
@@ -2306,6 +2340,9 @@ export const generateRaporFormHtml = (
                     try {
                         parsed = typeof item.DataJSON === 'string' ? JSON.parse(item.DataJSON) : (item.DataJSON || {});
                     } catch(err) { parsed = {}; }
+                    if (Object.keys(parsed).some(k => k.indexOf('__e2ee_') === 0)) {
+                        sawEncryptedChunks = true;
+                    }
                     let touched = false;
                     if (parsed.__cleared && typeof parsed.__cleared === 'object') {
                         Object.keys(parsed.__cleared).forEach(ck => {
@@ -2336,8 +2373,12 @@ export const generateRaporFormHtml = (
                 if (hasClassAvgFormula) santriIds.forEach(id => runRowFormulasOnce(id));
                 calculateRanks();
                 const appliedCount = touchedStudents.size;
-                if (appliedCount > 0) {
+                if (appliedCount > 0 && sawEncryptedChunks) {
+                    showFormToast('Nilai plaintext lama dimuat untuk ' + appliedCount + ' santri, NAMUN ditemukan paket terbaru Terenkripsi E2EE yang tidak dapat dibaca form ini. Hati-hati agar tidak menimpa nilai terbaru.', 'info');
+                } else if (appliedCount > 0) {
                     showFormToast('Berhasil memuat nilai terbaru dari ${providerMeta.name} untuk ' + appliedCount + ' santri.', 'success');
+                } else if (sawEncryptedChunks) {
+                    showFormToast('Data nilai di server berstatus Terenkripsi E2EE sehingga tidak dapat didekripsi oleh form guru ini. Silakan input/kirim nilai baru secara langsung.', 'info');
                 } else {
                     showFormToast('Belum ada nilai tersimpan di ${providerMeta.name} untuk periode & template ini.', 'info');
                 }
@@ -2381,7 +2422,7 @@ export const generateRaporFormHtml = (
             if (modal) modal.style.display = 'none';
         }
 
-        function submitData(forceOutOfScale = false) { 
+        async function submitData(forceOutOfScale = false) { 
             santriIds.forEach(id => calculateRow(id)); 
             const btn = document.getElementById('submit-btn'); 
             const originalText = btn.innerHTML; 
@@ -2483,7 +2524,34 @@ export const generateRaporFormHtml = (
                         timestamp: new Date().toISOString() 
                     }, 
                     records: records 
-                }; 
+                };
+                let wirePayload = payload;
+                if (typeof window.__esantriEncryptHybrid === 'function') {
+                    const encryptedRecords = [];
+                    for (let i = 0; i < records.length; i++) {
+                        const r = records[i];
+                        const env = await window.__esantriEncryptHybrid({
+                            santriName: r.santriName,
+                            nis: r.nis,
+                            data: r.data,
+                            clearedKeys: r.clearedKeys || []
+                        });
+                        const chunkKey = '__e2ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+                        encryptedRecords.push({
+                            santriId: r.santriId,
+                            nis: '',
+                            santriName: '[E2EE]',
+                            rombelId: r.rombelId,
+                            rombelName: r.rombelName,
+                            kelasId: r.kelasId,
+                            kelasName: r.kelasName,
+                            jenjangId: r.jenjangId,
+                            jenjangName: r.jenjangName,
+                            data: { [chunkKey]: JSON.stringify(env) }
+                        });
+                    }
+                    wirePayload = { meta: payload.meta, records: encryptedRecords };
+                }
                 ${submissionScript} 
             } catch (e) { 
                 showFormToast("Terjadi kesalahan: " + e.message, "error"); 
@@ -2493,6 +2561,10 @@ export const generateRaporFormHtml = (
         }
 
         window.addEventListener('DOMContentLoaded', () => {
+            const e2eeWarnEl = document.getElementById('e2ee-crypto-warning');
+            if (e2eeWarnEl && typeof window.__esantriEncryptHybrid === 'function' && (!window.crypto || !window.crypto.subtle)) {
+                e2eeWarnEl.style.display = 'flex';
+            }
             loadDraft();
             if (window.innerWidth < 768) {
                 setViewMode('card');
@@ -2567,6 +2639,13 @@ export const generateRaporFormHtml = (
 
         <!-- SHARED FILTER & SHEET TABS WORKSPACE BAR (Aktif di PC Tabel & HP Kartu) -->
         <div class="px-3 pt-3 md:px-4 md:pt-3.5 bg-slate-50 border-b border-slate-200/80 shrink-0">
+            <div id="e2ee-crypto-warning" style="display: none;" class="mb-3 bg-amber-50 border border-amber-300 text-amber-900 rounded-xl p-3 text-xs flex items-start gap-2.5">
+                <i class="bi bi-shield-exclamation text-amber-600 text-base shrink-0 mt-0.5"></i>
+                <div>
+                    <div class="font-bold">Fitur Enkripsi E2EE Tidak Didukung di Konteks Ini</div>
+                    <div class="text-[11px] leading-relaxed mt-0.5">Browser memblokir Web Crypto karena halaman dibuka lewat tautan non-HTTPS/preview terbatas. Buka file HTML langsung dari penyimpanan perangkat atau host HTTPS agar pengiriman Cloud &amp; Backup terenkripsi E2EE dapat berjalan.</div>
+                </div>
+            </div>
             ${sharedFilterToolbarHtml}
             ${sheetTabsToolbarHtml}
         </div>
@@ -2679,6 +2758,120 @@ export const generateRaporFormHtml = (
 </html>`;
 };
 
+const unwrapEncryptedRaporDataMap = async (
+    rawDataObj: Record<string, any>
+): Promise<{
+    data: Record<string, any>;
+    clearedKeys: string[];
+    santriName?: string;
+    nis?: string;
+    failedChunkCount: number;
+    firstLockedError?: Error | null;
+}> => {
+    const outData: Record<string, any> = {};
+    const clearedSet = new Set<string>();
+    let santriName: string | undefined;
+    let nis: string | undefined;
+
+    const plainKeys: string[] = [];
+    const e2eeKeys: string[] = [];
+
+    Object.keys(rawDataObj || {}).forEach((k) => {
+        if (k.startsWith('__e2ee_')) {
+            e2eeKeys.push(k);
+        } else {
+            plainKeys.push(k);
+        }
+    });
+
+    // Apply plaintext keys (and __cleared if any) first
+    for (const pk of plainKeys) {
+        if (pk === '__cleared' && rawDataObj.__cleared && typeof rawDataObj.__cleared === 'object') {
+            Object.keys(rawDataObj.__cleared).forEach((ck) => clearedSet.add(ck));
+        } else {
+            outData[pk] = rawDataObj[pk];
+        }
+    }
+
+    // Sort chronological E2EE chunks by embedded timestamp (__e2ee_<ms>_<rand>)
+    e2eeKeys.sort((a, b) => {
+        const ta = Number(a.split('_')[3] || 0);
+        const tb = Number(b.split('_')[3] || 0);
+        return ta - tb;
+    });
+
+    const failedChunks: string[] = [];
+    let lockedActiveError: Error | null = null;
+    let firstLockedError: Error | null = null;
+
+    let activeKeyId: string | null = null;
+    try {
+        const localSettings = await db.settings.toArray();
+        if (localSettings[0]?.e2eeConfig?.enabled) {
+            activeKeyId = localSettings[0].e2eeConfig.keyId || null;
+        }
+    } catch {
+        // ignore db lookup failure
+    }
+
+    for (const ek of e2eeKeys) {
+        const env = tryParseE2eeEnvelope(rawDataObj[ek]);
+        if (!env) continue;
+        try {
+            const inner = await decryptAnyEnvelope<{
+                santriName?: string;
+                nis?: string;
+                data?: Record<string, any>;
+                clearedKeys?: string[];
+            }>(env);
+            if (inner.santriName) santriName = inner.santriName;
+            if (inner.nis) nis = inner.nis;
+            if (Array.isArray(inner.clearedKeys)) {
+                inner.clearedKeys.forEach((ck) => {
+                    clearedSet.add(ck);
+                    delete outData[ck];
+                });
+            }
+            if (inner.data && typeof inner.data === 'object') {
+                Object.entries(inner.data).forEach(([dk, dv]) => {
+                    if (dv !== undefined && dv !== null && dv !== '') {
+                        outData[dk] = dv;
+                        clearedSet.delete(dk);
+                    }
+                });
+            }
+        } catch (err: any) {
+            const msg = String(err?.message || 'Gagal dekripsi paket.');
+            if (msg.includes('E2EE_LOCKED')) {
+                if (!firstLockedError) firstLockedError = err instanceof Error ? err : new Error(msg);
+                if (activeKeyId && env.kid === activeKeyId && !lockedActiveError) {
+                    lockedActiveError = err instanceof Error ? err : new Error(msg);
+                }
+            }
+            failedChunks.push(`${ek}(${env.kid || '-'})`);
+        }
+    }
+
+    if (lockedActiveError) {
+        throw lockedActiveError;
+    }
+
+    if (clearedSet.size > 0) {
+        const clearedMap: Record<string, boolean> = {};
+        clearedSet.forEach((ck) => { clearedMap[ck] = true; });
+        outData.__cleared = clearedMap;
+    }
+
+    return {
+        data: outData,
+        clearedKeys: Array.from(clearedSet),
+        santriName,
+        nis,
+        failedChunkCount: failedChunks.length,
+        firstLockedError: failedChunks.length === e2eeKeys.length ? firstLockedError : null
+    };
+};
+
 export const fetchRaporFromCloud = async (
     scriptUrl: string,
     filterOptions?: ParseRaporFilterOptions,
@@ -2688,7 +2881,7 @@ export const fetchRaporFromCloud = async (
     }
 ): Promise<any[]> => {
     try {
-        return await fetchRaporFromCloudAdapter(
+        const rawRows = await fetchRaporFromCloudAdapter(
             {
                 endpointUrl: scriptUrl,
                 backendProvider: cloudOptions?.backendProvider || 'gas',
@@ -2696,6 +2889,61 @@ export const fetchRaporFromCloud = async (
             },
             filterOptions
         );
+
+        const decodedRows: any[] = [];
+        let encryptedRowCount = 0;
+        let fullyFailedEncryptedRowCount = 0;
+        let firstLockedError: Error | null = null;
+
+        for (const row of rawRows) {
+            if (!row || typeof row !== 'object') continue;
+            let parsedData: Record<string, any> = {};
+            try {
+                parsedData = typeof row.DataJSON === 'string' ? JSON.parse(row.DataJSON) : (row.DataJSON || {});
+            } catch {
+                parsedData = {};
+            }
+            const e2eeKeys = Object.keys(parsedData).filter((k) => k.startsWith('__e2ee_'));
+            if (e2eeKeys.length === 0) {
+                decodedRows.push({ ...row, _e2eeChunkCount: 0, _e2eeSkippedChunks: 0 });
+                continue;
+            }
+            encryptedRowCount++;
+            try {
+                const unwrapped = await unwrapEncryptedRaporDataMap(parsedData);
+                if (unwrapped.failedChunkCount === e2eeKeys.length) {
+                    fullyFailedEncryptedRowCount++;
+                    if (!firstLockedError && unwrapped.firstLockedError) {
+                        firstLockedError = unwrapped.firstLockedError;
+                    }
+                }
+                decodedRows.push({
+                    ...row,
+                    _e2eeChunkCount: e2eeKeys.length,
+                    _e2eeSkippedChunks: unwrapped.failedChunkCount,
+                    ...(unwrapped.santriName ? { SantriNama: unwrapped.santriName } : {}),
+                    ...(unwrapped.nis ? { NIS: unwrapped.nis } : {}),
+                    DataJSON: JSON.stringify(unwrapped.data)
+                });
+            } catch (rowErr: any) {
+                if (String(rowErr?.message || '').includes('E2EE_LOCKED')) {
+                    throw rowErr;
+                }
+                fullyFailedEncryptedRowCount++;
+                decodedRows.push({
+                    ...row,
+                    _e2eeChunkCount: e2eeKeys.length,
+                    _e2eeSkippedChunks: e2eeKeys.length,
+                    DataJSON: '{}'
+                });
+            }
+        }
+
+        if (encryptedRowCount > 0 && fullyFailedEncryptedRowCount === encryptedRowCount && decodedRows.length === encryptedRowCount && firstLockedError) {
+            throw firstLockedError;
+        }
+
+        return decodedRows;
     } catch (e) {
         console.error('Fetch Cloud Error:', e);
         throw e;
@@ -2756,6 +3004,8 @@ export interface RaporCloudInspectionSummary {
     rombels: Array<{ id: number; name: string; studentCount: number }>;
     templates: Array<{ id: string; name: string; rowCount: number }>;
     latestTimestamp: string | null;
+    maxChunksPerRow: number;
+    bloatedRowCount: number;
 }
 
 const RESERVED_CLOUD_ROW_KEYS = new Set([
@@ -2784,9 +3034,23 @@ export const inspectRaporCloudSummary = (
     const tplMap = new Map<string, number>();
     let latestTsMs = 0;
     let latestTsIso: string | null = null;
+    let maxChunksPerRow = 0;
+    let bloatedRowCount = 0;
 
     for (const row of safeRows) {
         if (!row) continue;
+        let rowChunks = typeof row._e2eeChunkCount === 'number' ? row._e2eeChunkCount : 0;
+        if (rowChunks === 0 && row.DataJSON) {
+            try {
+                const parsed = typeof row.DataJSON === 'string' ? JSON.parse(row.DataJSON) : row.DataJSON;
+                if (parsed && typeof parsed === 'object') {
+                    rowChunks = Object.keys(parsed).filter((k) => k.startsWith('__e2ee_')).length;
+                }
+            } catch {}
+        }
+        if (rowChunks > maxChunksPerRow) maxChunksPerRow = rowChunks;
+        if (rowChunks >= 4) bloatedRowCount++;
+
         const sid = parseInt(String(row.SantriID || ''), 10);
         if (sid > 0) studentSet.add(sid);
 
@@ -2833,7 +3097,9 @@ export const inspectRaporCloudSummary = (
             const tplObj = settings.raporTemplates?.find(t => t.id === id);
             return { id, name: tplObj?.name || id, rowCount };
         }),
-        latestTimestamp: latestTsIso
+        latestTimestamp: latestTsIso,
+        maxChunksPerRow,
+        bloatedRowCount
     };
 };
 
@@ -2917,7 +3183,31 @@ export const syncRaporStructuredData = async (
         const globalLockKey = `${metaTahun}_${metaSemester}_all`;
         const periodMap = await getPeriodMap(metaTahun, metaSemester);
 
-        for (const rec of payload.records || []) {
+        for (const rawRec of payload.records || []) {
+            let rec = rawRec;
+            if (rawRec?.data && typeof rawRec.data === 'object' && Object.keys(rawRec.data).some((k) => k.startsWith('__e2ee_'))) {
+                try {
+                    const unwrapped = await unwrapEncryptedRaporDataMap(rawRec.data);
+                    const { __cleared: _drop, ...cleanData } = unwrapped.data;
+                    if (unwrapped.failedChunkCount > 0) {
+                        errors.push(`Santri #${rawRec.santriId}: ${unwrapped.failedChunkCount} paket nilai E2EE lama/rusak dilewati.`);
+                    }
+                    rec = {
+                        ...rawRec,
+                        ...(unwrapped.santriName ? { santriName: unwrapped.santriName } : {}),
+                        ...(unwrapped.nis ? { nis: unwrapped.nis } : {}),
+                        data: cleanData,
+                        ...(unwrapped.clearedKeys.length > 0 ? { clearedKeys: unwrapped.clearedKeys } : {})
+                    };
+                } catch (decErr: any) {
+                    const errMsg = String(decErr?.message || 'Gagal dekripsi E2EE.');
+                    if (errMsg.includes('E2EE_LOCKED')) {
+                        throw decErr;
+                    }
+                    errors.push(`Santri #${rawRec.santriId}: ${errMsg}`);
+                    continue;
+                }
+            }
             const santriIdNum = Number(rec.santriId);
             if (!santriIdNum) continue;
 
@@ -3399,6 +3689,42 @@ export const pushRaporGradesToCloud = async (
         return { pushedStudents: 0, sheets: [] };
     }
 
+    const useE2eeRapor = Boolean(
+        params.settings.e2eeConfig?.enabled &&
+        params.settings.e2eeConfig?.modules?.rapor &&
+        params.settings.e2eeConfig?.publicKeySpki
+    );
+
+    const wireRecords = useE2eeRapor
+        ? await Promise.all(
+              records.map(async (rec) => {
+                  const env = await encryptObjectHybridWithPublicKey(
+                      {
+                          santriName: rec.santriName,
+                          nis: rec.nis,
+                          data: rec.data,
+                          clearedKeys: rec.clearedKeys || []
+                      },
+                      params.settings.e2eeConfig!.publicKeySpki,
+                      params.settings.e2eeConfig!.keyId
+                  );
+                  const chunkKey = `__e2ee_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+                  return {
+                      santriId: rec.santriId,
+                      nis: '',
+                      santriName: '[E2EE]',
+                      rombelId: rec.rombelId,
+                      rombelName: rec.rombelName,
+                      kelasId: rec.kelasId,
+                      kelasName: rec.kelasName,
+                      jenjangId: rec.jenjangId,
+                      jenjangName: rec.jenjangName,
+                      data: { [chunkKey]: JSON.stringify(env) }
+                  };
+              })
+          )
+        : records;
+
     const payload = {
         meta: {
             rombelId: params.rombelId || 0,
@@ -3411,7 +3737,7 @@ export const pushRaporGradesToCloud = async (
             columnLabels,
             timestamp: new Date().toISOString()
         },
-        records
+        records: wireRecords
     };
 
     return await pushRaporPayloadToCloudAdapter(

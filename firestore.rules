@@ -78,10 +78,29 @@ service cloud.firestore {
         (!('nomorHpWali' in data) || data.nomorHpWali == null || (data.nomorHpWali is string && data.nomorHpWali.size() <= 50));
     }
 
+    function isValidPublicPortalEntry(data) {
+      return data is map &&
+        data.keys().hasAll(['id', 'nis', 'namaLengkap']) &&
+        (data.id is int || data.id is number) &&
+        data.nis is string &&
+        data.nis.size() >= 1 &&
+        data.nis.size() <= 200 &&
+        data.namaLengkap is string &&
+        data.namaLengkap.size() <= 200;
+    }
+
     match /publicPortals/{tenantId} {
       allow get: if isValidId(tenantId);
       allow list: if false;
       allow create, update, delete: if isValidId(tenantId) && isTenantMember(tenantId);
+
+      match /entries/{entryId} {
+        allow get: if isValidId(tenantId) && isValidId(entryId);
+        allow list: if isValidId(tenantId) && isTenantMember(tenantId);
+        allow create: if isValidId(tenantId) && isValidId(entryId) && isTenantMember(tenantId) && isValidPublicPortalEntry(request.resource.data);
+        allow update: if isValidId(tenantId) && isValidId(entryId) && isTenantMember(tenantId) && isValidPublicPortalEntry(request.resource.data);
+        allow delete: if isValidId(tenantId) && isValidId(entryId) && isTenantMember(tenantId);
+      }
     }
 
     match /tenantInvites/{inviteId} {

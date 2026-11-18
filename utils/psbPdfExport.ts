@@ -560,7 +560,7 @@ export const exportPsbDashboardReportPdf = async ({
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6.5);
         doc.setTextColor(148, 163, 184); // Slate 400
-        doc.text('Sistem Informasi Manajemen Pesantren (eSantri Web)', marginX, pageHeight - 5);
+        doc.text('Sistem Informasi Manajemen Pesantren - eSantri Web by AI Projek | aiprojek01.my.id', marginX, pageHeight - 5);
         doc.text(totalPages > 1 ? `Laporan Resmi Statistik PSB • Hal ${p}/${totalPages}` : 'Laporan Resmi Statistik PSB', pageWidth - marginX, pageHeight - 5, { align: 'right' });
     }
 

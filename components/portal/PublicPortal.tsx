@@ -1,21 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { PondokSettings, PortalAnnouncementPost, PsbConfig } from '../../types';
+import { PondokSettings, PortalAnnouncementPost } from '../../types';
 import { LoadingFallback } from '../common/LoadingFallback';
 import {
     decodePortalKey,
     fetchPortalPublicInfoFromGas,
     loginPortalSantriViaGas,
     getLocalSantriSummary,
-    PortalSantriSummary,
-    submitPortalPsbToGas
+    PortalSantriSummary
 } from '../../services/portalGasService';
-import { fetchPublicPortalSettings } from '../../services/firebasePortalRuntime';
-import { PSB_STANDARD_FIELD_GROUPS } from '../psb/utils/psbUtils';
-import { MarkdownEditor } from '../common/MarkdownEditor';
+import { fetchPublicPortalEntry, fetchPublicPortalSettings } from '../../services/firebasePortalRuntime';
 import { db } from '../../db';
-import { initialSettings } from '../../data/mock';
-
-const fieldGroups = PSB_STANDARD_FIELD_GROUPS;
+import {
+    decryptPortalSantriSummary,
+    deriveFirebasePortalLookupCandidates,
+    derivePortalAuthHashCandidates,
+    isEncryptedPortalRecord,
+    isWebCryptoAvailable,
+    normalizePortalDob,
+    normalizePortalNis,
+} from '../../services/e2eeService';
 
 const PORTAL_THEMES: Record<string, {
     bgGradient: string;
@@ -134,8 +137,6 @@ export const PublicPortal: React.FC = () => {
     const isPsbParam = searchParams.get('psb') === 'true' || searchParams.has('psb') || hashStr.includes('psb=true') || pathParts[0] === 'psb';
     const portalType = isPsbParam ? 'psb' : (pathParts[0] || 'portal');
     const tenantId = searchParams.get('tenant') || pathParts[1] || 'default-portal';
-    const templateId = searchParams.get('template') || searchParams.get('templateId') || pathParts[2];
-    const jenjangQuery = searchParams.get('jenjang') || searchParams.get('jenjangId');
 
     const [resolvedConn, setResolvedConn] = useState<{ portalId: string; gasEndpoint: string; gasApiKey: string; isEncrypted: boolean }>({
         portalId: tenantId,
@@ -161,27 +162,35 @@ export const PublicPortal: React.FC = () => {
     useEffect(() => {
         const fetchTenantData = async () => {
             try {
-                let conn = resolvePortalConnectionFromUrl(tenantId);
-                const isPreview = searchParams.get('preview') === 'true' || searchParams.get('mode') === 'preview';
-
-                // Fallback otomatis jika gasEndpoint belum ada di URL dan jenisnya PSB
-                if (!conn.gasEndpoint && portalType === 'psb') {
+                if (portalType === 'psb') {
+                    let localPsbSettings: PondokSettings | undefined = undefined;
                     try {
-                        const localSett = await db.settings.toCollection().first();
-                        const fallbackGas = localSett?.psbConfig?.googleScriptUrl || localSett?.portalConfig?.gasEndpoint;
-                        if (fallbackGas) {
-                            conn = {
-                                ...conn,
-                                gasEndpoint: fallbackGas
-                            };
-                        }
+                        localPsbSettings = await db.settings.toCollection().first();
                     } catch {}
+                    if (!localPsbSettings && tenantId && tenantId !== 'default-portal') {
+                        try {
+                            const cloudPublic = await fetchPublicPortalSettings(tenantId);
+                            if (cloudPublic) {
+                                localPsbSettings = cloudPublic as unknown as PondokSettings;
+                            }
+                        } catch {}
+                    }
+                    setTenantSettings(
+                        localPsbSettings || ({
+                            namaPonpes: 'Pondok Pesantren',
+                            portalConfig: { theme: 'teal', contacts: [] },
+                        } as unknown as PondokSettings)
+                    );
+                    return;
                 }
+
+                let conn = resolvePortalConnectionFromUrl(tenantId);
+                let cloudPublicDoc: any = null;
 
                 if (!conn.gasEndpoint && tenantId && tenantId !== 'default-portal') {
                     try {
-                        const cloudPublic = await fetchPublicPortalSettings(tenantId);
-                        const encKey = (cloudPublic?.portalConfig as any)?.encryptedKey;
+                        cloudPublicDoc = await fetchPublicPortalSettings(tenantId) as any;
+                        const encKey = (cloudPublicDoc?.portalConfig as any)?.encryptedKey;
                         if (encKey) {
                             const decoded = decodePortalKey(encKey);
                             if (decoded && decoded.gasEndpoint) {
@@ -190,6 +199,14 @@ export const PublicPortal: React.FC = () => {
                                     gasEndpoint: decoded.gasEndpoint,
                                     gasApiKey: decoded.gasApiKey || '',
                                     isEncrypted: true
+                                };
+                            }
+                        } else if (cloudPublicDoc) {
+                            const metaPortalId = cloudPublicDoc?.metadata?.portalId || cloudPublicDoc?.portalConfig?.portalId;
+                            if (metaPortalId) {
+                                conn = {
+                                    ...conn,
+                                    portalId: String(metaPortalId),
                                 };
                             }
                         }
@@ -243,9 +260,55 @@ export const PublicPortal: React.FC = () => {
                     }
                 }
 
+                // Jika URL menggunakan ?tenant=<firebaseUid> pada provider Firebase (termasuk dari HP wali tanpa localSett)
+                if (cloudPublicDoc && (cloudPublicDoc.settings || cloudPublicDoc.namaPonpes)) {
+                    const pubSettings = (cloudPublicDoc.settings || cloudPublicDoc) as PondokSettings;
+                    const resolvedSettings: PondokSettings = {
+                        ...pubSettings,
+                        portalConfig: {
+                            ...(pubSettings.portalConfig || {}),
+                            ...(cloudPublicDoc.portalConfig || {}),
+                            provider: pubSettings.portalConfig?.provider || cloudPublicDoc.portalConfig?.provider || 'firebase',
+                        } as any,
+                    };
+                    setTenantSettings(resolvedSettings);
+                    setSyncedAt(
+                        cloudPublicDoc.metadata?.updatedAt ||
+                        (typeof cloudPublicDoc.updatedAt === 'number' ? new Date(cloudPublicDoc.updatedAt).toISOString() : cloudPublicDoc.updatedAt)
+                    );
+                    if (Array.isArray(cloudPublicDoc.santriSummary) && cloudPublicDoc.santriSummary.length > 0) {
+                        setLegacySantriList(cloudPublicDoc.santriSummary);
+                    }
+                    return;
+                }
+
                 // Cek provider lain jika ada setting lokal
                 if (localSett) {
                     const prov = localSett.portalConfig?.provider;
+
+                    // Provider: Firebase Firestore
+                    if (prov === 'firebase') {
+                        const fbId = localSett.cloudSyncConfig?.firebasePairedTenantId || (tenantId !== 'default-portal' ? tenantId : conn.portalId);
+                        if (fbId) {
+                            try {
+                                const fbDoc = await fetchPublicPortalSettings(fbId) as any;
+                                if (fbDoc && (fbDoc.settings || fbDoc.namaPonpes)) {
+                                    const fbSettings = (fbDoc.settings || fbDoc) as PondokSettings;
+                                    setTenantSettings(fbSettings);
+                                    setSyncedAt(fbDoc.metadata?.updatedAt || localSett.portalConfig?.lastSyncedAt);
+                                    if (fbDoc.metadata?.portalId) {
+                                        setResolvedConn((prev) => ({ ...prev, portalId: String(fbDoc.metadata.portalId) }));
+                                    }
+                                    if (Array.isArray(fbDoc.santriSummary) && fbDoc.santriSummary.length > 0) {
+                                        setLegacySantriList(fbDoc.santriSummary);
+                                    }
+                                    return;
+                                }
+                            } catch (fbErr) {
+                                console.warn('Gagal ambil dari Firebase publicPortals:', fbErr);
+                            }
+                        }
+                    }
 
                     // Provider: Cloudflare Worker
                     if (prov === 'cloudflare' && localSett.portalConfig?.cloudflareWorkerUrl) {
@@ -301,6 +364,11 @@ export const PublicPortal: React.FC = () => {
                     }
                     throw new Error('Koneksi Portal belum terkonfigurasi. Pastikan menggunakan tautan Portal Wali resmi dari pihak pondok atau aktifkan mode Pratinjau.');
                 }
+
+                if (portalType === 'psb') {
+                    throw new Error('Desain formulir PSB belum disinkronkan ke Google Apps Script (GAS) atau script Code.gs belum menggunakan versi v3.0. Silakan minta Panitia menekan tombol "Sinkron ke GAS" di menu PSB.');
+                }
+                throw new Error('Gagal memuat konfigurasi portal dari Google Apps Script. Pastikan Admin telah menekan tombol "Sinkronkan Sekarang".');
             } catch (err) {
                 console.error('Portal error:', err);
                 setError((err as Error)?.message || 'Gagal memuat halaman portal. Pastikan koneksi internet stabil.');
@@ -395,17 +463,75 @@ export const PublicPortal: React.FC = () => {
         .concat(portalConfig?.showLibrary !== false ? [{ key: 'perpus', label: 'Perpustakaan', icon: 'bi-journal-bookmark' }] : []);
 
     if (portalType === 'psb') {
-        const numericJenjangId = jenjangQuery ? parseInt(jenjangQuery, 10) : undefined;
-        const resolvedJenjangId = !isNaN(numericJenjangId!) ? numericJenjangId : undefined;
+        const tahunAjaran = tenantSettings.psbConfig?.tahunAjaranAktif || '';
         return (
-            <PsbPublicForm
-                settings={tenantSettings || initialSettings}
-                templateId={templateId}
-                tenantId={resolvedConn.portalId}
-                conn={resolvedConn}
-                initialJenjangId={resolvedJenjangId}
-                jenjangNameQuery={jenjangQuery}
-            />
+            <div className={`min-h-screen bg-gradient-to-br ${theme.bgGradient} flex items-center justify-center p-4 sm:p-6`}>
+                <div className="bg-white rounded-3xl shadow-xl border border-slate-200 max-w-lg w-full overflow-hidden">
+                    <div className={`bg-gradient-to-r ${theme.bannerGradient} text-white p-6 flex items-center gap-4`}>
+                        {tenantSettings.logoPonpesUrl ? (
+                            <img
+                                src={tenantSettings.logoPonpesUrl}
+                                alt={tenantSettings.namaPonpes}
+                                className="w-14 h-14 rounded-2xl bg-white object-contain p-1.5 shrink-0"
+                                referrerPolicy="no-referrer"
+                            />
+                        ) : (
+                            <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
+                                <i className="bi bi-mortarboard-fill text-2xl"></i>
+                            </div>
+                        )}
+                        <div className="min-w-0">
+                            <p className="text-[11px] uppercase tracking-widest text-white/80 font-semibold">Penerimaan Santri Baru (PSB)</p>
+                            <h1 className="text-lg font-extrabold leading-tight truncate">{tenantSettings.namaPonpes || 'Pondok Pesantren'}</h1>
+                            {tahunAjaran && <p className="text-xs text-white/90 mt-0.5">Tahun Ajaran {tahunAjaran}</p>}
+                        </div>
+                    </div>
+
+                    <div className="p-6 space-y-4">
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+                            <i className="bi bi-file-earmark-code-fill text-amber-600 text-xl shrink-0 mt-0.5"></i>
+                            <div className="text-xs text-amber-950 leading-relaxed space-y-1.5">
+                                <p className="font-bold text-sm text-amber-900">Pendaftaran Menggunakan Formulir HTML Mandiri PSB</p>
+                                <p>
+                                    Tautan langsung portal PSB saat ini dinonaktifkan untuk menjaga kestabilan pengiriman data dan berkas lampiran.
+                                    Silakan gunakan berkas/tautan <strong>Formulir HTML Mandiri PSB</strong> resmi yang dibagikan oleh Panitia PSB Pondok.
+                                </p>
+                            </div>
+                        </div>
+
+                        {portalContacts.length > 0 && (
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                <p className="text-xs font-bold text-slate-700 mb-2">Kontak Panitia PSB / Bantuan:</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {portalContacts.map((c) => (
+                                        <a
+                                            key={c.id}
+                                            href={normalizeExternalUrl(c.value || '', c.icon)}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className={`inline-flex items-center gap-1.5 rounded-full border ${theme.borderLight} bg-white px-3 py-1.5 text-xs font-bold ${theme.textPrimary}`}
+                                        >
+                                            <i className={`bi ${c.icon}`}></i>
+                                            <span>{c.label}</span>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="pt-2 flex flex-wrap justify-between items-center gap-2 border-t border-slate-100">
+                            <a
+                                href={resolvedConn.portalId && resolvedConn.portalId !== 'default-portal' ? `/?tenant=${encodeURIComponent(resolvedConn.portalId)}` : '/'}
+                                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs ${theme.btnPrimary} transition-colors`}
+                            >
+                                <i className="bi bi-arrow-left"></i>
+                                <span>Ke Portal Wali Santri</span>
+                            </a>
+                            <span className="text-[11px] text-slate-400">eSantri Web • PSB Resmi</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         );
     }
 
@@ -417,10 +543,35 @@ export const PublicPortal: React.FC = () => {
             return;
         }
 
+        const cleanNis = normalizePortalNis(normalizedNis);
+        const cleanDob = normalizePortalDob(dobInput.trim());
+
+        const matchAndDecryptCandidate = async (
+            list: any[],
+            portalId: string,
+            authHashes: string[]
+        ): Promise<PortalSantriSummary | null> => {
+            if (!Array.isArray(list) || list.length === 0) return null;
+            const found = list.find((s) => {
+                if (isEncryptedPortalRecord(s)) {
+                    return authHashes.includes(s.nis);
+                }
+                return normalizePortalNis(s.nis) === cleanNis && normalizePortalDob(s.tanggalLahir) === cleanDob;
+            });
+            if (!found) return null;
+            if (isEncryptedPortalRecord(found)) {
+                return await decryptPortalSantriSummary<PortalSantriSummary>(found, portalId, normalizedNis, dobInput.trim());
+            }
+            return found as PortalSantriSummary;
+        };
+
         setIsLoggingIn(true);
         setLoginNotice('');
         try {
             let matched: PortalSantriSummary | null = null;
+            const authHashes = isWebCryptoAvailable()
+                ? await derivePortalAuthHashCandidates(resolvedConn.portalId, normalizedNis, dobInput.trim())
+                : [];
 
             if (resolvedConn.gasEndpoint) {
                 try {
@@ -437,15 +588,25 @@ export const PublicPortal: React.FC = () => {
                 }
             }
 
-            // Cek Cloudflare Worker jika provider cloudflare
+            // Cek Cloudflare Worker jika provider cloudflare (E2EE authHash v2 -> v1 lebih dulu, lalu plaintext fallback)
             if (!matched && tenantSettings?.portalConfig?.provider === 'cloudflare' && tenantSettings.portalConfig.cloudflareWorkerUrl) {
                 try {
                     const cfUrl = tenantSettings.portalConfig.cloudflareWorkerUrl.replace(/\/+$/, '');
-                    const cfRes = await fetch(`${cfUrl}?action=loginSantri&portalId=${encodeURIComponent(resolvedConn.portalId)}&nis=${encodeURIComponent(normalizedNis)}&dob=${encodeURIComponent(dobInput.trim())}`);
-                    if (cfRes.ok) {
-                        const cfJson = await cfRes.json();
-                        if (cfJson?.success && cfJson?.data?.santri) {
-                            matched = cfJson.data.santri;
+                    const attempts: Array<{ qNis: string; qDob: string }> = [
+                        ...authHashes.map((h) => ({ qNis: h, qDob: 'e2ee' })),
+                        { qNis: cleanNis, qDob: cleanDob },
+                    ];
+                    for (const att of attempts) {
+                        const cfRes = await fetch(`${cfUrl}?action=loginSantri&portalId=${encodeURIComponent(resolvedConn.portalId)}&nis=${encodeURIComponent(att.qNis)}&dob=${encodeURIComponent(att.qDob)}`);
+                        if (cfRes.ok) {
+                            const cfJson = await cfRes.json();
+                            const candidate = cfJson?.data?.santri || cfJson?.santri;
+                            if (cfJson?.success && candidate) {
+                                matched = isEncryptedPortalRecord(candidate)
+                                    ? await decryptPortalSantriSummary<PortalSantriSummary>(candidate, resolvedConn.portalId, normalizedNis, dobInput.trim())
+                                    : candidate;
+                                break;
+                            }
                         }
                     }
                 } catch (cfErr) {
@@ -466,23 +627,40 @@ export const PublicPortal: React.FC = () => {
                     });
                     if (sbRes.ok) {
                         const rows = await sbRes.json();
-                        const list: PortalSantriSummary[] = rows[0]?.payload?.santriSummary || [];
-                        const cleanNis = normalizedNis.toLowerCase();
-                        const cleanDob = dobInput.trim().slice(0, 10);
-                        const found = list.find(s => (s.nis || '').replace(/\s+/g, '').toLowerCase() === cleanNis && (s.tanggalLahir || '').slice(0, 10) === cleanDob);
-                        if (found) matched = found;
+                        const list: any[] = rows[0]?.payload?.santriSummary || [];
+                        matched = await matchAndDecryptCandidate(list, resolvedConn.portalId, authHashes);
                     }
                 } catch (sbErr) {
                     console.warn('Login via Supabase gagal:', sbErr);
                 }
             }
 
+            // Cek Firebase publicPortals/{tenantId}/entries/{entryId} (anti-enumeration), lalu fallback dokumen legacy
+            if (!matched && tenantSettings?.portalConfig?.provider === 'firebase') {
+                try {
+                    const fbTargetId =
+                        tenantId && tenantId !== 'default-portal'
+                            ? tenantId
+                            : (tenantSettings?.cloudSyncConfig?.firebasePairedTenantId || resolvedConn.portalId);
+                    const lookupIds = await deriveFirebasePortalLookupCandidates(resolvedConn.portalId, normalizedNis, dobInput.trim());
+                    const entryRec = await fetchPublicPortalEntry(fbTargetId, lookupIds);
+                    if (entryRec) {
+                        matched = isEncryptedPortalRecord(entryRec)
+                            ? await decryptPortalSantriSummary<PortalSantriSummary>(entryRec, resolvedConn.portalId, normalizedNis, dobInput.trim())
+                            : (entryRec as PortalSantriSummary);
+                    } else {
+                        const fbDoc = await fetchPublicPortalSettings(fbTargetId) as any;
+                        const fbList: any[] = fbDoc?.santriSummary || [];
+                        matched = await matchAndDecryptCandidate(fbList, resolvedConn.portalId, authHashes);
+                    }
+                } catch (fbErr) {
+                    console.warn('Login via Firebase gagal:', fbErr);
+                }
+            }
+
             // Fallback ke legacySantriList jika ada
             if (!matched && legacySantriList && legacySantriList.length > 0) {
-                const cleanNis = normalizedNis.toLowerCase();
-                const cleanDob = dobInput.trim().slice(0, 10);
-                const found = legacySantriList.find(s => (s.nis || '').replace(/\s+/g, '').toLowerCase() === cleanNis && (s.tanggalLahir || '').slice(0, 10) === cleanDob);
-                if (found) matched = found;
+                matched = await matchAndDecryptCandidate(legacySantriList, resolvedConn.portalId, authHashes);
             }
 
             // Fallback ke database lokal untuk Mode Pratinjau / Testing Mandiri
@@ -548,6 +726,17 @@ export const PublicPortal: React.FC = () => {
 
                 {!loggedInSantri ? (
                     <>
+                        {!isWebCryptoAvailable() && (
+                            <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-left text-xs text-amber-950">
+                                <div className="font-bold flex items-center gap-1.5">
+                                    <i className="bi bi-exclamation-triangle-fill text-amber-600"></i>
+                                    Koneksi Non-HTTPS (Web Crypto Tidak Aktif)
+                                </div>
+                                <p className="mt-1 leading-relaxed text-[11px]">
+                                    Jika portal pondok mengaktifkan Enkripsi E2EE, pastikan Anda membuka tautan melalui alamat aman <strong>HTTPS</strong> agar dekripsi data santri dapat berjalan di browser.
+                                </p>
+                            </div>
+                        )}
                         <form onSubmit={handlePortalLogin} className="text-left mb-6 space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Nomor Induk Santri (NIS)</label>
@@ -1285,562 +1474,5 @@ export const PublicPortal: React.FC = () => {
     );
 };
 
-// Helper untuk mendapatkan konfigurasi template PSB sesuai jenjang terpilih
-const resolveJenjangConfig = (
-    baseConfig: PsbConfig,
-    targetJenjangId?: number,
-    explicitTemplateId?: string
-): { activeConfig: PsbConfig; templateName: string; isCustom: boolean } => {
-    // 1. Jika ada ID template spesifik dari URL
-    if (explicitTemplateId && baseConfig.templates && baseConfig.templates.length > 0) {
-        const found = baseConfig.templates.find(t => t.id === explicitTemplateId);
-        if (found) {
-            return {
-                activeConfig: {
-                    ...baseConfig,
-                    tahunAjaranAktif: found.tahunAjaranAktif || baseConfig.tahunAjaranAktif,
-                    targetJenjangId: found.targetJenjangId || targetJenjangId,
-                    designStyle: found.designStyle || baseConfig.designStyle,
-                    activeFields: found.activeFields && found.activeFields.length > 0 ? found.activeFields : baseConfig.activeFields,
-                    requiredStandardFields: found.requiredStandardFields || baseConfig.requiredStandardFields,
-                    requiredDocuments: found.requiredDocuments || baseConfig.requiredDocuments || [],
-                    customFields: found.customFields || baseConfig.customFields || [],
-                    fieldHints: found.fieldHints || baseConfig.fieldHints || {},
-                    biayaPendaftaran: found.biayaPendaftaran !== undefined ? found.biayaPendaftaran : baseConfig.biayaPendaftaran,
-                    infoRekening: found.infoRekening || baseConfig.infoRekening,
-                    pesanSukses: found.pesanSukses || baseConfig.pesanSukses,
-                },
-                templateName: found.name,
-                isCustom: true
-            };
-        }
-    }
 
-    // 2. Jika jenjang dipilih, cari template yang khusus dibuat untuk jenjang ini di daftar templates
-    if (targetJenjangId && baseConfig.templates && baseConfig.templates.length > 0) {
-        const foundByJenjang = baseConfig.templates.find(t => t.targetJenjangId === targetJenjangId);
-        if (foundByJenjang) {
-            return {
-                activeConfig: {
-                    ...baseConfig,
-                    tahunAjaranAktif: foundByJenjang.tahunAjaranAktif || baseConfig.tahunAjaranAktif,
-                    targetJenjangId: targetJenjangId,
-                    designStyle: foundByJenjang.designStyle || baseConfig.designStyle,
-                    activeFields: foundByJenjang.activeFields && foundByJenjang.activeFields.length > 0 ? foundByJenjang.activeFields : baseConfig.activeFields,
-                    requiredStandardFields: foundByJenjang.requiredStandardFields || baseConfig.requiredStandardFields,
-                    requiredDocuments: foundByJenjang.requiredDocuments || baseConfig.requiredDocuments || [],
-                    customFields: foundByJenjang.customFields || baseConfig.customFields || [],
-                    fieldHints: foundByJenjang.fieldHints || baseConfig.fieldHints || {},
-                    biayaPendaftaran: foundByJenjang.biayaPendaftaran !== undefined ? foundByJenjang.biayaPendaftaran : baseConfig.biayaPendaftaran,
-                    infoRekening: foundByJenjang.infoRekening || baseConfig.infoRekening,
-                    pesanSukses: foundByJenjang.pesanSukses || baseConfig.pesanSukses,
-                },
-                templateName: foundByJenjang.name,
-                isCustom: true
-            };
-        }
-    }
 
-    // 3. Jika konfigurasi utama saat ini memang untuk jenjang ini
-    if (targetJenjangId && baseConfig.targetJenjangId === targetJenjangId) {
-        return {
-            activeConfig: baseConfig,
-            templateName: 'Formulir Utama',
-            isCustom: true
-        };
-    }
-
-    // 4. Default: formulir standar baseConfig dengan targetJenjangId terpasang
-    return {
-        activeConfig: {
-            ...baseConfig,
-            targetJenjangId: targetJenjangId
-        },
-        templateName: 'Formulir Standar',
-        isCustom: false
-    };
-};
-
-const PsbPublicForm: React.FC<{
-    settings: PondokSettings;
-    templateId?: string;
-    tenantId: string;
-    conn: { portalId: string; gasEndpoint: string; gasApiKey: string };
-    initialJenjangId?: number;
-    jenjangNameQuery?: string | null;
-}> = ({ settings, templateId, tenantId, conn, initialJenjangId, jenjangNameQuery }) => {
-    const config = settings.psbConfig || {
-        tahunAjaranAktif: `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`,
-        targetKuota: 100,
-        nomorHpAdmin: '',
-        pesanSukses: 'Terima kasih telah mendaftar!',
-        activeGelombang: 1,
-        biayaPendaftaran: 0,
-        infoRekening: '',
-        activeFields: ['namaLengkap', 'jenisKelamin', 'tempatLahir', 'tanggalLahir', 'alamat', 'namaAyah', 'teleponAyah', 'namaIbu'],
-        requiredStandardFields: ['namaLengkap', 'jenisKelamin'],
-        requiredDocuments: []
-    };
-
-    let presetJenjangId = initialJenjangId;
-    if (!presetJenjangId && jenjangNameQuery && settings.jenjang) {
-        const matched = settings.jenjang.find(j => 
-            String(j.id) === jenjangNameQuery ||
-            j.nama.toLowerCase() === jenjangNameQuery.toLowerCase() ||
-            j.nama.toLowerCase().includes(jenjangNameQuery.toLowerCase())
-        );
-        if (matched) presetJenjangId = matched.id;
-    }
-
-    return (
-        <div className="min-h-screen bg-gray-100 flex flex-col items-center py-4 sm:py-10 px-0 sm:px-4">
-            <div className="w-full max-w-4xl bg-white shadow-2xl rounded-none sm:rounded-2xl overflow-hidden min-h-[90vh] flex flex-col relative border border-gray-200">
-                <div className="bg-teal-900 text-white p-4 flex justify-between items-center no-print">
-                    <div className="flex items-center gap-3">
-                        <img
-                            src={settings.logoPonpesUrl || `https://picsum.photos/seed/${settings.namaPonpes}/100/100`}
-                            className="w-10 h-10 rounded-full bg-white object-contain p-1"
-                            alt="Logo"
-                            referrerPolicy="no-referrer"
-                        />
-                        <div>
-                            <div className="font-bold text-sm leading-tight">{settings.namaPonpes}</div>
-                            <div className="text-[10px] text-teal-300">Sistem Pendaftaran Online (PSB)</div>
-                        </div>
-                    </div>
-                </div>
-                <div className="flex-grow">
-                    <PsbFormViewer
-                        settings={settings}
-                        config={config}
-                        tenantId={tenantId}
-                        conn={conn}
-                        initialJenjangId={presetJenjangId}
-                        templateId={templateId}
-                    />
-                </div>
-                <div className="bg-gray-50 border-t p-3 text-center text-gray-400 text-[10px] no-print">
-                    &copy; {new Date().getFullYear()} eSantri Web • Didukung oleh {settings.namaPonpes}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const PsbFormViewer: React.FC<{
-    settings: PondokSettings;
-    config: PsbConfig;
-    tenantId: string;
-    conn: { portalId: string; gasEndpoint: string; gasApiKey: string };
-    initialJenjangId?: number;
-    templateId?: string;
-}> = ({ settings, config, tenantId, conn, initialJenjangId, templateId }) => {
-    const [submitting, setSubmitting] = useState(false);
-    const [submitted, setSubmitted] = useState(false);
-    const [submitError, setSubmitError] = useState<string | null>(null);
-    const [fields, setFields] = useState<Record<string, any>>({});
-
-    // Jenjang hanya terkunci jika ada parameter eksplisit di URL (?jenjang=ID atau ?template=ID)
-    const isJenjangLocked = Boolean(initialJenjangId || templateId);
-
-    // Cari jenjang default awal: prioritaskan jenjang yang sudah memiliki desain khusus
-    const defaultJenjangId = initialJenjangId ||
-        settings.jenjang?.find(j => 
-            config.templates?.some(t => t.targetJenjangId === j.id) ||
-            config.targetJenjangId === j.id
-        )?.id ||
-        settings.jenjang?.[0]?.id;
-
-    const [selectedJenjangId, setSelectedJenjangId] = useState<number | undefined>(defaultJenjangId);
-
-    // Dapatkan konfigurasi form yang dinamis sesuai jenjang yang dipilih saat ini
-    const { activeConfig: currentConfig, templateName, isCustom } = useMemo(() => {
-        return resolveJenjangConfig(config, selectedJenjangId, templateId);
-    }, [config, selectedJenjangId, templateId]);
-
-    const handleInputChange = (name: string, value: any) => {
-        setFields(prev => ({ ...prev, [name]: value }));
-    };
-
-    const targetJenjang = settings.jenjang?.find(j => j.id === selectedJenjangId);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setSubmitting(true);
-        setSubmitError(null);
-        try {
-            if (!conn.gasEndpoint) {
-                throw new Error('URL Google Apps Script belum tersedia. Pastikan panitia telah menghubungkan Web App GAS.');
-            }
-
-            if (!selectedJenjangId && settings.jenjang && settings.jenjang.length > 0) {
-                throw new Error('Silakan pilih Jenjang Pendidikan Tujuan pendaftaran terlebih dahulu.');
-            }
-
-            const jenjangName = targetJenjang?.nama || 'Umum';
-            const targetSheetName = `Pendaftar ${jenjangName}`;
-
-            await submitPortalPsbToGas(conn.gasEndpoint, tenantId, {
-                ...fields,
-                tahunAjaranAktif: currentConfig.tahunAjaranAktif,
-                targetJenjangId: selectedJenjangId,
-                targetJenjangNama: jenjangName,
-                jenjangId: selectedJenjangId,
-                namaJenjang: jenjangName,
-                submissionSource: 'portal-psb',
-                sheetName: targetSheetName
-            }, conn.gasApiKey);
-            setSubmitted(true);
-        } catch (err) {
-            console.error('Submission Error:', err);
-            setSubmitError((err as Error)?.message || 'Terjadi kesalahan saat menyimpan data. Pastikan koneksi internet aktif.');
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    if (submitted) {
-        return (
-            <div className="p-10 text-center animate-fade-in">
-                <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <i className="bi bi-check-lg text-5xl"></i>
-                </div>
-                <h2 className="text-2xl font-bold mb-2">Pendaftaran Berhasil!</h2>
-                <p className="text-gray-600 mb-8 max-w-md mx-auto">
-                    {currentConfig.pesanSukses || 'Data pendaftaran santri baru telah kami terima di database cloud. Silakan simpan halaman ini atau catat ID Pendaftaran Anda.'}
-                </p>
-                <div className="bg-gray-50 border p-4 rounded-lg text-left max-w-sm mx-auto mb-8">
-                    <div className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-1">ID Pendaftaran</div>
-                    <div className="font-mono text-lg">{Date.now()}</div>
-                    {selectedJenjangId && (
-                        <div className="text-xs text-teal-800 font-bold mt-1">
-                            Jenjang: {targetJenjang?.nama}
-                        </div>
-                    )}
-                </div>
-                <button onClick={() => window.location.reload()} className="bg-teal-600 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:bg-teal-700 transition-colors">Daftar Santri Lain</button>
-            </div>
-        );
-    }
-
-    return (
-        <div className="h-full relative overflow-y-auto print:h-auto print:overflow-visible custom-scrollbar">
-            <form onSubmit={handleSubmit} className="p-6 md:p-10 max-w-3xl mx-auto space-y-10 print:p-4 print:max-w-none print:space-y-6">
-                <header className="text-center mb-8 border-b pb-6">
-                    <h1 className="text-2xl sm:text-3xl font-extrabold text-teal-900 mb-2 uppercase tracking-wide">
-                        {currentConfig.tahunAjaranAktif ? 'Pendaftaran Santri Baru' : 'Formulir Pendaftaran'}
-                    </h1>
-                    <div className="h-1 w-20 bg-amber-500 mx-auto rounded-full mb-3"></div>
-                    <p className="text-sm text-gray-500 uppercase tracking-widest font-bold">
-                        Tahun Ajaran {currentConfig.tahunAjaranAktif || new Date().getFullYear()}
-                    </p>
-                </header>
-
-                {submitError && (
-                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 font-medium">
-                        <i className="bi bi-exclamation-triangle-fill mr-2"></i>
-                        {submitError}
-                    </div>
-                )}
-
-                <div className="space-y-10">
-                    {/* BAGIAN PEMILIHAN JENJANG PENDIDIKAN */}
-                    {isJenjangLocked ? (
-                        <div className="bg-teal-50 border border-teal-200 p-4 sm:p-5 rounded-2xl flex items-center justify-between shadow-2xs">
-                            <div>
-                                <label className="block text-[11px] font-bold text-teal-700 uppercase mb-1 tracking-widest">
-                                    Jenjang Pendidikan Tujuan
-                                </label>
-                                <div className="font-extrabold text-xl text-teal-950 flex items-center gap-2">
-                                    <i className="bi bi-mortarboard-fill text-teal-600"></i>
-                                    {targetJenjang?.nama || 'Semua Jenjang'}
-                                </div>
-                                {isCustom && (
-                                    <span className="inline-block mt-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                                        ✓ Desain Khusus Aktif ({templateName})
-                                    </span>
-                                )}
-                            </div>
-                            <span className="bg-teal-700 text-white text-[11px] font-bold px-3 py-1 rounded-full shrink-0">
-                                Terkunci
-                            </span>
-                        </div>
-                    ) : (
-                        <div className="bg-teal-50/80 border border-teal-200 p-4 sm:p-5 rounded-2xl space-y-3.5 shadow-2xs">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-teal-200/60 pb-2.5">
-                                <div>
-                                    <label className="block text-xs font-black text-teal-950 uppercase tracking-wider">
-                                        Pilih Jenjang Pendidikan Tujuan <span className="text-red-500 font-black">*</span>
-                                    </label>
-                                    <p className="text-[11px] text-teal-800 mt-0.5">
-                                        Formulir dan syarat berkas di bawah akan <strong>berganti otomatis</strong> sesuai jenjang yang Anda pilih:
-                                    </p>
-                                </div>
-
-                                {/* Dropdown Selector Cepat */}
-                                <div className="w-full sm:w-56 shrink-0">
-                                    <select
-                                        value={selectedJenjangId || ''}
-                                        onChange={e => setSelectedJenjangId(Number(e.target.value))}
-                                        className="w-full bg-white border border-teal-300 text-teal-950 text-xs font-bold rounded-xl p-2.5 shadow-2xs focus:ring-2 focus:ring-teal-500 outline-none cursor-pointer"
-                                    >
-                                        <option value="">-- Pilih Jenjang --</option>
-                                        {(settings.jenjang || []).map(j => (
-                                            <option key={j.id} value={j.id}>
-                                                {j.nama} {config.templates?.some(t => t.targetJenjangId === j.id) || config.targetJenjangId === j.id ? '★' : ''}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-
-                            {/* Tombol Pilihan Interaktif Berbentuk Kartu */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                                {(settings.jenjang || []).map(j => {
-                                    const isSelected = selectedJenjangId === j.id;
-                                    const hasDesign = config.templates?.some(t => t.targetJenjangId === j.id) || config.targetJenjangId === j.id;
-                                    return (
-                                        <button
-                                            key={j.id}
-                                            type="button"
-                                            onClick={() => setSelectedJenjangId(j.id)}
-                                            className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
-                                                isSelected
-                                                    ? 'bg-teal-700 text-white border-teal-800 shadow-md ring-2 ring-teal-500 font-bold'
-                                                    : 'bg-white text-gray-800 border-gray-200 hover:border-teal-300 hover:bg-teal-50/50'
-                                            }`}
-                                        >
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                <i className={`bi bi-mortarboard${isSelected ? '-fill' : ''} text-lg shrink-0 ${isSelected ? 'text-teal-200' : 'text-teal-600'}`}></i>
-                                                <div className="min-w-0">
-                                                    <span className="text-xs font-bold block truncate">{j.nama}</span>
-                                                    {hasDesign && (
-                                                        <span className={`text-[10px] block ${isSelected ? 'text-teal-200' : 'text-emerald-700'}`}>
-                                                            {isSelected ? '✓ Desain Khusus' : '★ Ada Desain'}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            {isSelected && <i className="bi bi-check-circle-fill text-base text-teal-200 shrink-0 ml-1"></i>}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Status Desain Formulir yang Sedang Aktif */}
-                            <div className="pt-2 flex items-center justify-between text-[11px] text-teal-800 border-t border-teal-200/50">
-                                <span>
-                                    Jenjang Aktif: <strong>{targetJenjang?.nama || 'Belum Dipilih'}</strong>
-                                </span>
-                                {isCustom ? (
-                                    <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-bold">
-                                        ✓ Memuat Desain: {templateName}
-                                    </span>
-                                ) : (
-                                    <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium">
-                                        Formulir Standar
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* KELOMPOK DATA STANDAR (SESUAI CONFIG AKTIF) */}
-                    {fieldGroups.map((group, gIdx) => {
-                        const groupFields = group.fields.filter(f => currentConfig.activeFields.includes(f.key));
-                        if (groupFields.length === 0) return null;
-                        return (
-                            <section key={gIdx} className="space-y-6">
-                                <h3 className="font-bold text-lg text-gray-800 border-l-4 border-amber-500 pl-3 flex items-center justify-between">
-                                    {group.title}
-                                    <span className="h-px bg-gray-200 flex-1 ml-4"></span>
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                                    {groupFields.map(f => {
-                                        const isRequired = (currentConfig.requiredStandardFields || []).includes(f.key);
-                                        const hint = currentConfig.fieldHints?.[f.key];
-                                        return (
-                                            <div key={f.key} className={`space-y-1.5 ${f.key === 'namaLengkap' || f.key === 'alamat' || f.key === 'catatan' || f.type === 'markdown' || f.isFullWidth ? 'md:col-span-2' : ''}`}>
-                                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                                    {f.label} {isRequired && <span className="text-red-500">*</span>}
-                                                </label>
-                                                {f.key === 'jenisKelamin' ? (
-                                                    <div className="flex gap-4 p-1">
-                                                        <label className="flex items-center gap-2 cursor-pointer bg-white border px-4 py-2.5 rounded-lg flex-1 text-sm has-[:checked]:border-teal-500 has-[:checked]:bg-teal-50 transition-all">
-                                                            <input required={isRequired} type="radio" name={f.key} value="Laki-laki" onChange={e => handleInputChange(f.key, e.target.value)} /> Laki-laki
-                                                        </label>
-                                                        <label className="flex items-center gap-2 cursor-pointer bg-white border px-4 py-2.5 rounded-lg flex-1 text-sm has-[:checked]:border-teal-500 has-[:checked]:bg-teal-50 transition-all">
-                                                            <input required={isRequired} type="radio" name={f.key} value="Perempuan" onChange={e => handleInputChange(f.key, e.target.value)} /> Perempuan
-                                                        </label>
-                                                    </div>
-                                                ) : (f.type === 'select' || (f.options && f.options.length > 0)) ? (
-                                                    <select
-                                                        required={isRequired}
-                                                        className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-teal-500 outline-none text-sm transition"
-                                                        onChange={e => handleInputChange(f.key, e.target.value)}
-                                                    >
-                                                        <option value="">-- Pilih {f.label} --</option>
-                                                        {f.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                                    </select>
-                                                ) : (f.type === 'markdown' || f.key === 'catatan') ? (
-                                                    <MarkdownEditor
-                                                        value={fields[f.key] || ''}
-                                                        onChange={val => handleInputChange(f.key, val)}
-                                                        placeholder="Tulis catatan atau pesan orang tua (mendukung markdown)..."
-                                                        rows={3}
-                                                        required={isRequired}
-                                                    />
-                                                ) : (f.type === 'date' || f.key.toLowerCase().includes('tanggal')) ? (
-                                                    <input required={isRequired} type="date" className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-teal-500 outline-none text-sm transition" onChange={e => handleInputChange(f.key, e.target.value)} />
-                                                ) : (f.type === 'number' || ['anakKe', 'jumlahSaudara', 'tinggiBadan', 'beratBadan', 'tahunLulusSebelumnya', 'targetJuz'].includes(f.key)) ? (
-                                                    <input required={isRequired} type="number" className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-teal-500 outline-none text-sm transition" placeholder={f.label} onChange={e => handleInputChange(f.key, e.target.value)} />
-                                                ) : (
-                                                    <input required={isRequired} type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-teal-500 outline-none text-sm transition" placeholder={f.label} onChange={e => handleInputChange(f.key, e.target.value)} />
-                                                )}
-                                                {hint && (
-                                                    <p className="text-[11px] text-teal-700 italic">
-                                                        <i className="bi bi-info-circle mr-1"></i>{hint}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </section>
-                        );
-                    })}
-
-                    {/* CHECKLIST PERSYARATAN BERKAS (JIKA ADA DOKUMEN YANG DIATUR) */}
-                    {(currentConfig.requiredDocuments?.length ?? 0) > 0 && (
-                        <section className="space-y-4 pt-4 border-t">
-                            <h3 className="font-bold text-lg text-gray-800 border-l-4 border-teal-600 pl-3">
-                                Persyaratan Berkas Pendaftaran
-                            </h3>
-                            <div className="p-4 bg-teal-50/60 border border-teal-200 rounded-xl space-y-2.5">
-                                <p className="text-xs text-teal-900 font-semibold">
-                                    Mohon siapkan dokumen-dokumen fisik berikut untuk diserahkan ke Panitia PSB:
-                                </p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                    {currentConfig.requiredDocuments?.map((doc, idx) => (
-                                        <div key={idx} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-teal-100 text-gray-700">
-                                            <i className="bi bi-file-earmark-check-fill text-teal-600 text-sm"></i>
-                                            <span>{doc}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </section>
-                    )}
-
-                    {/* PERTANYAAN KHUSUS & BERKAS UPLOAD (SESUAI TEMPLATE JENJANG) */}
-                    {(currentConfig.customFields?.length ?? 0) > 0 && (
-                        <section className="space-y-6 pt-6 border-t">
-                            <h3 className="font-bold text-lg text-gray-800 border-l-4 border-teal-600 pl-3">
-                                Informasi Tambahan &amp; Berkas ({targetJenjang?.nama || 'Jenjang'})
-                            </h3>
-                            <div className="grid grid-cols-1 gap-6">
-                                {currentConfig.customFields?.map(field => (
-                                    <div key={field.id} className="space-y-2">
-                                        {field.type === 'section' ? (
-                                            <h4 className="font-bold text-teal-700 bg-teal-50 p-3 rounded-lg border-l-4 border-teal-500 uppercase tracking-widest text-xs">{field.label}</h4>
-                                        ) : field.type === 'statement' ? (
-                                            <div className="text-sm text-gray-600 leading-relaxed bg-amber-50 p-4 rounded-xl border border-amber-100">{field.label}</div>
-                                        ) : (
-                                            <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-3">
-                                                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">{field.label} {field.required && <span className="text-red-500 font-black">*</span>}</label>
-                                                {field.type === 'paragraph' ? (
-                                                    <textarea required={field.required} rows={3} className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-teal-500 outline-none" onChange={e => handleInputChange(`custom_${field.id}`, e.target.value)} />
-                                                ) : field.type === 'date' ? (
-                                                    <input required={field.required} type="date" className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-teal-500 outline-none bg-white text-sm" onChange={e => handleInputChange(`custom_${field.id}`, e.target.value)} />
-                                                ) : field.type === 'markdown' ? (
-                                                    <MarkdownEditor
-                                                        value={fields[`custom_${field.id}`] || ''}
-                                                        onChange={val => handleInputChange(`custom_${field.id}`, val)}
-                                                        placeholder="Tulis jawaban atau catatan terformat..."
-                                                        rows={3}
-                                                        required={field.required}
-                                                    />
-                                                ) : field.type === 'number' ? (
-                                                    <input required={field.required} type="number" className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-teal-500 outline-none bg-white text-sm" onChange={e => handleInputChange(`custom_${field.id}`, e.target.value)} />
-                                                ) : field.type === 'select' ? (
-                                                    <select
-                                                        required={field.required}
-                                                        className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-teal-500 outline-none text-sm"
-                                                        onChange={e => handleInputChange(`custom_${field.id}`, e.target.value)}
-                                                    >
-                                                        <option value="">-- Pilih {field.label} --</option>
-                                                        {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                                    </select>
-                                                ) : field.type === 'file' ? (
-                                                    <div className="relative group">
-                                                        <input required={field.required} type="file" accept="image/*,application/pdf" className="w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 transition-all cursor-pointer" onChange={e => handleInputChange(`custom_${field.id}`, e.target.files?.[0])} />
-                                                        <p className="text-[10px] text-gray-400 mt-2 ml-2"><i className="bi bi-info-circle"></i> Format: PDF, JPG, Maksimal 5MB.</p>
-                                                    </div>
-                                                ) : field.type === 'radio' ? (
-                                                    <div className="flex flex-wrap gap-3">
-                                                        {field.options?.map(opt => (
-                                                            <label key={opt} className="flex items-center gap-2 cursor-pointer border px-4 py-2.5 rounded-xl hover:bg-gray-50 has-[:checked]:bg-teal-50 has-[:checked]:border-teal-500 transition-all text-sm">
-                                                                <input type="radio" name={`custom_${field.id}`} value={opt} required={field.required} onChange={e => handleInputChange(`custom_${field.id}`, e.target.value)} />
-                                                                {opt}
-                                                            </label>
-                                                        ))}
-                                                    </div>
-                                                ) : field.type === 'checkbox' ? (
-                                                    <div className="flex flex-wrap gap-3">
-                                                        {field.options?.map(opt => (
-                                                            <label key={opt} className="flex items-center gap-2 cursor-pointer border px-4 py-2.5 rounded-xl hover:bg-gray-50 has-[:checked]:bg-teal-50 has-[:checked]:border-teal-500 transition-all text-sm">
-                                                                <input type="checkbox" name={`custom_${field.id}[]`} value={opt} onChange={e => {
-                                                                    const current = (fields[`custom_${field.id}`] as string[]) || [];
-                                                                    const next = e.target.checked ? [...current, opt] : current.filter(x => x !== opt);
-                                                                    handleInputChange(`custom_${field.id}`, next);
-                                                                }} />
-                                                                {opt}
-                                                            </label>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <input type="text" required={field.required} className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-teal-500 outline-none" onChange={e => handleInputChange(`custom_${field.id}`, e.target.value)} />
-                                                )}
-                                                {field.hint && (
-                                                    <p className="text-[11px] text-teal-700 italic">
-                                                        <i className="bi bi-info-circle mr-1"></i>{field.hint}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </section>
-                    )}
-                </div>
-
-                <div className="pt-10 border-t mt-12">
-                    <button
-                        disabled={submitting}
-                        type="submit"
-                        className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-400 text-white font-black py-5 rounded-2xl shadow-[0_6px_0_0_#0d9488] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-3 text-xl cursor-pointer"
-                    >
-                        {submitting ? (
-                            <>
-                                <i className="bi bi-arrow-repeat animate-spin text-2xl"></i>
-                                <span>Memproses...</span>
-                            </>
-                        ) : (
-                            <>
-                                <i className="bi bi-journal-check text-2xl"></i> KIRIM FORMULIR PENDAFTARAN
-                            </>
-                        )}
-                    </button>
-                    <p className="text-[10px] text-center text-gray-400 mt-6 max-w-sm mx-auto uppercase tracking-tighter">
-                        Data aman terenkripsi &bullet; Langsung terkirim ke sistem {settings.namaPonpes}
-                    </p>
-                    <div className="mt-6 pt-4 border-t text-center text-xs text-gray-500">
-                        <div>Tahun Ajaran {currentConfig.tahunAjaranAktif || new Date().getFullYear()}</div>
-                        <div className="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div>
-                    </div>
-                </div>
-            </form>
-        </div>
-    );
-};

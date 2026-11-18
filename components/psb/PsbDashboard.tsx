@@ -6,6 +6,7 @@ import { EmptyState } from '../common/EmptyState';
 import { PsbDashboardReportModal } from './modals/PsbDashboardReportModal';
 import { PsbArchiveHistoryModal } from './modals/PsbArchiveHistoryModal';
 import { getPsbArchives, calculateMultiYearComparison, YearComparisonStat } from './utils/psbArchiveService';
+import { matchesPsbTahunAjaran } from './utils/psbUtils';
 import {
     ResponsiveContainer,
     AreaChart,
@@ -25,15 +26,20 @@ interface PsbDashboardProps {
 }
 
 export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, config, settings, onSaveConfig }) => {
-    const totalPendaftar = pendaftarList.length;
+    const curYearLabel = config.tahunAjaranAktif || `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`;
+    const activePendaftarList = useMemo(() => {
+        return pendaftarList.filter(p => matchesPsbTahunAjaran(p, curYearLabel, curYearLabel));
+    }, [pendaftarList, curYearLabel]);
+
+    const totalPendaftar = activePendaftarList.length;
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
     const [archiveRefreshKey, setArchiveRefreshKey] = useState(0);
 
-    // Ambil data arsip historis
+    // Ambil data arsip historis (terintegrasi config.archives + fallback localStorage)
     const archives = useMemo(() => {
-        return getPsbArchives();
-    }, [archiveRefreshKey]);
+        return getPsbArchives(config);
+    }, [config, archiveRefreshKey]);
 
     // Hitung komparasi antar tahun
     const { yearsComparison, trendChartData, totalGrowthRate } = useMemo(() => {
@@ -69,18 +75,18 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
             'Diterima': 0,
             'Ditolak': 0
         };
-        pendaftarList.forEach(p => {
+        activePendaftarList.forEach(p => {
             if (counts[p.status] !== undefined) {
                 counts[p.status]++;
             }
         });
         return counts;
-    }, [pendaftarList]);
+    }, [activePendaftarList]);
 
     // Distribusi Jenjang
     const statsByJenjang = useMemo(() => {
         return settings.jenjang.map(j => {
-            const pendaftarInJenjang = pendaftarList.filter(p => p.jenjangId === j.id);
+            const pendaftarInJenjang = activePendaftarList.filter(p => p.jenjangId === j.id);
             const l = pendaftarInJenjang.filter(p => p.jenisKelamin === 'Laki-laki').length;
             const p = pendaftarInJenjang.filter(p => p.jenisKelamin === 'Perempuan').length;
             const total = pendaftarInJenjang.length;
@@ -102,7 +108,7 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
                 percentP: total > 0 ? (p / total) * 100 : 0
             };
         });
-    }, [settings.jenjang, pendaftarList, activeCompareStat]);
+    }, [settings.jenjang, activePendaftarList, activeCompareStat]);
 
     // Tren Harian 7 Hari Terakhir
     const dailyTrend = useMemo(() => {
@@ -112,15 +118,15 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
             const d = new Date(today);
             d.setDate(today.getDate() - i);
             const dateStr = d.toISOString().split('T')[0];
-            const count = pendaftarList.filter(p => p.tanggalDaftar && p.tanggalDaftar.startsWith(dateStr)).length;
+            const count = activePendaftarList.filter(p => p.tanggalDaftar && p.tanggalDaftar.startsWith(dateStr)).length;
             days.push({ date: d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' }), count });
         }
         return days;
-    }, [pendaftarList]);
+    }, [activePendaftarList]);
 
     const maxDaily = Math.max(...dailyTrend.map(d => d.count), 1);
     const todayStr = new Date().toISOString().split('T')[0];
-    const pendaftarHariIni = pendaftarList.filter(p => p.tanggalDaftar && p.tanggalDaftar.startsWith(todayStr)).length;
+    const pendaftarHariIni = activePendaftarList.filter(p => p.tanggalDaftar && p.tanggalDaftar.startsWith(todayStr)).length;
 
     // Persentase Penerimaan
     const acceptanceRate = totalPendaftar > 0 ? Math.round((statusStats.Diterima / totalPendaftar) * 100) : 0;
@@ -130,8 +136,6 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
     // Capaian Kuota
     const targetKuota = config.targetKuota || 0;
     const kuotaProgress = targetKuota > 0 ? Math.min(Math.round((totalPendaftar / targetKuota) * 100), 100) : null;
-
-    const curYearLabel = config.tahunAjaranAktif || `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`;
 
     return (
         <div className="space-y-6">
@@ -589,7 +593,7 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
             <PsbDashboardReportModal
                 isOpen={isReportModalOpen}
                 onClose={() => setIsReportModalOpen(false)}
-                pendaftarList={pendaftarList}
+                pendaftarList={activePendaftarList}
                 settings={settings}
                 config={config}
                 onSaveConfig={onSaveConfig}
@@ -601,6 +605,7 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
                 onClose={() => setIsArchiveModalOpen(false)}
                 settings={settings}
                 config={config}
+                onSaveConfig={onSaveConfig}
                 onArchivesUpdated={() => setArchiveRefreshKey(prev => prev + 1)}
             />
         </div>

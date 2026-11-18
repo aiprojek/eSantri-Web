@@ -15,6 +15,7 @@ export interface PsbBillingOption {
     biayaId: number;
     nominal: number;
     deskripsi: string;
+    jatuhTempo?: string;
 }
 
 interface PsbAcceptanceModalProps {
@@ -150,6 +151,12 @@ export const PsbAcceptanceModal: React.FC<PsbAcceptanceModalProps> = ({
         setSendWa(!isBulk && !!waliPhone);
     }, [isOpen, firstPendaftar?.id, isBulk]);
 
+    const hasMixedJenjang = useMemo(() => {
+        if (!isBulk) return false;
+        const distinct = new Set(items.map(p => p.jenjangId).filter(Boolean));
+        return distinct.size > 1;
+    }, [items, isBulk]);
+
     if (!isOpen || items.length === 0 || !firstPendaftar) return null;
 
     const handleJenjangChange = (newJenjangId: number) => {
@@ -157,7 +164,7 @@ export const PsbAcceptanceModal: React.FC<PsbAcceptanceModalProps> = ({
         setSelectedJenjangId(defaults.jenjangId);
         setSelectedKelasId(defaults.kelasId);
         setSelectedRombelId(defaults.rombelId);
-        // Apply to all in bulk map
+        // Terapkan ke semua santri terpilih bila admin secara eksplisit mengganti jenjang
         const nextMap: Record<number, { jenjangId: number; kelasId: number; rombelId: number }> = {};
         items.forEach(p => {
             nextMap[p.id] = { ...defaults };
@@ -170,15 +177,18 @@ export const PsbAcceptanceModal: React.FC<PsbAcceptanceModalProps> = ({
         const firstRombel = settings.rombel.find(r => r.kelasId === newKelasId);
         const newRombelId = firstRombel?.id || 0;
         setSelectedRombelId(newRombelId);
-        // Apply to all in bulk map that share this jenjang
+        // Hanya perbarui pendaftar yang berada di jenjang yang sama dengan kelas terpilih
         setPerPendaftarPlacement(prev => {
             const next = { ...prev };
             items.forEach(p => {
-                next[p.id] = {
-                    jenjangId: selectedJenjangId,
-                    kelasId: newKelasId,
-                    rombelId: newRombelId
-                };
+                const currentEntry = next[p.id] || getDefaultPlacementForJenjang(p.jenjangId);
+                if (!hasMixedJenjang || currentEntry.jenjangId === selectedJenjangId) {
+                    next[p.id] = {
+                        jenjangId: selectedJenjangId,
+                        kelasId: newKelasId,
+                        rombelId: newRombelId
+                    };
+                }
             });
             return next;
         });
@@ -189,11 +199,14 @@ export const PsbAcceptanceModal: React.FC<PsbAcceptanceModalProps> = ({
         setPerPendaftarPlacement(prev => {
             const next = { ...prev };
             items.forEach(p => {
-                next[p.id] = {
-                    jenjangId: selectedJenjangId,
-                    kelasId: selectedKelasId,
-                    rombelId: newRombelId
-                };
+                const currentEntry = next[p.id] || getDefaultPlacementForJenjang(p.jenjangId);
+                if (!hasMixedJenjang || currentEntry.jenjangId === selectedJenjangId) {
+                    next[p.id] = {
+                        jenjangId: selectedJenjangId,
+                        kelasId: selectedKelasId,
+                        rombelId: newRombelId
+                    };
+                }
             });
             return next;
         });
@@ -227,7 +240,8 @@ export const PsbAcceptanceModal: React.FC<PsbAcceptanceModalProps> = ({
                 createBilling,
                 biayaId: selectedBiayaId,
                 nominal,
-                deskripsi: deskripsi || (isBulk ? 'Daftar Ulang Santri Baru' : `Daftar Ulang - ${firstPendaftar.namaLengkap}`)
+                deskripsi: deskripsi || (isBulk ? 'Daftar Ulang Santri Baru' : `Daftar Ulang - ${firstPendaftar.namaLengkap}`),
+                jatuhTempo: batasDaftarUlang || undefined
             };
 
             await onConfirmed(isBulk ? items : firstPendaftar, billingOption, placementOption);
@@ -307,6 +321,12 @@ export const PsbAcceptanceModal: React.FC<PsbAcceptanceModalProps> = ({
                                     );
                                 })}
                             </div>
+                            {hasMixedJenjang && (
+                                <p className="mt-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+                                    <i className="bi bi-info-circle-fill text-amber-600 shrink-0"></i>
+                                    <span>Terdeteksi lintas jenjang. Penempatan Kelas & Rombel di bawah hanya berlaku untuk jenjang terpilih (kecuali Anda mengganti pilihan Jenjang secara global).</span>
+                                </p>
+                            )}
                         </div>
                     ) : (
                         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1 text-xs">

@@ -584,11 +584,14 @@ export const healPendaftarRecordWithDetails = (
         programpilihan: 'programPilihan',
         jalurpendaftaran: 'jalurPendaftaran',
         gelombang: 'gelombang',
+        tahunajaran: 'tahunAjaran',
+        tahunajaranaktif: 'tahunAjaran',
+        psbtahunajaran: 'tahunAjaran',
         catatan: 'catatan'
     };
 
     const numericFields = new Set(['tinggiBadan', 'beratBadan', 'anakKe', 'jumlahSaudara', 'gelombang', 'targetJuz']);
-    const metadataKeysToDrop = new Set(['sheetname', 'jenjangid', 'status', 'tanggaldaftar', 'drivefolderid', 'folderid', 'id', 'nomorregistrasi', 'timestamp']);
+    const metadataKeysToDrop = new Set(['sheetname', 'jenjangid', 'status', 'tanggaldaftar', 'drivefolderid', 'folderid', 'id', 'nomorregistrasi', 'timestamp', 'tahunajaran', 'tahunajaranaktif', 'psbtahunajaran']);
 
     const parseNumeric = (val: any): number | undefined => {
         if (val === undefined || val === null || val === '') return undefined;
@@ -867,6 +870,121 @@ export const getPsbAcademicYearOptions = (settings?: PondokSettings): {
 
 export const healPendaftarRecord = (raw: any, settings?: PondokSettings): Pendaftar => {
     return healPendaftarRecordWithDetails(raw, settings).healed;
+};
+
+/**
+ * Resolves the normalized Academic Year (Tahun Ajaran) of a Pendaftar record,
+ * checking top-level `tahunAjaran` and fallback JSON `customData`.
+ */
+export const resolvePendaftarTahunAjaran = (p?: Partial<Pendaftar> | null, fallbackTa = ''): string => {
+    if (!p) return fallbackTa.trim();
+    const direct = String((p as any).tahunAjaran || (p as any).tahunAjaranAktif || '').trim();
+    if (direct) return direct;
+    if (p.customData) {
+        try {
+            const parsed = typeof p.customData === 'string' ? JSON.parse(p.customData) : p.customData;
+            if (parsed && typeof parsed === 'object') {
+                const candidate = String(parsed.tahunAjaran || parsed.tahunAjaranAktif || parsed.psbTahunAjaran || '').trim();
+                if (candidate) return candidate;
+            }
+        } catch {
+            // ignore JSON error
+        }
+    }
+    return fallbackTa.trim();
+};
+
+/**
+ * Checks whether a Pendaftar belongs to the selected `targetTa`.
+ * Legacy records with no explicit `tahunAjaran` are treated as belonging to `activeTa`.
+ */
+export const matchesPsbTahunAjaran = (
+    p: Partial<Pendaftar> | null | undefined,
+    targetTa: string,
+    activeTa?: string
+): boolean => {
+    const cleanTarget = String(targetTa || '').trim();
+    if (!cleanTarget || cleanTarget === '__all__') return true;
+    const recordTa = resolvePendaftarTahunAjaran(p);
+    if (!recordTa) {
+        return !activeTa || cleanTarget === activeTa.trim();
+    }
+    return recordTa.toLowerCase() === cleanTarget.toLowerCase();
+};
+
+/**
+ * Resolves numeric `jenjangId` from either numeric ID or Jenjang name/kode string.
+ */
+export const resolveJenjangIdFromInput = (
+    rawJenjang: any,
+    settings?: PondokSettings,
+    fallbackId = 0
+): number => {
+    const jenjangList = settings?.jenjang || [];
+    if (rawJenjang !== undefined && rawJenjang !== null && String(rawJenjang).trim() !== '') {
+        const strVal = String(rawJenjang).trim();
+        if (/^\d+$/.test(strVal)) {
+            const num = parseInt(strVal, 10);
+            if (jenjangList.length === 0 || jenjangList.some(j => j.id === num)) {
+                return num;
+            }
+        }
+        const lower = strVal.toLowerCase();
+        const exactMatch = jenjangList.find(
+            j => j.nama.trim().toLowerCase() === lower || (j.kode || '').trim().toLowerCase() === lower
+        );
+        if (exactMatch) return exactMatch.id;
+        const partialMatch = jenjangList.find(
+            j => lower.includes(j.nama.trim().toLowerCase()) || j.nama.trim().toLowerCase().includes(lower)
+        );
+        if (partialMatch) return partialMatch.id;
+    }
+    if (fallbackId && (jenjangList.length === 0 || jenjangList.some(j => j.id === fallbackId))) {
+        return fallbackId;
+    }
+    return jenjangList[0]?.id || 0;
+};
+
+/**
+ * Checks whether two Pendaftar records represent the same applicant within the same academic year,
+ * preventing cross-year overwrites and false collisions between homonymous applicants.
+ */
+export const isSamePendaftarIdentity = (
+    a: Partial<Pendaftar>,
+    b: Partial<Pendaftar>,
+    activeTa = ''
+): boolean => {
+    const taA = resolvePendaftarTahunAjaran(a, activeTa).toLowerCase();
+    const taB = resolvePendaftarTahunAjaran(b, activeTa).toLowerCase();
+    if (taA && taB && taA !== taB) return false;
+
+    const regA = String(a.nomorRegistrasi || '').trim().toLowerCase();
+    const regB = String(b.nomorRegistrasi || '').trim().toLowerCase();
+    if (regA && regB) return regA === regB;
+
+    const nikA = String(a.nik || '').replace(/\D/g, '');
+    const nikB = String(b.nik || '').replace(/\D/g, '');
+    if (nikA.length >= 12 && nikB.length >= 12 && nikA === nikB) return true;
+
+    const nameA = String(a.namaLengkap || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const nameB = String(b.namaLengkap || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!nameA || !nameB || nameA !== nameB) return false;
+
+    if (nikA.length >= 8 && nikB.length >= 8) return nikA === nikB;
+
+    const nisnA = String(a.nisn || '').replace(/\D/g, '');
+    const nisnB = String(b.nisn || '').replace(/\D/g, '');
+    if (nisnA.length >= 6 && nisnB.length >= 6) return nisnA === nisnB;
+
+    const dobA = String(a.tanggalLahir || '').trim().slice(0, 10);
+    const dobB = String(b.tanggalLahir || '').trim().slice(0, 10);
+    if (dobA && dobB) return dobA === dobB;
+
+    const phoneA = cleanPhoneNumber(getPendaftarPhone(a as Pendaftar));
+    const phoneB = cleanPhoneNumber(getPendaftarPhone(b as Pendaftar));
+    if (phoneA && phoneB) return phoneA === phoneB;
+
+    return (!a.jenjangId || !b.jenjangId || a.jenjangId === b.jenjangId);
 };
 
 export const getPsbRegistrationNumber = (pendaftar: Pendaftar, jenjangName?: string): string => {

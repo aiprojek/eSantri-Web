@@ -8,8 +8,7 @@ import { initialSettings } from '../data/mock';
 import { LoadingFallback } from './common/LoadingFallback';
 import { PageHeader } from './common/PageHeader';
 import { HeaderTabs } from './common/HeaderTabs';
-import { getPsbAcademicYearOptions } from './psb/utils/psbUtils';
-import { PsbShareLinkModal } from './psb/modals/PsbShareLinkModal';
+import { getPsbAcademicYearOptions, healPendaftarRecord } from './psb/utils/psbUtils';
 import { generateSyncSafeId } from '../utils/idGenerator';
 import { logActivity } from '../services/logService';
 
@@ -21,7 +20,6 @@ const PsbPosterMaker = React.lazy(() => import('./psb/PsbPosterMaker').then((mod
 const PSB: React.FC = () => {
     const { settings, onSaveSettings, showToast, currentUser } = useAppContext();
     const [activeTab, setActiveTab] = useState<'dashboard' | 'rekap' | 'form' | 'poster'>('dashboard');
-    const [isShareLinkModalOpen, setIsShareLinkModalOpen] = useState(false);
     
     // Reactive live query ensures Firebase Realtime updates from Hub replicate to UI instantly
     const livePendaftarList = useLiveQuery(() => db.pendaftar.filter(p => !p.deleted).toArray(), []);
@@ -62,17 +60,18 @@ const PSB: React.FC = () => {
                 const data = JSON.parse(match[1].trim());
                 const now = Date.now();
                 const newId = generateSyncSafeId();
-                const newPendaftar: Pendaftar = {
+                const newPendaftar = healPendaftarRecord({
                     ...data,
                     id: newId,
-                    jenjangId: parseInt(data.jenjangId) || 0,
+                    jenjangId: parseInt(data.jenjangId) || psbConfig.targetJenjangId || 0,
                     tanggalDaftar: data.tanggalDaftar || new Date().toISOString(),
                     status: 'Baru',
                     kewarganegaraan: 'WNI',
                     gelombang: psbConfig.activeGelombang,
+                    tahunAjaran: data.tahunAjaran || data.tahunAjaranAktif || currentPsbYear,
                     deleted: false,
                     lastModified: now,
-                };
+                }, settings);
                 db.pendaftar.put(newPendaftar).then(() => {
                     void logActivity('INSERT', 'pendaftar', newId, null, { namaLengkap: newPendaftar.namaLengkap, source: 'WhatsApp' }, currentUser?.username || 'Admin');
                     fetchPendaftar();
@@ -91,18 +90,9 @@ const PSB: React.FC = () => {
             <PageHeader
                 eyebrow="PSB"
                 title="Penerimaan Santri Baru (PSB)"
-                description="Kelola dashboard pendaftar, formulir online, rekap penerimaan, dan materi promosi PSB dalam satu ruang kerja yang konsisten."
+                description="Kelola dashboard pendaftar, formulir HTML mandiri, rekap penerimaan, dan materi promosi PSB dalam satu ruang kerja yang konsisten."
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setIsShareLinkModalOpen(true)}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
-                            title="Bagikan Tautan Pendaftaran Online PSB"
-                        >
-                            <i className="bi bi-link-45deg text-base"></i>
-                            <span>Bagikan Link PSB</span>
-                        </button>
                         <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-semibold">
                             <i className="bi bi-calendar-check text-teal-600"></i>
                             <span>TA PSB Aktif: <strong className="font-bold text-teal-950">{currentPsbYear}</strong></span>
@@ -133,15 +123,6 @@ const PSB: React.FC = () => {
                 {activeTab === 'form' && canWrite && <PsbFormBuilder config={psbConfig} settings={settings} onSave={handleSaveConfig} />}
                 {activeTab === 'poster' && canWrite && <PsbPosterMaker config={psbConfig} onSave={handleSaveConfig} settings={settings} />}
             </Suspense>
-
-            {isShareLinkModalOpen && (
-                <PsbShareLinkModal
-                    isOpen={isShareLinkModalOpen}
-                    onClose={() => setIsShareLinkModalOpen(false)}
-                    settings={settings}
-                    config={psbConfig}
-                />
-            )}
         </div>
     );
 };

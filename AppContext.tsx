@@ -224,6 +224,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 setSyncStatus('success');
                 setTimeout(() => setSyncStatus('idle'), 3000);
             } catch (error) {
+                if ((error as Error)?.message?.includes('E2EE_LOCKED')) {
+                    setSyncStatus('idle');
+                    return;
+                }
                 setSyncStatus('error');
             }
         }, 5000); 
@@ -317,8 +321,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 setSyncStatus('success');
                 setTimeout(() => setSyncStatus('idle'), 3000);
             } catch (err) {
+                const msg = (err as Error)?.message || '';
+                if (msg.includes('E2EE_LOCKED')) {
+                    setSyncStatus('idle');
+                    if (!silent) {
+                        ui.showToast('Perangkat E2EE masih terkunci. Klik tombol "Buka Kunci E2EE" pada banner kuning di atas aplikasi lalu ulangi sync.', 'error');
+                    }
+                    return;
+                }
                 setSyncStatus('error');
-                if (!silent) ui.showToast(`Gagal sinkronisasi Firebase: ${(err as Error).message}`, 'error');
+                if (!silent) ui.showToast(`Gagal sinkronisasi Firebase: ${msg}`, 'error');
             }
             return;
         }
@@ -398,8 +410,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setSyncStatus('success');
             setTimeout(() => setSyncStatus('idle'), 3000);
         } catch (e) {
+            const msg = (e as Error)?.message || '';
+            if (msg.includes('E2EE_LOCKED')) {
+                setSyncStatus('idle');
+                if (!silent) {
+                    ui.showToast('Perangkat E2EE masih terkunci. Klik tombol "Buka Kunci E2EE" pada banner kuning di atas aplikasi lalu ulangi sync.', 'error');
+                }
+                return;
+            }
             setSyncStatus('error');
-            if (!silent) ui.showToast(`Gagal Sync: ${(e as Error).message}`, 'error');
+            if (!silent) ui.showToast(`Gagal Sync: ${msg}`, 'error');
         }
     };
 
@@ -490,6 +510,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             await db.arsipSurat.clear();
         });
         localStorage.setItem('eSantriSampleDataDeleted', 'true');
+        localStorage.removeItem('esantri_psb_historical_archives');
+        Object.keys(localStorage).forEach((k) => {
+            if (k.startsWith('psb_signature_')) localStorage.removeItem(k);
+        });
         triggerAutoSync(); 
     };
 
@@ -519,6 +543,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
 
         localStorage.removeItem('eSantriSampleDataDeleted');
+        localStorage.removeItem('esantri_psb_historical_archives');
+        Object.keys(localStorage).forEach((k) => {
+            if (k.startsWith('psb_signature_')) localStorage.removeItem(k);
+        });
         triggerAutoSync();
     };
 

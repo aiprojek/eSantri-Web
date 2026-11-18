@@ -5,6 +5,9 @@ import { Santri, Prestasi, Pelanggaran } from '../../../types';
 import { FormSection } from '../santriModal/FormSection';
 import { MarkdownEditor } from '../../common/MarkdownEditor';
 import { MarkdownViewer } from '../../common/MarkdownViewer';
+import { useAppContext } from '../../../AppContext';
+import { resolveCustomFieldLabel } from '../../psb/utils/psbUtils';
+import { openExternalLinkSafe } from '../../../services/waService';
 
 interface TabDataLainProps {
   formMethods: UseFormReturn<Santri>;
@@ -13,6 +16,7 @@ interface TabDataLainProps {
 }
 
 export const TabDataLain: React.FC<TabDataLainProps> = ({ formMethods, openPrestasiModal, openPelanggaranModal }) => {
+    const { settings } = useAppContext();
     const { register, watch, setValue, getValues } = formMethods;
 
     const [newHobby, setNewHobby] = useState('');
@@ -21,6 +25,7 @@ export const TabDataLain: React.FC<TabDataLainProps> = ({ formMethods, openPrest
     const watchPelanggaran = watch('pelanggaran');
     const watchCatatan = watch('catatan') || '';
     const watchCustomData = watch('customData') || '';
+    const watchJenjangId = watch('jenjangId');
 
     let parsedCustomData: Record<string, any> = {};
     if (watchCustomData) {
@@ -98,14 +103,59 @@ export const TabDataLain: React.FC<TabDataLainProps> = ({ formMethods, openPrest
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {Object.entries(parsedCustomData).map(([key, val]) => {
-                        const strVal = typeof val === 'object' && val !== null ? JSON.stringify(val, null, 2) : String(val ?? '-');
-                        const isLong = strVal.length > 60 || strVal.includes('\n');
+                        const fieldLabel = resolveCustomFieldLabel(key, settings, watchJenjangId, val);
+                        const isUrlOrDataUri =
+                            typeof val === 'string' &&
+                            (val.startsWith('http://') || val.startsWith('https://') || val.startsWith('data:'));
+
+                        const handleOpenAttachment = (rawUrl: string) => {
+                            if (rawUrl.startsWith('data:')) {
+                                try {
+                                    const [meta, base64] = rawUrl.split(',');
+                                    const mime = meta.match(/:(.*?);/)?.[1] || 'application/octet-stream';
+                                    const byteStr = atob(base64 || '');
+                                    const bytes = new Uint8Array(byteStr.length);
+                                    for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
+                                    const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+                                    openExternalLinkSafe(blobUrl);
+                                    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+                                    return;
+                                } catch {
+                                    // fallback below
+                                }
+                            }
+                            openExternalLinkSafe(rawUrl);
+                        };
+
+                        const strVal = Array.isArray(val)
+                            ? val.join(', ')
+                            : typeof val === 'object' && val !== null
+                            ? JSON.stringify(val, null, 2)
+                            : String(val ?? '-');
+                        const isLong = !isUrlOrDataUri && (strVal.length > 60 || strVal.includes('\n'));
+
                         return (
                             <div key={key} className={`bg-white p-3 rounded-lg border border-amber-100 shadow-2xs ${isLong ? 'md:col-span-2' : ''}`}>
                                 <span className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-                                    {key.replace(/_/g, ' ')}
+                                    {fieldLabel}
                                 </span>
-                                {isLong ? (
+                                {isUrlOrDataUri ? (
+                                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleOpenAttachment(val as string)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-100 hover:bg-amber-200 text-amber-900 transition-colors"
+                                        >
+                                            <i className={`bi ${(val as string).startsWith('data:image') ? 'bi-image' : 'bi-file-earmark-arrow-up-right'}`}></i>
+                                            <span>{(val as string).startsWith('data:') ? 'Lihat Lampiran Lokal' : 'Buka Berkas / Tautan'}</span>
+                                        </button>
+                                        {!(val as string).startsWith('data:') && (
+                                            <span className="text-[11px] text-gray-400 truncate max-w-[220px]" title={val as string}>
+                                                {val as string}
+                                            </span>
+                                        )}
+                                    </div>
+                                ) : isLong ? (
                                     <MarkdownViewer content={strVal} className="text-sm text-gray-800" />
                                 ) : (
                                     <span className="text-sm font-medium text-gray-800 break-words">{strVal}</span>

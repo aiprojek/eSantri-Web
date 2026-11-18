@@ -1106,9 +1106,12 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
             if (hasGasUrl) {
                 const cloudRes = await syncSnapshotToCloudGas(mergedGradesSnapshot, previousBaselineGrades);
                 if (cloudRes.error) {
+                    const isE2eeLocked = cloudRes.error.includes('E2EE_LOCKED');
                     showToast(
-                        `Nilai tersimpan aman di aplikasi (sinkron otomatis ke ${activeCloudMeta.shortName} tertunda, cek koneksi/endpoint).`,
-                        'info'
+                        isE2eeLocked
+                            ? 'Nilai tersimpan lokal, namun sinkron ke Cloud ditunda karena E2EE masih terkunci. Buka kunci pada banner kuning di atas lalu klik Sync Cloud.'
+                            : `Nilai tersimpan lokal, sinkron ke ${activeCloudMeta.shortName} tertunda: ${cloudRes.error}`,
+                        isE2eeLocked ? 'error' : 'info'
                     );
                 } else if (cloudRes.synced) {
                     showToast(

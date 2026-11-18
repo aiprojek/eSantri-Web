@@ -9,6 +9,7 @@ import { UserModal } from '../modals/UserModal';
 import { BulkUserFromTeacherModal } from '../modals/BulkUserFromTeacherModal';
 import { SectionCard } from '../../common/SectionCard';
 import { generateSyncSafeId } from '../../../utils/idGenerator';
+import { E2eeSettingsPanel } from '../E2eeSettingsPanel';
 
 interface TabAkunProps {
     localSettings: PondokSettings;
@@ -172,6 +173,7 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
     };
 
     return (
+        <div className="space-y-6">
         <SectionCard
             title="Keamanan & Pengguna"
             description="Aktifkan multi-user, kelola akun, serta amankan recovery key untuk pemulihan akses admin."
@@ -315,5 +317,11 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
                 existingUsers={users}
             />
         </SectionCard>
+
+        <E2eeSettingsPanel
+            localSettings={localSettings}
+            handleInputChange={handleInputChange}
+        />
+        </div>
     );
 };

@@ -3,7 +3,8 @@ import { Pendaftar, PondokSettings, PsbBerkasFisik, PsbNilaiUjian, PendaftarStat
 import { useAppContext } from '../../../AppContext';
 import { loadFirebasePsbUploadRuntime } from '../../../utils/lazyFirebaseRuntimes';
 import { isFirebaseClientConfigReady } from '../../../firebaseStorage';
-import { getPsbRegistrationNumber, calculatePsbAverageScore, healPendaftarRecordWithDetails, normalizePhoneLocal, resolveCustomFieldLabel, getAllConfiguredCustomFields, PSB_PENDIDIKAN_OPTIONS, PSB_PENGHASILAN_OPTIONS, PSB_PEKERJAAN_OPTIONS, withCurrentOption } from '../utils/psbUtils';
+import { getPsbRegistrationNumber, calculatePsbAverageScore, healPendaftarRecordWithDetails, normalizePhoneLocal, resolveCustomFieldLabel, getAllConfiguredCustomFields, PSB_PENDIDIKAN_OPTIONS, PSB_PENGHASILAN_OPTIONS, PSB_PEKERJAAN_OPTIONS, withCurrentOption, getPsbAcademicYearOptions } from '../utils/psbUtils';
+import { openExternalLinkSafe } from '../../../services/waService';
 import { MarkdownEditor } from '../../common/MarkdownEditor';
 import { MarkdownViewer } from '../../common/MarkdownViewer';
 
@@ -266,6 +267,8 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                     targetJuz: undefined,
                     catatan: '',
                     status: 'Baru',
+                    gelombang: settings.psbConfig?.activeGelombang || 1,
+                    tahunAjaran: settings.psbConfig?.tahunAjaranAktif || getPsbAcademicYearOptions(settings).activeYear,
                     tanggalDaftar: new Date().toISOString(),
                     customData: '{}',
                     berkasFisik: {
@@ -406,6 +409,7 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
 
         const dataToSave = {
             ...formData,
+            tahunAjaran: formData.tahunAjaran || settings.psbConfig?.tahunAjaranAktif || getPsbAcademicYearOptions(settings).activeYear,
             nomorRegistrasi,
             telepon: normalizePhoneLocal(formData.telepon),
             teleponAyah: normalizePhoneLocal(formData.teleponAyah),
@@ -478,9 +482,17 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                 <div className="mt-1 space-y-2">
                     <img src={stringVal} alt={key} className="max-h-40 rounded border p-1 bg-white" />
                     <button 
-                        onClick={() => {
-                            const w = window.open("");
-                            w?.document.write('<img src="' + stringVal + '" />');
+                        type="button"
+                        onClick={async () => {
+                            try {
+                                const res = await fetch(stringVal);
+                                const blob = await res.blob();
+                                const blobUrl = URL.createObjectURL(blob);
+                                openExternalLinkSafe(blobUrl);
+                                setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+                            } catch {
+                                showAlert('Gagal Membuka', 'Pratinjau berkas tidak dapat dibuka di peramban ini.');
+                            }
                         }}
                         className="text-xs text-blue-600 hover:underline"
                     >

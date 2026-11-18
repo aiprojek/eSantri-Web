@@ -101,7 +101,7 @@ const HealthDashboard: React.FC = () => {
                 'Keuangan (Kas)': await db.transaksiKas.filter(k => !k.deleted).count(),
                 'Tagihan': await db.tagihan.filter(t => !t.deleted).count(),
                 'Pembayaran': await db.pembayaran.filter(p => !p.deleted).count(),
-                'Pendaftar (PSB)': await db.pendaftar.count(),
+                'Pendaftar (PSB)': await db.pendaftar.filter(p => !p.deleted).count(),
                 'Rapor': await db.raporRecords.count(),
                 'Absensi': await db.absensi.count(),
                 'Konseling (BK)': await db.bkSessions.count(),
@@ -271,10 +271,24 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
                 if (restorePlan.length === 0) {
                     throw new Error('Tidak ada tabel backup yang dikenali. Pastikan file berasal dari eSantri.');
                 }
+
+                const backupSettingsArr = getArrayFromBackup(payload, 'settings', ['config']) as Array<Partial<PondokSettings>> | null;
+                const incomingE2ee = backupSettingsArr?.[0]?.e2eeConfig;
+                const currentE2ee = localSettings.e2eeConfig;
+                let e2eeWarning = '';
+                if (currentE2ee?.enabled) {
+                    if (!incomingE2ee?.enabled) {
+                        e2eeWarning = `\n\nPERINGATAN KUNCI E2EE: Enkripsi E2EE saat ini AKTIF (Key ID: ${currentE2ee.keyId}), sedangkan file backup ini TIDAK mengaktifkan E2EE. Setelah restore, perangkat tidak akan membawa konfigurasi kunci aktif sehingga data cloud/formulir lama yang sudah terenkripsi tidak bisa didekripsi kecuali Anda memulihkan via File Kunci Darurat (.txt).`;
+                    } else if (incomingE2ee.keyId !== currentE2ee.keyId) {
+                        e2eeWarning = `\n\nPERINGATAN PERBEDAAN KUNCI E2EE: File backup memakai Key ID berbeda (${incomingE2ee.keyId}) dibanding kunci aktif saat ini (${currentE2ee.keyId}). Pastikan Anda memiliki password/File Kunci Darurat untuk Key ID baru maupun lama.`;
+                    }
+                } else if (incomingE2ee?.enabled) {
+                    e2eeWarning = `\n\nINFO KUNCI E2EE: File backup ini membawa konfigurasi E2EE aktif (Key ID: ${incomingE2ee.keyId}). Setelah restore, masukkan Master Password E2EE yang sesuai.`;
+                }
                 
                 showConfirmation(
                     'Konfirmasi Pemulihan Data',
-                    'PERHATIAN: Data yang tersedia pada file backup akan menggantikan data saat ini. Lanjutkan pemulihan?',
+                    `PERHATIAN: Data yang tersedia pada file backup akan menggantikan data saat ini. Lanjutkan pemulihan?${e2eeWarning}`,
                     async () => {
                         try {
                             const permissionMigrationItems: PermissionMigrationItem[] = [];
@@ -384,6 +398,14 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
                                     ))}
                                 </div>
                             </div>
+                            {localSettings.e2eeConfig?.enabled && (
+                                <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-[11px] text-amber-900 flex items-start gap-2">
+                                    <i className="bi bi-shield-exclamation text-amber-600 shrink-0 mt-0.5 text-sm"></i>
+                                    <span className="leading-relaxed">
+                                        <strong>Catatan Keamanan E2EE:</strong> File backup lokal <code>.JSON</code> ini berisi salinan database dalam bentuk teks biasa (tidak terenkripsi E2EE) agar selalu dapat dipulihkan darurat. Simpan file ini di media offline yang aman dan hindari mengunggahnya ke cloud publik tanpa enkripsi.
+                                    </span>
+                                </div>
+                            )}
                         </div>
                         <button onClick={downloadBackup} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 sm:w-auto"><i className="bi bi-download"></i><span>Unduh Cadangan Data (.JSON)</span></button>
                     </div>

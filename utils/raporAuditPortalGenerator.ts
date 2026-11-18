@@ -1629,7 +1629,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
 
                 // Simpan pada bucket umum santri
                 if (!bySantriAny.has(sid)) {
-                    bySantriAny.set(sid, { data: {}, lastTs: 0 });
+                    bySantriAny.set(sid, { data: {}, lastTs: 0, encCount: 0, encLastTs: 0, plainLastTs: 0 });
                 }
                 const anyEntry = bySantriAny.get(sid);
 
@@ -1639,21 +1639,35 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 if (tplId) {
                     const key = sid + '|' + tplId;
                     if (!bySantriAndTpl.has(key)) {
-                        bySantriAndTpl.set(key, { data: {}, lastTs: 0 });
+                        bySantriAndTpl.set(key, { data: {}, lastTs: 0, encCount: 0, encLastTs: 0, plainLastTs: 0 });
                     }
                     tplEntry = bySantriAndTpl.get(key);
                 } else {
                     if (!bySantriNoTpl.has(sid)) {
-                        bySantriNoTpl.set(sid, { data: {}, lastTs: 0 });
+                        bySantriNoTpl.set(sid, { data: {}, lastTs: 0, encCount: 0, encLastTs: 0, plainLastTs: 0 });
                     }
                     noTplEntry = bySantriNoTpl.get(sid);
                 }
 
+                const encKeys = Object.keys(parsed).filter(k => k.indexOf('__e2ee_') === 0);
+                if (encKeys.length > 0) {
+                    anyEntry.encCount += encKeys.length;
+                    if (tplEntry) tplEntry.encCount += encKeys.length;
+                    if (noTplEntry) noTplEntry.encCount += encKeys.length;
+                    if (ts && !isNaN(ts)) {
+                        if (ts > anyEntry.encLastTs) anyEntry.encLastTs = ts;
+                        if (tplEntry && ts > tplEntry.encLastTs) tplEntry.encLastTs = ts;
+                        if (noTplEntry && ts > noTplEntry.encLastTs) noTplEntry.encLastTs = ts;
+                    }
+                }
+
+                let hasPlainChange = false;
                 if (parsed.__cleared && typeof parsed.__cleared === 'object') {
                     Object.keys(parsed.__cleared).forEach(ck => {
                         delete anyEntry.data[ck];
                         if (tplEntry) delete tplEntry.data[ck];
                         if (noTplEntry) delete noTplEntry.data[ck];
+                        hasPlainChange = true;
                     });
                 }
 
@@ -1664,7 +1678,14 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                     anyEntry.data[k] = v;
                     if (tplEntry) tplEntry.data[k] = v;
                     if (noTplEntry) noTplEntry.data[k] = v;
+                    hasPlainChange = true;
                 });
+
+                if (hasPlainChange && ts && !isNaN(ts)) {
+                    if (ts > anyEntry.plainLastTs) anyEntry.plainLastTs = ts;
+                    if (tplEntry && ts > tplEntry.plainLastTs) tplEntry.plainLastTs = ts;
+                    if (noTplEntry && ts > noTplEntry.plainLastTs) noTplEntry.plainLastTs = ts;
+                }
 
                 if (ts && !isNaN(ts)) {
                     if (ts > anyEntry.lastTs) anyEntry.lastTs = ts;
@@ -1673,33 +1694,33 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 }
             });
 
+            const mergeEntries = (a, b) => {
+                if (a && b) {
+                    return {
+                        data: Object.assign({}, a.data, b.data),
+                        lastTs: Math.max(a.lastTs, b.lastTs),
+                        encCount: (a.encCount || 0) + (b.encCount || 0),
+                        encLastTs: Math.max(a.encLastTs || 0, b.encLastTs || 0),
+                        plainLastTs: Math.max(a.plainLastTs || 0, b.plainLastTs || 0),
+                    };
+                }
+                return b || a || { data: {}, lastTs: 0, encCount: 0, encLastTs: 0, plainLastTs: 0 };
+            };
+
             return {
                 getStudentRecord(santriId, templateId) {
                     const noTpl = bySantriNoTpl.get(santriId);
                     if (state.templateId !== 'auto' && templateId) {
                         const specific = bySantriAndTpl.get(santriId + '|' + templateId);
-                        if (specific && noTpl) {
-                            return {
-                                data: Object.assign({}, noTpl.data, specific.data),
-                                lastTs: Math.max(noTpl.lastTs, specific.lastTs)
-                            };
-                        }
-                        if (specific) return specific;
-                        if (noTpl) return noTpl;
-                        return { data: {}, lastTs: 0 };
+                        if (specific || noTpl) return mergeEntries(noTpl, specific);
+                        return { data: {}, lastTs: 0, encCount: 0, encLastTs: 0, plainLastTs: 0 };
                     }
                     if (templateId) {
                         const specific = bySantriAndTpl.get(santriId + '|' + templateId);
                         const general = bySantriAny.get(santriId);
-                        if (specific && general) {
-                            return {
-                                data: Object.assign({}, general.data, specific.data),
-                                lastTs: Math.max(general.lastTs, specific.lastTs)
-                            };
-                        }
-                        if (specific) return specific;
+                        if (specific || general) return mergeEntries(general, specific);
                     }
-                    return bySantriAny.get(santriId) || { data: {}, lastTs: 0 };
+                    return bySantriAny.get(santriId) || { data: {}, lastTs: 0, encCount: 0, encLastTs: 0, plainLastTs: 0 };
                 }
             };
         }
@@ -1775,6 +1796,10 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                     percent: inputColumns.length > 0 ? Math.round((filledCount / inputColumns.length) * 100) : 0,
                     missingCols,
                     lastTs: rec.lastTs || 0,
+                    hasEncryptedUpdate: Boolean((rec.encCount || 0) > 0),
+                    encryptedChunkCount: rec.encCount || 0,
+                    encryptedLastTs: rec.encLastTs || 0,
+                    plainLastTs: rec.plainLastTs || 0,
                     avgScore: numericScores.length > 0 ? (numericScores.reduce((a, b) => a + b, 0) / numericScores.length) : null
                 });
             });
@@ -2029,15 +2054,19 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 let complete = 0;
                 let partial = 0;
                 let empty = 0;
+                let encryptedOnly = 0;
                 let latestTs = 0;
                 let sumPct = 0;
 
                 rSantri.forEach(s => {
                     const info = evalRes.studentMap.get(s.id);
-                    const m = info ? info.meta : { filledCount: 0, expectedCount: 0, percent: 0, lastTs: 0 };
+                    const m = info ? info.meta : { filledCount: 0, expectedCount: 0, percent: 0, lastTs: 0, hasEncryptedUpdate: false };
                     sumPct += m.percent;
                     if (m.lastTs > latestTs) latestTs = m.lastTs;
-                    if (m.filledCount === 0) empty++;
+                    if (m.filledCount === 0) {
+                        if (m.hasEncryptedUpdate) encryptedOnly++;
+                        else empty++;
+                    }
                     else if (m.expectedCount > 0 && m.filledCount >= m.expectedCount) complete++;
                     else partial++;
                 });
@@ -2047,6 +2076,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 if (rSantri.length > 0) {
                     if (complete === rSantri.length) status = 'Lengkap';
                     else if (complete > 0 || partial > 0) status = 'Sebagian';
+                    else if (encryptedOnly > 0) status = 'Terkirim (E2EE)';
                 }
 
                 return {
@@ -2059,6 +2089,7 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                     complete,
                     partial,
                     empty,
+                    encryptedOnly,
                     avgPct,
                     status,
                     latestTs
@@ -2173,6 +2204,9 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 } else if (item.status === 'Sebagian') {
                     badgeCls = 'bg-amber-50 text-amber-700 border-amber-200';
                     barCls = 'bg-amber-500';
+                } else if (item.status === 'Terkirim (E2EE)') {
+                    badgeCls = 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                    barCls = 'bg-indigo-500';
                 } else if (item.totalSantri > 0) {
                     badgeCls = 'bg-rose-50 text-rose-700 border-rose-200';
                     barCls = 'bg-rose-400';
@@ -2217,10 +2251,15 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                                         '<span class="block font-black text-amber-700">' + item.partial + '</span>' +
                                         '<span class="text-[10px] text-amber-800">Sebagian</span>' +
                                     '</div>' +
-                                    '<div class="bg-slate-50 border border-slate-200 rounded-lg py-1 px-1.5">' +
-                                        '<span class="block font-black text-slate-700">' + item.empty + '</span>' +
-                                        '<span class="text-[10px] text-slate-500">Kosong</span>' +
-                                    '</div>' +
+                                    (item.encryptedOnly > 0
+                                        ? '<div class="bg-indigo-50 border border-indigo-200 rounded-lg py-1 px-1.5">' +
+                                              '<span class="block font-black text-indigo-700">' + item.encryptedOnly + '</span>' +
+                                              '<span class="text-[10px] text-indigo-800">Terkirim E2EE</span>' +
+                                          '</div>'
+                                        : '<div class="bg-slate-50 border border-slate-200 rounded-lg py-1 px-1.5">' +
+                                              '<span class="block font-black text-slate-700">' + item.empty + '</span>' +
+                                              '<span class="text-[10px] text-slate-500">Kosong</span>' +
+                                          '</div>') +
                                 '</div>' +
                             '</div>' +
                         '</div>' +
@@ -2348,20 +2387,27 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                       const m = info.meta;
                       const rNama = rombelById.get(s.rombelId)?.nama || '-';
                       let statusBadge = '<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">Lengkap 100%</span>';
-                      if (m.filledCount === 0) {
+                      if (m.filledCount === 0 && m.hasEncryptedUpdate) {
+                          statusBadge = '<span class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold"><i class="bi bi-shield-lock-fill mr-1"></i>Terkirim (E2EE)</span>';
+                      } else if (m.filledCount === 0) {
                           statusBadge = '<span class="px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold">Belum Ada Nilai</span>';
                       } else if (m.filledCount < m.expectedCount) {
                           statusBadge = '<span class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold">' + m.filledCount + '/' + m.expectedCount + ' (' + m.percent + '%)</span>';
                       }
+                      if (m.filledCount > 0 && m.hasEncryptedUpdate && m.encryptedLastTs > m.plainLastTs) {
+                          statusBadge += ' <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] font-bold">+ Update E2EE Baru</span>';
+                      }
 
-                      const missingPreview = m.missingCols.length === 0
-                          ? '<span class="text-[11px] text-emerald-600 font-semibold"><i class="bi bi-check2-all mr-1"></i>Seluruh kolom telah terisi</span>'
-                          : m.missingCols.slice(0, 5).map(mc =>
-                                '<span class="inline-block px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold mr-1 mb-1">' + esc(mc.label) + '</span>'
-                            ).join('') +
-                            (m.missingCols.length > 5
-                                ? '<span class="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold mb-1">+' + (m.missingCols.length - 5) + ' lainnya</span>'
-                                : '');
+                      const missingPreview = (m.filledCount === 0 && m.hasEncryptedUpdate)
+                          ? '<span class="text-[11px] text-indigo-700 font-semibold"><i class="bi bi-shield-lock-fill mr-1"></i>Nilai telah dikirim guru dalam bentuk Terenkripsi E2EE (' + m.encryptedChunkCount + ' paket). Tarik di menu Rapor &gt; Cloud Staging pada eSantri Web untuk mendekripsi.</span>'
+                          : m.missingCols.length === 0
+                              ? '<span class="text-[11px] text-emerald-600 font-semibold"><i class="bi bi-check2-all mr-1"></i>Seluruh kolom telah terisi</span>'
+                              : m.missingCols.slice(0, 5).map(mc =>
+                                    '<span class="inline-block px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold mr-1 mb-1">' + esc(mc.label) + '</span>'
+                                ).join('') +
+                                (m.missingCols.length > 5
+                                    ? '<span class="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold mb-1">+' + (m.missingCols.length - 5) + ' lainnya</span>'
+                                    : '');
 
                       return (
                           '<tr class="hover:bg-slate-50 border-b border-slate-100">' +
@@ -2619,8 +2665,9 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                                     '<div class="text-xs font-black text-slate-900">' + (idx + 1) + '. ' + esc(s.nama) + '</div>' +
                                     '<div class="text-[11px] text-slate-500">NIS: ' + esc(s.nis || '-') + ' • Rombel: <b>' + esc(rNama) + '</b></div>' +
                                 '</div>' +
-                                '<span class="px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 text-[10px] font-bold tabular-nums shrink-0">' +
-                                    m.filledCount + '/' + m.expectedCount +
+                                '<span class="px-2 py-0.5 rounded text-[10px] font-bold tabular-nums shrink-0 ' +
+                                    ((m.filledCount === 0 && m.hasEncryptedUpdate) ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-teal-50 text-teal-800 border border-teal-200') + '">' +
+                                    ((m.filledCount === 0 && m.hasEncryptedUpdate) ? 'E2EE (' + m.encryptedChunkCount + ')' : (m.filledCount + '/' + m.expectedCount)) +
                                 '</span>' +
                             '</div>' +
                             '<div class="divide-y divide-slate-50">' + itemsHtml + '</div>' +
@@ -2698,8 +2745,8 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                         '<td class="text-center font-mono text-[11px] text-slate-500 whitespace-nowrap">' + esc(s.nis || '-') + '</td>' +
                         '<td class="text-center tabular-nums whitespace-nowrap">' +
                             '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold ' +
-                                (m.filledCount === 0 ? 'bg-rose-50 text-rose-700' : m.filledCount >= m.expectedCount ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700') + '">' +
-                                m.filledCount + '/' + m.expectedCount +
+                                ((m.filledCount === 0 && m.hasEncryptedUpdate) ? 'bg-indigo-50 text-indigo-700' : m.filledCount === 0 ? 'bg-rose-50 text-rose-700' : m.filledCount >= m.expectedCount ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700') + '">' +
+                                ((m.filledCount === 0 && m.hasEncryptedUpdate) ? 'E2EE' : (m.filledCount + '/' + m.expectedCount)) +
                             '</span>' +
                         '</td>' +
                         cellsHtml +
@@ -2756,10 +2803,20 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 });
                 state.liveRows = rows;
                 state.lastSyncAt = new Date();
+                const hasEncryptedRows = rows.some(r => {
+                    try {
+                        const d = typeof r.DataJSON === 'string' ? JSON.parse(r.DataJSON) : (r.DataJSON || {});
+                        return Object.keys(d).some(k => k.indexOf('__e2ee_') === 0);
+                    } catch { return false; }
+                });
                 const timeLabel = state.lastSyncAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-                statusText.textContent = 'Live ' + pName + ' • ' + timeLabel + ' (' + rows.length + ' entri)';
+                statusText.textContent = hasEncryptedRows
+                    ? 'Cloud E2EE Aktif • ' + timeLabel + ' (' + rows.length + ' entri terenkripsi)'
+                    : 'Live ' + pName + ' • ' + timeLabel + ' (' + rows.length + ' entri)';
                 renderAll();
-                if (manualClick) {
+                if (hasEncryptedRows) {
+                    showPortalToast('Sebagian data cloud terenkripsi E2EE. Gunakan Snapshot Lokal atau Leger di eSantri Web untuk melihat nilai terdekripsi.', 'info');
+                } else if (manualClick) {
                     showPortalToast('Data live dari ' + pName + ' berhasil diperbarui (' + rows.length + ' baris kiriman).', 'success');
                 }
             } catch (err) {
@@ -2793,14 +2850,20 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
                 'NIS: ' + (s.nis || '-') + ' • Rombel: ' + (rombel?.nama || '-') + ' • ' + (tpl?.name || '');
 
             const m = info.meta;
-            const missingHtml = m.missingCols.length > 0
+            const e2eeBannerHtml = m.hasEncryptedUpdate
+                ? '<div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs mb-2">' +
+                    '<div class="font-bold"><i class="bi bi-shield-lock-fill mr-1"></i>Kiriman Terenkripsi E2EE Terdeteksi (' + m.encryptedChunkCount + ' paket)</div>' +
+                    '<div class="mt-0.5 text-[11px]">Portal Audit bersifat publik tanpa Master Password pondok. Nilai terenkripsi menunggu proses tarik/impor di aplikasi eSantri Web agar tampil pada Leger plaintext.</div>' +
+                  '</div>'
+                : '';
+            const missingHtml = e2eeBannerHtml + (m.missingCols.length > 0
                 ? '<div class="p-3 rounded-xl bg-rose-50 border border-rose-200 space-y-1.5">' +
                     '<div class="font-bold text-rose-800"><i class="bi bi-exclamation-triangle-fill mr-1"></i>Belum Diisi (' + m.missingCols.length + ' Kolom):</div>' +
                     '<div class="flex flex-wrap gap-1">' +
                         m.missingCols.map(mc => '<span class="px-2 py-0.5 rounded bg-white border border-rose-200 text-rose-700 text-[11px] font-semibold">' + esc(mc.label) + '</span>').join('') +
                     '</div>' +
                   '</div>'
-                : '<div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 font-bold text-emerald-800"><i class="bi bi-check-circle-fill mr-1"></i>Seluruh kolom input pada template ini telah lengkap.</div>';
+                : '<div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 font-bold text-emerald-800"><i class="bi bi-check-circle-fill mr-1"></i>Seluruh kolom input pada template ini telah lengkap.</div>');
 
             const rowsHtml = evalRes.allColumns.map(col => {
                 const v = info.values[col.key];

@@ -532,6 +532,8 @@ export interface PsbCustomField {
     placeholder?: string;
 }
 
+export type PsbCloudProvider = 'gas' | 'cloudflare_d1' | 'cloudflare_r2' | 'supabase';
+
 export interface PsbFormTemplate {
     id: string;
     name: string;
@@ -543,8 +545,11 @@ export interface PsbFormTemplate {
     requiredDocuments: string[];
     customFields?: PsbCustomField[];
     submissionMethod?: PsbSubmissionMethod;
+    backendProvider?: PsbCloudProvider;
     googleScriptUrl?: string;
+    cloudApiKey?: string;
     driveFolderId?: string;
+    supabaseBucket?: string;
     fieldHints?: Record<string, string>;
     biayaPendaftaran?: number;
     infoRekening?: string;
@@ -581,8 +586,11 @@ export interface PsbConfig {
     templates?: PsbFormTemplate[];
     posterTemplates?: PsbPosterTemplate[];
     submissionMethod?: PsbSubmissionMethod;
+    backendProvider?: PsbCloudProvider;
     googleScriptUrl?: string;
+    cloudApiKey?: string;
     driveFolderId?: string;
+    supabaseBucket?: string;
     registrationDeadline?: string;
     fieldHints?: Record<string, string>;
     namaAdminPsb?: string;
@@ -592,6 +600,7 @@ export interface PsbConfig {
     kotaSuratPsb?: string;
     nomorSuratPengumumanPsb?: string;
     formatNomorSuratPsb?: 'hybrid' | 'panitia' | 'tu';
+    archives?: PsbArchiveRecord[];
 }
 
 export interface PsbArchiveRecord {
@@ -829,6 +838,31 @@ export interface RaporCloudConfig {
     lastPurgedAt?: string;
 }
 
+export interface E2eeModuleToggles {
+    sync: boolean;
+    rapor: boolean;
+    psb: boolean;
+    portal: boolean;
+}
+
+export interface E2eeConfig {
+    enabled: boolean;
+    version: 1;
+    keyId: string;
+    salt: string;
+    recoverySalt: string;
+    passwordWrappedMdk: string;
+    recoveryWrappedMdk: string;
+    publicKeySpki: string;
+    encryptedPrivateKeyPkcs8: string;
+    keyCheck: string;
+    passwordHint?: string;
+    modules: E2eeModuleToggles;
+    createdAt: string;
+    updatedAt: string;
+    disabledAt?: string;
+}
+
 export interface PondokCustomInfoField {
     id: string;
     label: string;
@@ -880,6 +914,7 @@ export interface PondokSettings {
     nisSettings: NisSettings;
     cloudSyncConfig: CloudSyncConfig;
     backupConfig: BackupConfig;
+    e2eeConfig?: E2eeConfig;
     aiConfig?: AiConfig;
     psbConfig: PsbConfig;
     academicYears?: AcademicYearConfig[];
@@ -951,6 +986,7 @@ export interface Tagihan {
     status: 'Lunas' | 'Belum Lunas';
     tanggalLunas?: string;
     pembayaranId?: number;
+    jatuhTempo?: string;
     deleted?: boolean;
     lastModified?: number;
 }
@@ -1209,6 +1245,8 @@ export interface Pendaftar extends Omit<Santri, 'id' | 'status' | 'riwayatStatus
     catatan?: string;
     jalurPendaftaran?: string; // Reguler, Prestasi, Beasiswa
     gelombang?: number;
+    tahunAjaran?: string;
+    santriId?: number;
     customData?: string; // JSON string for flexible additional fields
     
     // Checklist Berkas Fisik Posko

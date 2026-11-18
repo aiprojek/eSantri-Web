@@ -1,5 +1,8 @@
 import { PondokSettings, PortalConfig } from '../types';
 import { encodePortalKey, PORTAL_CIPHER_KEY } from '../services/portalGasService';
+import { buildStandalonePortalCryptoJsHelper } from '../services/e2eeService';
+import { activeFirebaseConfig, isFirebaseClientConfigReady } from '../firebaseApp';
+import { auth as firebaseAuth } from '../firebaseAuth';
 
 export const THEME_PALETTES: Record<string, { primary: string; primaryDark: string; primaryLight: string; border: string; gradientFrom: string; gradientTo: string }> = {
     teal: { primary: '#0d9488', primaryDark: '#0f766e', primaryLight: '#f0fdfa', border: '#99f6e4', gradientFrom: '#0f766e', gradientTo: '#0e7490' },
@@ -15,6 +18,14 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
     const portalId = (portalConfig.portalId || 'default-portal').trim();
     const gasEndpoint = (portalConfig.gasEndpoint || '').trim();
     const gasApiKey = (portalConfig.gasApiKey || '').trim();
+    const firebaseDocId = (settings.cloudSyncConfig?.firebasePairedTenantId || firebaseAuth?.currentUser?.uid || portalId).trim();
+    const embeddedFirebaseConfig = isFirebaseClientConfigReady && portalConfig.provider === 'firebase'
+        ? {
+            projectId: activeFirebaseConfig.projectId,
+            apiKey: activeFirebaseConfig.apiKey,
+            databaseId: activeFirebaseConfig.firestoreDatabaseId || '(default)',
+        }
+        : null;
 
     // Enkripsi kredensial GAS menjadi string tersamar (ep2_...)
     const encryptedVault = encodePortalKey(gasEndpoint, portalId, gasApiKey);
@@ -205,14 +216,18 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
   <div id="app" class="portal-shell"></div>
 
   <script>
+${buildStandalonePortalCryptoJsHelper()}
     (function() {
       const __PORTAL_META__ = ${JSON.stringify({
           provider: portalConfig.provider || 'gas',
           portalId: portalId,
+          firebaseDocId: firebaseDocId,
+          firebaseConfig: embeddedFirebaseConfig,
           cloudflareWorkerUrl: portalConfig.cloudflareWorkerUrl || '',
           supabaseUrl: portalConfig.supabaseUrl || '',
           supabaseAnonKey: portalConfig.supabaseAnonKey || '',
           supabaseTable: portalConfig.supabaseTable || 'portal_data',
+          e2eePortal: Boolean(settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.portal),
       })};
       const __PORTAL_VAULT__ = "${encryptedVault}";
       const __KEY_BYTES__ = ${JSON.stringify(cipherKeyBytes)};
@@ -286,7 +301,75 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
         return "https://" + v;
       }
 
+      function decodeFirestoreVal(v) {
+        if (!v || typeof v !== "object") return v;
+        if ("stringValue" in v) return v.stringValue;
+        if ("integerValue" in v) return Number(v.integerValue);
+        if ("doubleValue" in v) return Number(v.doubleValue);
+        if ("booleanValue" in v) return Boolean(v.booleanValue);
+        if ("nullValue" in v) return null;
+        if ("timestampValue" in v) return v.timestampValue;
+        if ("arrayValue" in v) {
+          var arr = (v.arrayValue && v.arrayValue.values) || [];
+          return arr.map(decodeFirestoreVal);
+        }
+        if ("mapValue" in v) {
+          var obj = {};
+          var fields = (v.mapValue && v.mapValue.fields) || {};
+          Object.keys(fields).forEach(function(k) { obj[k] = decodeFirestoreVal(fields[k]); });
+          return obj;
+        }
+        return v;
+      }
+
+      function decodeFirestoreDoc(raw) {
+        if (!raw || !raw.fields) return null;
+        var out = {};
+        Object.keys(raw.fields).forEach(function(k) {
+          out[k] = decodeFirestoreVal(raw.fields[k]);
+        });
+        return out;
+      }
+
+      function firestoreRestDocUrl(path) {
+        var fb = __PORTAL_META__.firebaseConfig;
+        if (!fb || !fb.projectId || !fb.apiKey) return "";
+        var dbId = fb.databaseId || "(default)";
+        return "https://firestore.googleapis.com/v1/projects/" + encodeURIComponent(fb.projectId) +
+          "/databases/" + encodeURIComponent(dbId) + "/documents/" + path + "?key=" + encodeURIComponent(fb.apiKey);
+      }
+
       async function initPortal() {
+        // 0. Firebase Firestore Public Document
+        if (__PORTAL_META__.provider === "firebase" && __PORTAL_META__.firebaseConfig) {
+          try {
+            var fbDocId = __PORTAL_META__.firebaseDocId || __PORTAL_META__.portalId;
+            var fbUrl = firestoreRestDocUrl("publicPortals/" + encodeURIComponent(fbDocId));
+            if (fbUrl) {
+              var resFb = await fetch(fbUrl);
+              if (resFb.ok) {
+                var rawFb = await resFb.json();
+                var decodedFb = decodeFirestoreDoc(rawFb);
+                if (decodedFb && (decodedFb.settings || decodedFb.namaPonpes)) {
+                  state.settings = decodedFb.settings || decodedFb;
+                  if (Array.isArray(decodedFb.santriSummary) && decodedFb.santriSummary.length > 0) {
+                    state.santriSummaryFallback = decodedFb.santriSummary;
+                  }
+                  state.updatedAt = (decodedFb.metadata && decodedFb.metadata.updatedAt) || "";
+                  state.syncStatus = "Terhubung (Firebase)";
+                  if (state.settings.portalConfig && state.settings.portalConfig.theme) {
+                    applyTheme(state.settings.portalConfig.theme);
+                  }
+                  render();
+                  return;
+                }
+              }
+            }
+          } catch (eFb) {
+            console.warn("Firebase init failed:", eFb);
+          }
+        }
+
         // 1. Cloudflare Worker
         if (__PORTAL_META__.provider === "cloudflare" && __PORTAL_META__.cloudflareWorkerUrl) {
           try {
@@ -388,8 +471,11 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
 
       async function handleLogin(e) {
         e.preventDefault();
-        const nis = (state.nisInput || "").replace(/\\s+/g, "").toLowerCase();
-        const dob = (state.dobInput || "").trim().slice(0, 10);
+        var cryptoApi = window.__esantriPortalCrypto;
+        var nisRaw = (state.nisInput || "").trim();
+        var dobRaw = (state.dobInput || "").trim();
+        var nis = cryptoApi ? cryptoApi.normalizeNis(nisRaw) : nisRaw.replace(/\\s+/g, "").toLowerCase();
+        var dob = cryptoApi ? cryptoApi.normalizeDob(dobRaw) : dobRaw.slice(0, 10);
         if (!nis || !dob) {
           state.loginNotice = "Silakan isi NIS dan Tanggal Lahir santri terlebih dahulu.";
           render();
@@ -400,21 +486,74 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
         render();
 
         try {
-          // 1. Cloudflare Worker Login
+          var pid = __PORTAL_META__.portalId || "default";
+          var authHashes = [];
+          try {
+            if (cryptoApi) {
+              authHashes = cryptoApi.deriveAuthHashes
+                ? await cryptoApi.deriveAuthHashes(pid, nisRaw, dobRaw)
+                : [await cryptoApi.deriveAuthHash(pid, nisRaw, dobRaw)];
+            }
+          } catch (hashErr) {
+            console.warn("AuthHash derivation warning:", hashErr);
+          }
+
+          async function maybeDecrypt(rec, targetPid) {
+            if (!rec) return null;
+            if (rec.__e2eePortal === 1 && cryptoApi) {
+              return await cryptoApi.decryptRecord(rec, targetPid, nisRaw, dobRaw);
+            }
+            return rec;
+          }
+
+          // 1. Cloudflare Worker Login (coba E2EE authHash v2 -> v1 dulu, lalu plaintext fallback)
           if (__PORTAL_META__.provider === "cloudflare" && __PORTAL_META__.cloudflareWorkerUrl) {
-            const cfUrl = __PORTAL_META__.cloudflareWorkerUrl.replace(/\/+$/, "");
-            const res = await fetch(cfUrl + "?action=loginSantri&portalId=" + encodeURIComponent(__PORTAL_META__.portalId) + "&nis=" + encodeURIComponent(nis) + "&dob=" + encodeURIComponent(dob));
-            if (res.ok) {
-              const json = await res.json();
+            var cfUrl = __PORTAL_META__.cloudflareWorkerUrl.replace(/\\/+$/, "");
+            var cfAttempts = authHashes.map(function(h) { return { n: h, d: "e2ee" }; }).concat([{ n: nis, d: dob }]);
+            for (var ci = 0; ci < cfAttempts.length; ci++) {
+              var att = cfAttempts[ci];
+              var resCf = await fetch(cfUrl + "?action=loginSantri&portalId=" + encodeURIComponent(pid) + "&nis=" + encodeURIComponent(att.n) + "&dob=" + encodeURIComponent(att.d));
+              if (resCf.ok) {
+                var jsonCf = await resCf.json();
+                var candidateCf = (jsonCf && jsonCf.data && jsonCf.data.santri) || (jsonCf && jsonCf.santri);
+                if (jsonCf && jsonCf.success && candidateCf) {
+                  if (state.rememberNis) localStorage.setItem("esantri_saved_nis", state.nisInput);
+                  state.loggedInSantri = await maybeDecrypt(candidateCf, pid);
+                  state.isLoggingIn = false;
+                  render();
+                  return;
+                }
+              }
+            }
+          }
+
+          // 2. GAS Login (coba E2EE authHash v2 -> v1 dulu, lalu plaintext fallback)
+          var creds = unlockVault(__PORTAL_VAULT__);
+          if (creds && creds.g) {
+            var gasPid = creds.p || pid;
+            var gasHashes = authHashes;
+            if (cryptoApi && gasPid !== pid) {
+              try {
+                gasHashes = cryptoApi.deriveAuthHashes
+                  ? await cryptoApi.deriveAuthHashes(gasPid, nisRaw, dobRaw)
+                  : [await cryptoApi.deriveAuthHash(gasPid, nisRaw, dobRaw)];
+              } catch (e2) {}
+            }
+            var gasAttempts = gasHashes.map(function(h) { return { n: h, d: "e2ee" }; }).concat([{ n: nis, d: dob }]);
+            for (var gi = 0; gi < gasAttempts.length; gi++) {
+              var ga = gasAttempts[gi];
+              var url = new URL(creds.g);
+              url.searchParams.set("action", "loginSantri");
+              url.searchParams.set("portalId", gasPid);
+              url.searchParams.set("nis", ga.n);
+              url.searchParams.set("dob", ga.d);
+              if (creds.t) url.searchParams.set("apiKey", creds.t);
+
+              var res = await fetch(url.toString());
+              var json = await res.json();
               if (json && json.success && json.data && json.data.santri) {
                 if (state.rememberNis) localStorage.setItem("esantri_saved_nis", state.nisInput);
-                state.loggedInSantri = json.data.santri;
-                state.isLoggingIn = false;
-                render();
-                return;
-              }
-              if (json && json.success === false) {
-                state.loginNotice = json.message || "NIS atau Tanggal Lahir tidak sesuai.";
+                state.loggedInSantri = await maybeDecrypt(json.data.santri, gasPid);
                 state.isLoggingIn = false;
                 render();
                 return;
@@ -422,47 +561,47 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
             }
           }
 
-          // 2. GAS Login
-          const creds = unlockVault(__PORTAL_VAULT__);
-          if (creds && creds.g) {
-            const url = new URL(creds.g);
-            url.searchParams.set("action", "loginSantri");
-            url.searchParams.set("portalId", creds.p);
-            url.searchParams.set("nis", nis);
-            url.searchParams.set("dob", dob);
-            if (creds.t) url.searchParams.set("apiKey", creds.t);
-
-            const res = await fetch(url.toString());
-            const json = await res.json();
-            if (json && json.success && json.data && json.data.santri) {
-              if (state.rememberNis) localStorage.setItem("esantri_saved_nis", state.nisInput);
-              state.loggedInSantri = json.data.santri;
-              state.isLoggingIn = false;
-              render();
-              return;
-            }
-            if (json && json.success === false && json.message && !json.message.includes("Action GET tidak valid")) {
-              state.loginNotice = json.message || "NIS atau Tanggal Lahir tidak sesuai.";
-              state.isLoggingIn = false;
-              render();
-              return;
+          // 2b. Firebase Firestore Isolated Entry Lookup (tanpa bulk list)
+          if (__PORTAL_META__.provider === "firebase" && __PORTAL_META__.firebaseConfig && cryptoApi && cryptoApi.deriveFirebaseEntryIds) {
+            var fbTargetId = __PORTAL_META__.firebaseDocId || pid;
+            var entryIds = await cryptoApi.deriveFirebaseEntryIds(pid, nisRaw, dobRaw);
+            for (var fi = 0; fi < entryIds.length; fi++) {
+              var entryUrl = firestoreRestDocUrl("publicPortals/" + encodeURIComponent(fbTargetId) + "/entries/" + encodeURIComponent(entryIds[fi]));
+              if (!entryUrl) continue;
+              try {
+                var resEntry = await fetch(entryUrl);
+                if (resEntry.ok) {
+                  var rawEntry = await resEntry.json();
+                  var decodedEntry = decodeFirestoreDoc(rawEntry);
+                  if (decodedEntry) {
+                    if (state.rememberNis) localStorage.setItem("esantri_saved_nis", state.nisInput);
+                    state.loggedInSantri = await maybeDecrypt(decodedEntry, pid);
+                    state.isLoggingIn = false;
+                    render();
+                    return;
+                  }
+                }
+              } catch (fbEntryErr) {}
             }
           }
 
-          // 3. Fallback jika data santri tersemat (Supabase / Standalone / GAS v1)
-          const matched = (state.santriSummaryFallback || []).find(function(s) {
-            const sNis = String(s.nis || "").replace(/\\s+/g, "").toLowerCase();
-            const sDob = String(s.tanggalLahir || "").slice(0, 10);
+          // 3. Fallback jika data santri tersemat (Supabase / Standalone / GAS v1 / Legacy Firebase)
+          var matched = (state.santriSummaryFallback || []).find(function(s) {
+            if (s && s.__e2eePortal === 1) {
+              return authHashes.indexOf(s.nis) !== -1;
+            }
+            var sNis = cryptoApi ? cryptoApi.normalizeNis(s.nis) : String(s.nis || "").replace(/\\s+/g, "").toLowerCase();
+            var sDob = cryptoApi ? cryptoApi.normalizeDob(s.tanggalLahir) : String(s.tanggalLahir || "").slice(0, 10);
             return sNis === nis && sDob === dob;
           });
           if (matched) {
             if (state.rememberNis) localStorage.setItem("esantri_saved_nis", state.nisInput);
-            state.loggedInSantri = matched;
+            state.loggedInSantri = await maybeDecrypt(matched, pid);
           } else {
             state.loginNotice = "NIS atau Tanggal Lahir tidak ditemukan. Pastikan data sudah disinkronkan oleh Admin.";
           }
         } catch (err) {
-          state.loginNotice = "Gagal menghubungi server portal. Periksa koneksi internet Anda.";
+          state.loginNotice = (err && err.message) ? err.message : "Gagal menghubungi server portal. Periksa koneksi internet Anda.";
         }
         state.isLoggingIn = false;
         render();
@@ -717,6 +856,9 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
           : '<div class="logo-wrap">' + esc((state.settings.namaPonpes || "E").charAt(0)) + '</div>';
 
         if (!state.loggedInSantri) {
+          var hasCryptoSubtle = Boolean(window.crypto && window.crypto.subtle);
+          var hasEncryptedSummary = (state.santriSummaryFallback || []).some(function(s) { return s && s.__e2eePortal === 1; });
+          var needsCryptoWarning = !hasCryptoSubtle && (__PORTAL_META__.e2eePortal || hasEncryptedSummary);
           root.className = "portal-shell";
           root.innerHTML =
             '<div style="text-align:center;margin-bottom:20px;">' +
@@ -725,6 +867,11 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
               '<div class="eyebrow">Portal Resmi Wali Santri</div>' +
               '<div class="subtitle">' + esc(cfg.welcomeMessage || "Selamat Datang di Portal Wali Santri") + '</div>' +
             '</div>' +
+            (needsCryptoWarning ? (
+              '<div style="margin-bottom:14px;padding:10px 12px;border-radius:12px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:12px;line-height:1.45;">' +
+                '<strong><i class="bi bi-exclamation-triangle-fill"></i> Peringatan Koneksi Browser:</strong> Portal ini memakai enkripsi E2EE, namun Web Crypto API tidak aktif pada alamat HTTP non-aman. Silakan buka Portal melalui <strong>HTTPS</strong> atau Google Apps Script resmi.' +
+              '</div>'
+            ) : '') +
             '<form id="portal-login-form">' +
               '<div class="form-group">' +
                 '<label class="form-label">NIS / Nomor Induk Santri</label>' +

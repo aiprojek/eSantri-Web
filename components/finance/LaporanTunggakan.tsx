@@ -39,8 +39,9 @@ export const LaporanTunggakan: React.FC = () => {
             if (!santri || santri.status !== 'Aktif') return;
             if (filterJenjang && santri.jenjangId !== parseInt(filterJenjang)) return;
 
-            // Hitung umur tagihan berdasarkan tanggal 10 bulan tagihan
-            const dueDate = new Date(t.tahun, t.bulan - 1, 10);
+            // Hitung umur tagihan berdasarkan jatuhTempo jika ada, fallback ke tanggal 10 bulan tagihan
+            const parsedJt = t.jatuhTempo ? new Date(t.jatuhTempo) : null;
+            const dueDate = parsedJt && !isNaN(parsedJt.getTime()) ? parsedJt : new Date(t.tahun, t.bulan - 1, 10);
             const diffTime = Math.max(0, today.getTime() - dueDate.getTime());
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 

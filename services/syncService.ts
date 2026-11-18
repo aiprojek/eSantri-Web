@@ -1,10 +1,11 @@
 
-import { CloudSyncConfig, SyncFileRecord, ConflictItem } from '../types';
+import { CloudSyncConfig, E2eeConfig, SyncFileRecord, ConflictItem } from '../types';
 import { db } from '../db';
 import { createClient, WebDAVClient } from 'webdav';
 import { migrateUserPermissions } from './permissionMigrationService';
 import { setAuditSyncMute } from './logService';
 import { mergePortalConfig } from './portalGasService';
+import { decryptBytesSym, E2EE_CHANGED_EVENT, encryptBytesSym, tryParseE2eeEnvelope } from './e2eeService';
 
 const MASTER_FILENAME = 'master_data.json';
 const MASTER_CONFIG_FILENAME = 'master_config.json';
@@ -15,28 +16,40 @@ const INBOX_FOLDER = `${CLOUD_ROOT}/inbox_staff`;
 
 /**
  * Mengompresi objek JSON menjadi GZIP ArrayBuffer.
- * Mengurangi ukuran file hingga 80-90% untuk mempercepat sync.
+ * Jika E2EE modul Sync aktif, hasil GZIP dienkripsi AES-256-GCM sebelum diupload ke cloud.
  */
-const compressData = async (data: any): Promise<ArrayBuffer> => {
-    // 1. Convert JSON to string
+const compressData = async (data: any, options?: { attachPublicE2eeMeta?: E2eeConfig }): Promise<ArrayBuffer> => {
     const jsonString = JSON.stringify(data);
-    
-    // 2. Create stream from string
     const stream = new Blob([jsonString]).stream();
-    
-    // 3. Pipe through GZIP compressor
     const compressedStream = stream.pipeThrough(new CompressionStream('gzip'));
-    
-    // 4. Convert back to ArrayBuffer
-    return await new Response(compressedStream).arrayBuffer();
+    const gzipBuffer = await new Response(compressedStream).arrayBuffer();
+
+    const settingsList = await db.settings.toArray();
+    const e2eeConfig = settingsList[0]?.e2eeConfig;
+    if (e2eeConfig?.enabled && e2eeConfig?.modules?.sync) {
+        const envelope: any = await encryptBytesSym(
+            new Uint8Array(gzipBuffer),
+            e2eeConfig,
+            'sync-bundle',
+            'gzip_b64'
+        );
+        if (options?.attachPublicE2eeMeta) {
+            envelope.e2eeConfig = options.attachPublicE2eeMeta;
+        }
+        return new TextEncoder().encode(JSON.stringify(envelope)).buffer;
+    }
+
+    return gzipBuffer;
 };
 
 /**
  * Mendekompresi ArrayBuffer/String. 
- * Mendukung Backward Compatibility: Jika gagal dekompresi (file lama), coba parse sebagai JSON biasa.
+ * Mendukung E2EE envelope + GZIP + Backward Compatibility JSON lama.
  */
-const decompressData = async (input: ArrayBuffer | string): Promise<any> => {
-    // If input is string (from WebDAV text read sometimes), convert to buffer
+const decompressData = async (
+    input: ArrayBuffer | string,
+    onLockedWithMeta?: (meta: E2eeConfig) => Promise<void>
+): Promise<any> => {
     let buffer: ArrayBuffer;
     if (typeof input === 'string') {
         buffer = new TextEncoder().encode(input).buffer;
@@ -44,15 +57,42 @@ const decompressData = async (input: ArrayBuffer | string): Promise<any> => {
         buffer = input;
     }
 
+    // Cek apakah payload berupa amplop E2EE JSON
     try {
-        // Try to decompress assuming it is GZIP
+        const maybeText = new TextDecoder().decode(buffer);
+        if (maybeText.trim().startsWith('{')) {
+            const parsedJson = JSON.parse(maybeText);
+            const env = tryParseE2eeEnvelope(parsedJson);
+            if (env && env.mode === 'sym_aes') {
+                try {
+                    const plainBytes = await decryptBytesSym(env);
+                    if (env.encoding === 'json') {
+                        return JSON.parse(new TextDecoder().decode(plainBytes));
+                    }
+                    buffer = plainBytes.slice().buffer;
+                } catch (decryptErr: any) {
+                    if (parsedJson?.e2eeConfig && onLockedWithMeta) {
+                        await onLockedWithMeta(parsedJson.e2eeConfig);
+                    }
+                    throw decryptErr;
+                }
+            } else if (!env && (parsedJson.santri || parsedJson.data || parsedJson.users || parsedJson.timestamp)) {
+                return parsedJson;
+            }
+        }
+    } catch (e: any) {
+        if (e?.message?.includes('E2EE_LOCKED') || e?.message?.includes('mendekripsi')) {
+            throw e;
+        }
+        // bukan JSON amplop E2EE, lanjut ke dekompresi GZIP
+    }
+
+    try {
         const stream = new Blob([buffer]).stream();
         const decompressedStream = stream.pipeThrough(new DecompressionStream('gzip'));
-        const decompressedRes = await new Response(decompressedStream).json(); // Direct to JSON
+        const decompressedRes = await new Response(decompressedStream).json();
         return decompressedRes;
     } catch (e) {
-        // Fallback: File mungkin format lama (Uncompressed JSON String)
-        // Kita coba parse langsung buffer tersebut sebagai text -> JSON
         try {
             const text = new TextDecoder().decode(buffer);
             return JSON.parse(text);
@@ -60,6 +100,29 @@ const decompressData = async (input: ArrayBuffer | string): Promise<any> => {
             console.error("Gagal dekompresi dan gagal parsing JSON biasa:", jsonError);
             throw new Error("File rusak atau format tidak dikenali.");
         }
+    }
+};
+
+const syncLockedE2eeMetaToLocal = async (meta?: E2eeConfig) => {
+    if (!meta || !meta.enabled) return;
+    const localSettings = await db.settings.toArray();
+    if (localSettings.length > 0) {
+        const localCfg = localSettings[0].e2eeConfig;
+        if (localCfg && localCfg.enabled === false && localCfg.keyId === meta.keyId) {
+            const remoteTs = Date.parse(meta.updatedAt || '') || 0;
+            const localTs = Date.parse(localCfg.disabledAt || localCfg.updatedAt || '') || 0;
+            if (remoteTs <= localTs) {
+                return;
+            }
+        }
+        if (!localCfg?.enabled || localCfg.keyId !== meta.keyId) {
+            await db.settings.update(localSettings[0].id!, { e2eeConfig: meta });
+        }
+    } else {
+        await db.settings.add({ e2eeConfig: meta } as any);
+    }
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(E2EE_CHANGED_EVENT));
     }
 };
 
@@ -300,6 +363,11 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
 
         let allPendaftar: any[] = [];
         const seenIds = new Set();
+        const settingsRows = await db.settings.toArray();
+        const activeKeyId = settingsRows[0]?.e2eeConfig?.enabled ? settingsRows[0]?.e2eeConfig?.keyId : null;
+        let encryptedFileCount = 0;
+        let lockedErrorCount = 0;
+        let firstLockedError: Error | null = null;
 
         for (const file of files) {
              const dlResponse = await fetchWithRetry('https://content.dropboxapi.com/2/files/download', {
@@ -310,13 +378,29 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
                 }
             });
             if (dlResponse.ok) {
-                // UPDATE: Handle Decompression
                 const buffer = await dlResponse.arrayBuffer();
-                const json = await decompressData(buffer);
+                let json: any;
+                try {
+                    json = await decompressData(buffer, syncLockedE2eeMetaToLocal);
+                } catch (fileErr: any) {
+                    const msg = String(fileErr?.message || '');
+                    if (msg.includes('E2EE_LOCKED')) {
+                        encryptedFileCount++;
+                        lockedErrorCount++;
+                        if (!firstLockedError) firstLockedError = fileErr instanceof Error ? fileErr : new Error(msg);
+                        if (activeKeyId && msg.includes(`(${activeKeyId})`)) {
+                            throw fileErr;
+                        }
+                        console.warn(`Lewati file inbox PSB terenkripsi (${file.name}):`, msg);
+                        continue;
+                    }
+                    console.warn(`Lewati file inbox PSB rusak (${file.name}):`, msg);
+                    continue;
+                }
                 
                 if (json.data && Array.isArray(json.data.pendaftar)) {
                     json.data.pendaftar.forEach((p: any) => {
-                         const key = p.namaLengkap + (p.nomorHpWali || '');
+                         const key = `${String(p.tahunAjaran || '').trim().toLowerCase()}|${String(p.namaLengkap || '').trim().toLowerCase()}|${String(p.nik || p.nomorHpWali || p.tanggalLahir || p.id || '').trim().toLowerCase()}`;
                          if (!seenIds.has(key)) {
                              allPendaftar.push(p);
                              seenIds.add(key);
@@ -325,10 +409,17 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
                 }
             }
         }
+
+        if (encryptedFileCount > 0 && lockedErrorCount === encryptedFileCount && allPendaftar.length === 0 && firstLockedError) {
+            throw firstLockedError;
+        }
         
         return allPendaftar;
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error fetching PSB from Cloud:", error);
+        if (error?.message?.includes('E2EE_LOCKED')) {
+            throw error;
+        }
         throw new Error("Gagal mengambil data dari Dropbox. Cek koneksi internet.");
     }
 };
@@ -390,7 +481,12 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
     };
     
     // UPDATE: Compress Payload before upload
-    const compressedBuffer = await compressData(payload);
+    const settingsRows = await db.settings.toArray();
+    const e2eeMeta = settingsRows[0]?.e2eeConfig;
+    const compressedBuffer = await compressData(
+        payload,
+        e2eeMeta?.enabled && e2eeMeta?.modules?.sync ? { attachPublicE2eeMeta: e2eeMeta } : undefined
+    );
 
     const filename = `${new Date().getTime()}_${username.replace(/\s+/g, '_')}.json`;
     const fullPath = `${INBOX_FOLDER}/${filename}`;
@@ -443,7 +539,7 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         
         // UPDATE: Handle Decompression
         const buffer = await response.arrayBuffer();
-        masterData = await decompressData(buffer);
+        masterData = await decompressData(buffer, syncLockedE2eeMetaToLocal);
 
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
@@ -452,7 +548,7 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         }
         const contents = await client.getFileContents(`${CLOUD_ROOT}/${MASTER_FILENAME}`);
         // WebDAV client might return string or buffer. decompressData handles both.
-        masterData = await decompressData(contents as any);
+        masterData = await decompressData(contents as any, syncLockedE2eeMetaToLocal);
     } else {
          throw new Error("Provider tidak valid");
     }
@@ -692,11 +788,11 @@ export const inspectInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
             }
         });
         const buffer = await response.arrayBuffer();
-        fileContent = await decompressData(buffer);
+        fileContent = await decompressData(buffer, syncLockedE2eeMetaToLocal);
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
         const contents = await client.getFileContents(file.path_lower);
-        fileContent = await decompressData(contents as any);
+        fileContent = await decompressData(contents as any, syncLockedE2eeMetaToLocal);
     } else {
         throw new Error("Provider tidak valid");
     }
@@ -746,13 +842,13 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
         });
         // UPDATE: Handle Decompression
         const buffer = await response.arrayBuffer();
-        fileContent = await decompressData(buffer);
+        fileContent = await decompressData(buffer, syncLockedE2eeMetaToLocal);
 
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
         const contents = await client.getFileContents(file.path_lower);
         // WebDAV client returns string or buffer
-        fileContent = await decompressData(contents as any);
+        fileContent = await decompressData(contents as any, syncLockedE2eeMetaToLocal);
     } else {
         throw new Error("Provider tidak valid");
     }
@@ -983,9 +1079,12 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         settings: await db.settings.toArray()
     };
 
-    // UPDATE: Compress Data before Upload
-    const compressedMaster = await compressData(masterData);
-    const compressedConfig = await compressData(masterConfig);
+    // UPDATE: Compress Data (and encrypt if E2EE sync enabled) before Upload
+    const settingsRows = await db.settings.toArray();
+    const e2eeMeta = settingsRows[0]?.e2eeConfig;
+    const compressOpts = e2eeMeta?.enabled && e2eeMeta?.modules?.sync ? { attachPublicE2eeMeta: e2eeMeta } : undefined;
+    const compressedMaster = await compressData(masterData, compressOpts);
+    const compressedConfig = await compressData(masterConfig, compressOpts);
 
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
@@ -1020,6 +1119,11 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
 export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
     let data: any = null;
     
+    const handleLockedWithMeta = async (meta?: E2eeConfig) => {
+        await syncLockedE2eeMetaToLocal(meta);
+        throw new Error('E2EE_LOCKED: Konfigurasi E2EE telah dimuat ke perangkat ini. Silakan masukkan Master Password E2EE pada banner/Pengaturan > User & Keamanan lalu ulangi sync.');
+    };
+
     if (config.provider === 'firebase') {
         const tenantId = config.firebasePairedTenantId;
         if (!tenantId) throw new Error("Tenant ID tidak ditemukan. Harap hubungkan Firebase terlebih dahulu.");
@@ -1028,21 +1132,44 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
         const path = `tenants/${tenantId}/users`;
         const q = query(collection(fdb, path));
         const snapshot = await getDocs(q);
-        const users = snapshot.docs.map(doc => doc.data());
+        const rawUsers = snapshot.docs.map(d => d.data());
 
-        let settingsDoc = null;
+        let rawSettingsDoc: any = null;
         try {
             const settingsSnap = await getDoc(doc(fdb, `tenants/${tenantId}/settings`, 'main'));
             if (settingsSnap.exists()) {
-                settingsDoc = settingsSnap.data();
+                rawSettingsDoc = settingsSnap.data();
             }
         } catch (sErr) {
             console.warn("Could not fetch remote settings during updateAccountFromCloud:", sErr);
         }
 
+        const { decryptAnyEnvelope } = await import('./e2eeService');
+
+        if (rawSettingsDoc && tryParseE2eeEnvelope(rawSettingsDoc)) {
+            try {
+                rawSettingsDoc = await decryptAnyEnvelope(rawSettingsDoc);
+            } catch {
+                await handleLockedWithMeta(rawSettingsDoc.e2eeConfig);
+            }
+        }
+
+        const decryptedUsers: any[] = [];
+        for (const u of rawUsers) {
+            if (tryParseE2eeEnvelope(u)) {
+                try {
+                    decryptedUsers.push(await decryptAnyEnvelope(u));
+                } catch {
+                    await handleLockedWithMeta(rawSettingsDoc?.e2eeConfig);
+                }
+            } else {
+                decryptedUsers.push(u);
+            }
+        }
+
         data = {
-            users: users.length > 0 ? users : undefined,
-            settings: settingsDoc ? [settingsDoc] : undefined,
+            users: decryptedUsers.length > 0 ? decryptedUsers : undefined,
+            settings: rawSettingsDoc ? [rawSettingsDoc] : undefined,
         };
     } else if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
@@ -1055,7 +1182,7 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
         });
         
         const buffer = await response.arrayBuffer();
-        data = await decompressData(buffer);
+        data = await decompressData(buffer, handleLockedWithMeta);
 
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
@@ -1063,7 +1190,7 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
             throw new Error("File konfigurasi akun tidak ditemukan di server WebDAV.");
         }
         const contents = await client.getFileContents(`${CLOUD_ROOT}/${MASTER_CONFIG_FILENAME}`);
-        data = await decompressData(contents as any);
+        data = await decompressData(contents as any, handleLockedWithMeta);
     }
 
     if (data) {

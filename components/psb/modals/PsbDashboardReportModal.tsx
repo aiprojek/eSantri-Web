@@ -5,6 +5,7 @@ import { printToPdfNative } from '../../../utils/pdfGenerator';
 import { exportPsbDashboardReportPdf } from '../../../utils/psbPdfExport';
 import { useAppContext } from '../../../AppContext';
 import { savePsbArchive } from '../utils/psbArchiveService';
+import { matchesPsbTahunAjaran } from '../utils/psbUtils';
 
 interface PsbDashboardReportModalProps {
     isOpen: boolean;
@@ -91,14 +92,19 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
         setTimeout(() => setIsSavedMessage(false), 2500);
     };
 
-    const totalPendaftar = pendaftarList.length;
+    const yearStr = config.tahunAjaranAktif || `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`;
+    const scopedPendaftarList = useMemo(() => {
+        return pendaftarList.filter(p => matchesPsbTahunAjaran(p, yearStr, yearStr));
+    }, [pendaftarList, yearStr]);
+
+    const totalPendaftar = scopedPendaftarList.length;
     const todayStr = new Date().toISOString().split('T')[0];
-    const pendaftarHariIni = pendaftarList.filter(p => p.tanggalDaftar && p.tanggalDaftar.startsWith(todayStr)).length;
+    const pendaftarHariIni = scopedPendaftarList.filter(p => p.tanggalDaftar && p.tanggalDaftar.startsWith(todayStr)).length;
 
     // Per Jenjang Stats
     const statsByJenjang = useMemo(() => {
         return settings.jenjang.map(j => {
-            const pendaftarInJenjang = pendaftarList.filter(p => p.jenjangId === j.id);
+            const pendaftarInJenjang = scopedPendaftarList.filter(p => p.jenjangId === j.id);
             const l = pendaftarInJenjang.filter(p => p.jenisKelamin === 'Laki-laki').length;
             const p = pendaftarInJenjang.filter(p => p.jenisKelamin === 'Perempuan').length;
             const total = pendaftarInJenjang.length;
@@ -112,7 +118,7 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                 percent: percent.toFixed(1)
             };
         });
-    }, [settings.jenjang, pendaftarList, totalPendaftar]);
+    }, [settings.jenjang, scopedPendaftarList, totalPendaftar]);
 
     // Status Counts
     const statusStats = useMemo(() => {
@@ -124,18 +130,18 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
             'Diterima': 0,
             'Ditolak': 0
         };
-        pendaftarList.forEach(p => {
+        scopedPendaftarList.forEach(p => {
             if (counts[p.status] !== undefined) {
                 counts[p.status]++;
             }
         });
         return counts;
-    }, [pendaftarList]);
+    }, [scopedPendaftarList]);
 
     // Jalur Pendaftaran
     const jalurStats = useMemo(() => {
         const counts: Record<string, number> = {};
-        pendaftarList.forEach(p => {
+        scopedPendaftarList.forEach(p => {
             const j = p.jalurPendaftaran || 'Reguler';
             counts[j] = (counts[j] || 0) + 1;
         });
@@ -144,7 +150,7 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
             count,
             percent: totalPendaftar > 0 ? ((count / totalPendaftar) * 100).toFixed(1) : '0'
         }));
-    }, [pendaftarList, totalPendaftar]);
+    }, [scopedPendaftarList, totalPendaftar]);
 
     // 7-day trend
     const dailyTrend = useMemo(() => {
@@ -154,18 +160,18 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
             const d = new Date(today);
             d.setDate(today.getDate() - i);
             const dateIso = d.toISOString().split('T')[0];
-            const count = pendaftarList.filter(p => p.tanggalDaftar && p.tanggalDaftar.startsWith(dateIso)).length;
+            const count = scopedPendaftarList.filter(p => p.tanggalDaftar && p.tanggalDaftar.startsWith(dateIso)).length;
             days.push({
                 dateFormatted: d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' }),
                 count
             });
         }
         return days;
-    }, [pendaftarList]);
+    }, [scopedPendaftarList]);
 
     // Gender breakdown
-    const totalLaki = pendaftarList.filter(p => p.jenisKelamin === 'Laki-laki').length;
-    const totalPerempuan = pendaftarList.filter(p => p.jenisKelamin === 'Perempuan').length;
+    const totalLaki = scopedPendaftarList.filter(p => p.jenisKelamin === 'Laki-laki').length;
+    const totalPerempuan = scopedPendaftarList.filter(p => p.jenisKelamin === 'Perempuan').length;
     const percentLaki = totalPendaftar > 0 ? ((totalLaki / totalPendaftar) * 100).toFixed(1) : '0';
     const percentPerempuan = totalPendaftar > 0 ? ((totalPerempuan / totalPendaftar) * 100).toFixed(1) : '0';
 
@@ -180,7 +186,7 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
             await exportPsbDashboardReportPdf({
                 settings,
                 config,
-                pendaftarList,
+                pendaftarList: scopedPendaftarList,
                 statsByJenjang,
                 statusStats,
                 jalurStats,
@@ -193,7 +199,7 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
             });
         } catch (error) {
             console.error('Gagal export PDF laporan PSB:', error);
-            alert('Terjadi kesalahan saat membuat file PDF tabel. Silakan coba lagi.');
+            showToast('Terjadi kesalahan saat membuat file PDF tabel. Silakan coba lagi.', 'error');
         } finally {
             setIsExportingPdf(false);
         }
@@ -218,15 +224,13 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
         year: 'numeric'
     });
 
-    const yearStr = config.tahunAjaranAktif || `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`;
-
-    const handleArchiveReport = () => {
+    const handleArchiveReport = async () => {
         setIsArchiving(true);
         try {
             const todayIso = new Date().toISOString().split('T')[0];
             const archiveId = `psb-rep-${yearStr.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now().toString().slice(-4)}`;
             
-            savePsbArchive({
+            await savePsbArchive({
                 id: archiveId,
                 type: 'laporan-rekapitulasi',
                 tahunAjaran: yearStr,
@@ -250,7 +254,7 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                 adminName,
                 pimpinanName,
                 catatan: `Arsip Laporan Rekapitulasi Eksekutif PSB TA ${yearStr} disimpan pada ${todayFormatted}.`
-            });
+            }, config, onSaveConfig);
             showToast('Laporan Rekapitulasi PSB berhasil diarsipkan ke riwayat tahunan.', 'success');
         } catch (e) {
             console.error('Gagal arsip laporan:', e);
@@ -813,7 +817,7 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
 
                             {/* FOOTER NOTA */}
                             <div className="psb-footer-note mt-5 print:mt-2 pt-2 border-t border-dashed border-gray-300 text-[10px] text-gray-400 flex justify-between">
-                                <span>Sistem Informasi Manajemen Pesantren (eSantri Web)</span>
+                                <span>Sistem Informasi Manajemen Pesantren - eSantri Web by AI Projek | aiprojek01.my.id</span>
                                 <span>Laporan Resmi Statistik PSB</span>
                             </div>
                         </div>

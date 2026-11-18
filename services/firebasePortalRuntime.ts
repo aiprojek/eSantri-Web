@@ -1,50 +1,73 @@
 import type { Pendaftar, PondokSettings, PsbConfig } from '../types';
 import { liteDb, doc, getDoc, setDoc, serverTimestamp } from '../firebaseLite';
 import { storage, ref, uploadBytes, getDownloadURL } from '../firebaseStorage';
+import { encryptObjectHybridWithPublicKey, isWebCryptoAvailable } from './e2eeService';
 
 export const fetchPublicPortalSettings = async (tenantId: string) => {
     const tenantDoc = await getDoc(doc(liteDb, 'publicPortals', tenantId));
     return tenantDoc.exists() ? tenantDoc.data() as PondokSettings : null;
 };
 
+export const fetchPublicPortalEntry = async (tenantId: string, lookupIds: string[]): Promise<any | null> => {
+    for (const entryId of lookupIds) {
+        if (!entryId || !/^[a-zA-Z0-9_-]{1,128}$/.test(entryId)) continue;
+        try {
+            const snap = await getDoc(doc(liteDb, 'publicPortals', tenantId, 'entries', entryId));
+            if (snap.exists()) {
+                return snap.data();
+            }
+        } catch {
+            // Abaikan dan lanjut ke kandidat berikutnya
+        }
+    }
+    return null;
+};
+
 interface SubmitPortalPsbRegistrationInput {
     tenantId: string;
     config: PsbConfig;
     fields: Record<string, unknown>;
+    e2eePublicKey?: string;
+    e2eeKeyId?: string;
 }
+
+const NON_PII_FIELDS = new Set([
+    'tanggalDaftar',
+    'tanggalMasuk',
+    'status',
+    'jenjangId',
+    'gelombang',
+    'jalurPendaftaran',
+    'tahunAjaranAktif',
+    'sheetName',
+]);
 
 export const submitPortalPsbRegistration = async ({
     tenantId,
     config,
     fields,
+    e2eePublicKey,
+    e2eeKeyId,
 }: SubmitPortalPsbRegistrationInput) => {
     const pendaftarId = Date.now().toString();
     const year = new Date().getFullYear();
     const regNumber = `PSB-${year}-REG-${pendaftarId.slice(-4)}`;
 
-    const pendaftarData: Partial<Pendaftar> = {
-        nomorRegistrasi: regNumber,
-        ...fields,
-        tanggalDaftar: new Date().toISOString(),
-        tanggalMasuk: new Date().toISOString(),
-        status: 'Baru',
-        jalurPendaftaran: (fields.jalurPendaftaran as string) || 'Reguler',
-        gelombang: config.activeGelombang || 1,
-        berkasFisik: {
-            kk: false,
-            akta: false,
-            ijazahSkl: false,
-            suratSehat: false,
-            pasFoto: false,
-            catatanBerkas: 'Pendaftaran Online via Portal Publik'
-        },
-        nilaiUjian: {
-            rekomendasi: 'Dipertimbangkan',
-            ruangUjian: 'Posko PSB',
-            catatanUjian: 'Pendaftaran online via portal publik (menunggu jadwal seleksi)',
-        },
-        lastModified: Date.now(),
-    };
+    let pubSpki = e2eePublicKey || '';
+    let keyId = e2eeKeyId || '';
+    if (!pubSpki || !keyId) {
+        try {
+            const pubSettings = (await fetchPublicPortalSettings(tenantId)) as any;
+            if (pubSettings?.psbE2ee?.publicKeySpki && pubSettings?.psbE2ee?.keyId) {
+                pubSpki = String(pubSettings.psbE2ee.publicKeySpki);
+                keyId = String(pubSettings.psbE2ee.keyId);
+            }
+        } catch {
+            // Tetap lanjutkan tanpa override jika dokumen publik tidak terjangkau
+        }
+    }
+
+    const useE2ee = Boolean(pubSpki && keyId && isWebCryptoAvailable());
 
     const customData: Record<string, unknown> = {};
     const uploadPromises: Promise<void>[] = [];
@@ -60,7 +83,9 @@ export const submitPortalPsbRegistration = async ({
         if (value instanceof File) {
             const fieldLabel = config.customFields?.find((field) => field.id === fieldId)?.label || fieldId;
             const safeLabel = fieldLabel.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-            const safeName = String(fields.namaLengkap || 'TanpaNama').replace(/[^a-z0-9]/gi, '_');
+            const safeName = useE2ee
+                ? 'terenkripsi'
+                : String(fields.namaLengkap || 'TanpaNama').replace(/[^a-z0-9]/gi, '_');
             const filename = `${safeLabel}-${safeName}-${Date.now()}`;
             const storageRef = ref(storage, `tenants/${tenantId}/psb/${filename}`);
 
@@ -77,13 +102,76 @@ export const submitPortalPsbRegistration = async ({
 
     await Promise.all(uploadPromises);
 
-    pendaftarData.customData = JSON.stringify(customData);
+    const baseMeta: Partial<Pendaftar> = {
+        nomorRegistrasi: regNumber,
+        tanggalDaftar: new Date().toISOString(),
+        tanggalMasuk: new Date().toISOString(),
+        status: 'Baru',
+        jalurPendaftaran: (fields.jalurPendaftaran as string) || 'Reguler',
+        gelombang: config.activeGelombang || 1,
+        ...(fields.jenjangId !== undefined ? { jenjangId: Number(fields.jenjangId) || undefined } : {}),
+        berkasFisik: {
+            kk: false,
+            akta: false,
+            ijazahSkl: false,
+            suratSehat: false,
+            pasFoto: false,
+            catatanBerkas: 'Pendaftaran Online via Portal Publik'
+        },
+        nilaiUjian: {
+            rekomendasi: 'Dipertimbangkan',
+            ruangUjian: 'Posko PSB',
+            catatanUjian: 'Pendaftaran online via portal publik (menunggu jadwal seleksi)',
+        },
+        lastModified: Date.now(),
+    };
 
-    await setDoc(doc(liteDb, `tenants/${tenantId}/pendaftar`, pendaftarId), {
-        ...pendaftarData,
-        id: parseInt(pendaftarId, 10),
-        createdAt: serverTimestamp(),
-    });
+    let docPayload: Record<string, unknown>;
+
+    if (useE2ee) {
+        const sensitiveBio: Record<string, unknown> = {
+            nomorRegistrasi: regNumber,
+        };
+        for (const [k, v] of Object.entries(fields)) {
+            if (k.startsWith('custom_')) {
+                const fId = k.replace('custom_', '');
+                if (!(v instanceof File)) {
+                    sensitiveBio[fId] = v;
+                }
+                continue;
+            }
+            if (!NON_PII_FIELDS.has(k)) {
+                sensitiveBio[k] = v;
+            }
+        }
+        const envelope = await encryptObjectHybridWithPublicKey(sensitiveBio, pubSpki, keyId);
+        // Pertahankan URL lampiran (tanpa isi teks kustom sensitif) & bungkus biodata dalam __e2ee_bio
+        const sanitizedCustomData: Record<string, unknown> = {
+            __e2ee_bio: JSON.stringify(envelope),
+        };
+        for (const [ck, cv] of Object.entries(customData)) {
+            if (typeof cv === 'string' && /^https?:\/\//i.test(cv)) {
+                sanitizedCustomData[ck] = cv;
+            }
+        }
+        docPayload = {
+            ...baseMeta,
+            namaLengkap: '[TERENKRIPSI E2EE]',
+            customData: JSON.stringify(sanitizedCustomData),
+            id: parseInt(pendaftarId, 10),
+            createdAt: serverTimestamp(),
+        };
+    } else {
+        docPayload = {
+            ...baseMeta,
+            ...fields,
+            customData: JSON.stringify(customData),
+            id: parseInt(pendaftarId, 10),
+            createdAt: serverTimestamp(),
+        };
+    }
+
+    await setDoc(doc(liteDb, `tenants/${tenantId}/pendaftar`, pendaftarId), docPayload);
 
     return pendaftarId;
 };

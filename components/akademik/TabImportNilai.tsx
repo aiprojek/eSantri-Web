@@ -73,6 +73,10 @@ export const TabImportNilai: React.FC = () => {
                     backendProvider,
                     apiKey: cloudApiKey.trim()
                 });
+                const skippedChunksTotal = cloudData.reduce((acc, r) => acc + (Number(r?._e2eeSkippedChunks) || 0), 0);
+                if (skippedChunksTotal > 0) {
+                    showToast(`${skippedChunksTotal} paket nilai E2EE lama/beda kunci dilewati.`, 'info');
+                }
                 const syncRes = await syncRaporStructuredData(cloudData, settings, filterOpts);
                 totalSuccess = syncRes.successCount;
                 totalErrors = syncRes.errors;

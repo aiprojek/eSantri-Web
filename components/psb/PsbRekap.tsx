@@ -1,7 +1,7 @@
 import React, { Suspense, useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
-import { Pendaftar, PondokSettings, Santri, RiwayatStatus, Tagihan, PendaftarStatus, PsbConfig } from '../../types';
+import { Pendaftar, PondokSettings, Santri, RiwayatStatus, Tagihan, PendaftarStatus, PsbConfig, PsbCloudProvider } from '../../types';
 import { db } from '../../db';
 import { loadJsZip, loadSyncService } from '../../utils/lazyCloudServices';
 import { loadFirebaseRealtimeRuntime } from '../../utils/lazyFirebaseRuntimes';
@@ -10,6 +10,8 @@ import { generateSyncSafeId } from '../../utils/idGenerator';
 import { generateNis } from '../../utils/nisGenerator';
 import { logActivity } from '../../services/logService';
 import { openExternalLinkSafe } from '../../services/waService';
+import { decryptPsbCloudRowsWithReport, fetchPsbFromCloudAdapter, getPsbCloudProviderMeta, isPsbCloudEndpointValid } from '../../services/psbCloudService';
+import { decryptAnyEnvelope, tryParseE2eeEnvelope } from '../../services/e2eeService';
 import { LoadingFallback } from '../common/LoadingFallback';
 import { PsbExamCardModal } from './modals/PsbExamCardModal';
 import { PsbAcceptanceModal, PsbBillingOption, PsbPlacementOption } from './modals/PsbAcceptanceModal';
@@ -27,6 +29,11 @@ import {
     getPendaftarPhone,
     getPendaftarWaliName,
     normalizePhoneLocal,
+    resolvePendaftarTahunAjaran,
+    matchesPsbTahunAjaran,
+    resolveJenjangIdFromInput,
+    isSamePendaftarIdentity,
+    getPsbAcademicYearOptions,
     PSB_ALL_STANDARD_FIELD_KEYS
 } from './utils/psbUtils';
 
@@ -45,7 +52,11 @@ interface PsbRekapProps {
 export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onImportFromWA, onUpdateList, canWrite, onSaveConfig }) => {
     const { showToast, showConfirmation, showAlert, currentUser } = useAppContext();
     const { santriList, onBulkAddSantri } = useSantriContext();
+    const { activeYear: defaultActiveYear } = getPsbAcademicYearOptions(settings);
+    const activePsbTa = (settings.psbConfig?.tahunAjaranAktif || defaultActiveYear || '').trim();
+
     const [searchTerm, setSearchTerm] = useState('');
+    const [filterTahunAjaran, setFilterTahunAjaran] = useState<string>(activePsbTa);
     const [filterJenjang, setFilterJenjang] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
     const [waInput, setWaInput] = useState('');
@@ -94,8 +105,24 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         return pendaftarList.map(p => healPendaftarRecord(p, settings));
     }, [pendaftarList, settings]);
 
+    const tahunAjaranOptions = useMemo(() => {
+        const { options } = getPsbAcademicYearOptions(settings);
+        const set = new Set<string>(options);
+        if (activePsbTa) set.add(activePsbTa);
+        healedPendaftarList.forEach(p => {
+            const ta = resolvePendaftarTahunAjaran(p);
+            if (ta) set.add(ta);
+        });
+        return Array.from(set).filter(Boolean).sort((a, b) => b.localeCompare(a));
+    }, [settings, activePsbTa, healedPendaftarList]);
+
+    const yearScopedData = useMemo(() => {
+        if (!filterTahunAjaran || filterTahunAjaran === '__all__') return healedPendaftarList;
+        return healedPendaftarList.filter(p => matchesPsbTahunAjaran(p, filterTahunAjaran, activePsbTa));
+    }, [healedPendaftarList, filterTahunAjaran, activePsbTa]);
+
     const filteredData = useMemo(() => {
-        return healedPendaftarList.filter(p => {
+        return yearScopedData.filter(p => {
             const noReg = p.nomorRegistrasi || '';
             const phone = getPendaftarPhone(p);
             const matchSearch = p.namaLengkap.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -106,19 +133,19 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             const matchStatus = !filterStatus || p.status === filterStatus;
             return matchSearch && matchJenjang && matchStatus;
         });
-    }, [healedPendaftarList, searchTerm, filterJenjang, filterStatus]);
+    }, [yearScopedData, searchTerm, filterJenjang, filterStatus]);
 
     const psbStats = useMemo(() => {
         return {
-            total: pendaftarList.length,
-            baru: pendaftarList.filter((p) => p.status === 'Baru').length,
-            verifikasi: pendaftarList.filter((p) => p.status === 'Verifikasi Berkas').length,
-            ujian: pendaftarList.filter((p) => p.status === 'Ujian Masuk').length,
-            cadangan: pendaftarList.filter((p) => p.status === 'Cadangan').length,
-            diterima: pendaftarList.filter((p) => p.status === 'Diterima').length,
-            ditolak: pendaftarList.filter((p) => p.status === 'Ditolak').length,
+            total: yearScopedData.length,
+            baru: yearScopedData.filter((p) => p.status === 'Baru').length,
+            verifikasi: yearScopedData.filter((p) => p.status === 'Verifikasi Berkas').length,
+            ujian: yearScopedData.filter((p) => p.status === 'Ujian Masuk').length,
+            cadangan: yearScopedData.filter((p) => p.status === 'Cadangan').length,
+            diterima: yearScopedData.filter((p) => p.status === 'Diterima').length,
+            ditolak: yearScopedData.filter((p) => p.status === 'Ditolak').length,
         };
-    }, [pendaftarList]);
+    }, [yearScopedData]);
 
     const getStatusBadgeClass = (status: string) => {
         switch (status) {
@@ -163,22 +190,38 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 // Get valid token first to ensure auth
                 const { getValidDropboxToken, fetchPsbFromDropbox } = await loadSyncService();
                 const token = await getValidDropboxToken(config);
-                const newItems = await fetchPsbFromDropbox(token);
+                const rawDropboxItems = await fetchPsbFromDropbox(token);
+                const psbDecryptRes = rawDropboxItems.length > 0
+                    ? await decryptPsbCloudRowsWithReport(rawDropboxItems, settings.e2eeConfig?.enabled ? settings.e2eeConfig.keyId : undefined)
+                    : { rows: [], failedCount: 0, failedReasons: [] };
+                const newItems = psbDecryptRes.rows;
+                if (psbDecryptRes.failedCount > 0) {
+                    showToast(`${psbDecryptRes.failedCount} berkas PSB di Dropbox memakai kunci E2EE lama/berbeda sehingga dilewati.`, 'info');
+                }
 
                 if (newItems.length > 0) {
-                    // Filter existing by Name + HP (Simple de-dupe)
-                    const existingKeys = new Set(pendaftarList.map(p => p.namaLengkap + (p.nomorHpWali || '')));
-                    const reallyNewItems = newItems.filter((p: any) => !existingKeys.has(p.namaLengkap + (p.nomorHpWali || '')));
+                    const workingPool = [...healedPendaftarList];
+                    const itemsWithId: Pendaftar[] = [];
+                    for (const rawItem of newItems) {
+                        const healedItem = healPendaftarRecord({
+                            ...rawItem,
+                            tahunAjaran: resolvePendaftarTahunAjaran(rawItem, activePsbTa),
+                            jenjangId: resolveJenjangIdFromInput((rawItem as any).jenjangId || (rawItem as any).jenjang, settings, settings.psbConfig?.targetJenjangId || 0)
+                        }, settings);
+                        const duplicate = workingPool.some(existing => isSamePendaftarIdentity(existing, healedItem, activePsbTa));
+                        if (!duplicate) {
+                            const prepared: Pendaftar = {
+                                ...healedItem,
+                                id: generateSyncSafeId(),
+                                deleted: false,
+                                lastModified: healedItem.lastModified || Date.now()
+                            };
+                            workingPool.push(prepared);
+                            itemsWithId.push(prepared);
+                        }
+                    }
 
-                    if (reallyNewItems.length > 0) {
-                        // Assign sync-safe integer IDs
-                        const itemsWithId = reallyNewItems.map((item: any) => ({
-                            ...item,
-                            id: generateSyncSafeId(),
-                            deleted: false,
-                            lastModified: item.lastModified || Date.now()
-                        }));
-                        
+                    if (itemsWithId.length > 0) {
                         await db.pendaftar.bulkPut(itemsWithId);
                         onUpdateList();
                         showToast(`${itemsWithId.length} data pendaftar baru ditarik dari Dropbox.`, 'success');
@@ -201,34 +244,69 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
     const handleGoogleSync = async () => {
         if (!canWrite) return;
-        if (!scriptUrl || !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(scriptUrl.trim())) {
+        const primaryProvider: PsbCloudProvider = settings.psbConfig?.backendProvider || 'gas';
+        const endpointConfigs = new Map<string, { endpointUrl: string; backendProvider: PsbCloudProvider; apiKey?: string }>();
+
+        const addEndpointIfValid = (url?: string, provider?: PsbCloudProvider, apiKey?: string) => {
+            const p: PsbCloudProvider = provider || primaryProvider || 'gas';
+            const clean = (url || '').trim();
+            if (!clean || !isPsbCloudEndpointValid(clean, p)) return;
+            const key = `${p}::${clean}`;
+            if (!endpointConfigs.has(key)) {
+                endpointConfigs.set(key, {
+                    endpointUrl: clean,
+                    backendProvider: p,
+                    apiKey: (apiKey || '').trim()
+                });
+            }
+        };
+
+        addEndpointIfValid(scriptUrl, primaryProvider, settings.psbConfig?.cloudApiKey);
+        (settings.psbConfig?.templates || []).forEach((t) => {
+            addEndpointIfValid(
+                t.googleScriptUrl,
+                t.backendProvider || primaryProvider,
+                t.cloudApiKey ?? settings.psbConfig?.cloudApiKey
+            );
+        });
+        if (endpointConfigs.size === 0 && settings.portalConfig?.gasEndpoint) {
+            addEndpointIfValid(settings.portalConfig.gasEndpoint, 'gas', settings.portalConfig.gasApiKey);
+        }
+
+        if (endpointConfigs.size === 0) {
             setIsGasModalOpen(true);
             return;
         }
 
         setIsSyncing(true);
+        const usedProviders = new Set<string>();
         try {
-            // Fetch data from Google Apps Script (doGet)
-            const response = await fetch(scriptUrl);
-            if (!response.ok) throw new Error('Gagal menghubungi Google Script. Cek koneksi internet.');
-            
-            const rawData = await response.json();
-            
-            if (!Array.isArray(rawData)) throw new Error('Format data dari Google Sheet tidak valid.');
+            const combinedRawData: any[] = [];
+            for (const cfg of Array.from(endpointConfigs.values())) {
+                usedProviders.add(getPsbCloudProviderMeta(cfg.backendProvider).name);
+                const fetchedRows = await fetchPsbFromCloudAdapter(cfg);
+                combinedRawData.push(...fetchedRows);
+            }
+
+            const psbDecryptRes = await decryptPsbCloudRowsWithReport(
+                combinedRawData,
+                settings.e2eeConfig?.enabled ? settings.e2eeConfig.keyId : undefined
+            );
+            const rawData = psbDecryptRes.rows;
+            if (psbDecryptRes.failedCount > 0) {
+                showToast(`${psbDecryptRes.failedCount} baris pendaftar dengan kunci E2EE berbeda/rusak dilewati; data lain tetap diproses.`, 'info');
+            }
 
             let addedCount = 0;
             let updatedCount = 0;
-            const existingByNameMap = new Map<string, Pendaftar>();
-            pendaftarList.forEach(p => {
-                if (p.namaLengkap) {
-                    existingByNameMap.set(p.namaLengkap.toLowerCase().trim(), p);
-                }
-            });
+            const workingExistingPool: Pendaftar[] = [...healedPendaftarList];
 
             // Define fields that map directly to Pendaftar, others go to customData
             const standardFields = [
                 ...PSB_ALL_STANDARD_FIELD_KEYS,
                 'tanggalDaftar', 'Timestamp', 'sheetName', 'driveFolderId', 'folderId', 'docs', 'status', 'customData',
+                'rawJson', 'submittedAt', 'portalId', 'targetJenjangId', 'targetJenjangNama', 'namaJenjang', 'submissionSource',
+                'tahunAjaranAktif', 'fields',
                 'pekerjaan', 'Pekerjaan', 'pendidikan', 'Pendidikan', 'penghasilan', 'Penghasilan',
                 'pekerjaanAyah', 'Pekerjaan Ayah', 'pendidikanAyah', 'Pendidikan Ayah', 'Pendidikan Terakhir Ayah', 'penghasilanAyah', 'Penghasilan Ayah', 'Penghasilan Rata-rata Ayah / Bulan',
                 'pekerjaanIbu', 'Pekerjaan Ibu', 'pendidikanIbu', 'Pendidikan Ibu', 'Pendidikan Terakhir Ibu', 'penghasilanIbu', 'Penghasilan Ibu', 'Penghasilan Rata-rata Ibu / Bulan',
@@ -236,7 +314,29 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 'namaAyah', 'Nama Ayah', 'namaIbu', 'Nama Ibu', 'namaWali', 'Nama Wali', 'nomorHpWali', 'No HP Wali', 'teleponAyah', 'teleponIbu'
             ];
 
-            for (const item of rawData) {
+            for (const rawEntry of rawData) {
+                if (!rawEntry || typeof rawEntry !== 'object') continue;
+                // Lewati baris konfigurasi internal (_psb_portal_config / portals) jika script lama tidak menyaringnya
+                if (rawEntry.partCount !== undefined && rawEntry.payloadPart1 !== undefined && !rawEntry.namaLengkap) continue;
+
+                // Unpack rawJson jika berasal dari portal_psb_submissions
+                const item: Record<string, any> = { ...rawEntry };
+                if (typeof rawEntry.rawJson === 'string' && rawEntry.rawJson.trim()) {
+                    try {
+                        const parsedRaw = JSON.parse(rawEntry.rawJson);
+                        if (parsedRaw && typeof parsedRaw === 'object' && !Array.isArray(parsedRaw)) {
+                            Object.keys(parsedRaw).forEach((rk) => {
+                                if (item[rk] === undefined || item[rk] === '') {
+                                    item[rk] = parsedRaw[rk];
+                                }
+                            });
+                        }
+                    } catch {
+                        // abaikan jika rawJson korup
+                    }
+                }
+                delete item.rawJson;
+
                 // Flexible value getter supporting case-insensitivity, spaces, and aliases
                 const getVal = (...keys: string[]): any => {
                     for (const k of keys) {
@@ -347,7 +447,11 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     pekerjaanWali: resolvedPekerjaanWali,
                     pendidikanWali: resolvedPendidikanWali,
                     penghasilanWali: resolvedPenghasilanWali,
-                    jenjangId: parseInt(getVal('jenjangId', 'Jenjang')) || settings.psbConfig.targetJenjangId || 0,
+                    jenjangId: resolveJenjangIdFromInput(
+                        getVal('jenjangId', 'targetJenjangId', 'Jenjang', 'namaJenjang', 'targetJenjangNama'),
+                        settings,
+                        settings.psbConfig?.targetJenjangId || 0
+                    ),
                     asalSekolah: getVal('asalSekolah', 'Asal Sekolah', 'sekolahAsal', 'Nama Sekolah Sebelumnya') || '',
                     alamatSekolahAsal: getVal('alamatSekolahAsal', 'Alamat Sekolah Asal') || '',
                     nomorIjazahSebelumnya: getVal('nomorIjazahSebelumnya', 'Nomor Ijazah') ? String(getVal('nomorIjazahSebelumnya', 'Nomor Ijazah')) : '',
@@ -357,7 +461,8 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     tanggalMasuk: getVal('tanggalDaftar', 'Timestamp') || new Date().toISOString(),
                     status: 'Baru',
                     kewarganegaraan: getVal('kewarganegaraan') || 'WNI',
-                    gelombang: getVal('gelombang') || settings.psbConfig.activeGelombang,
+                    gelombang: Number(getVal('gelombang')) || settings.psbConfig.activeGelombang,
+                    tahunAjaran: String(getVal('tahunAjaran', 'tahunAjaranAktif', 'Tahun Ajaran', 'psbTahunAjaran') || activePsbTa).trim(),
                     
                     catatan: getVal('catatan', 'Catatan') || '',
                     jalurPendaftaran: getVal('jalurPendaftaran', 'Jalur Pendaftaran') || 'Reguler',
@@ -388,16 +493,17 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 };
 
                 const newPendaftar = healPendaftarRecordWithDetails({ ...item, ...rawPendaftar }, settings).healed;
-                const nameKey = newPendaftar.namaLengkap.toLowerCase().trim();
-                const existingPendaftar = existingByNameMap.get(nameKey);
+                const existingIdx = workingExistingPool.findIndex(existing =>
+                    isSamePendaftarIdentity(existing, newPendaftar, activePsbTa)
+                );
+                const existingPendaftar = existingIdx >= 0 ? workingExistingPool[existingIdx] : undefined;
 
                 if (existingPendaftar) {
-                    // Check if existing record is missing fields that are present in newPendaftar
                     const enrichableKeys: (keyof Pendaftar)[] = [
                         'pekerjaanAyah', 'pendidikanAyah', 'penghasilanAyah', 'statusAyah', 'nikAyah', 'teleponAyah', 'tempatLahirAyah', 'tanggalLahirAyah',
                         'pekerjaanIbu', 'pendidikanIbu', 'penghasilanIbu', 'statusIbu', 'nikIbu', 'teleponIbu', 'tempatLahirIbu', 'tanggalLahirIbu',
                         'namaWali', 'nikWali', 'statusWali', 'nomorHpWali', 'pekerjaanWali', 'pendidikanWali', 'penghasilanWali',
-                        'tinggiBadan', 'beratBadan', 'golonganDarah', 'riwayatPenyakit', 'berkebutuhanKhusus'
+                        'tinggiBadan', 'beratBadan', 'golonganDarah', 'riwayatPenyakit', 'berkebutuhanKhusus', 'tahunAjaran'
                     ];
                     let hasEnrichment = false;
                     const mergedExisting: any = { ...existingPendaftar };
@@ -409,38 +515,59 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                             hasEnrichment = true;
                         }
                     }
+                    // Gabungkan customData baru yang belum ada (mis. link berkas Drive tambahan)
+                    try {
+                        const curCustom = existingPendaftar.customData ? JSON.parse(existingPendaftar.customData) : {};
+                        const incCustom = newPendaftar.customData ? JSON.parse(newPendaftar.customData) : {};
+                        let customMerged = false;
+                        for (const ck of Object.keys(incCustom)) {
+                            if ((curCustom[ck] === undefined || curCustom[ck] === '') && incCustom[ck] !== undefined && incCustom[ck] !== '') {
+                                curCustom[ck] = incCustom[ck];
+                                customMerged = true;
+                            }
+                        }
+                        if (customMerged) {
+                            mergedExisting.customData = JSON.stringify(curCustom);
+                            hasEnrichment = true;
+                        }
+                    } catch {
+                        // ignore customData merge parse error
+                    }
                     const { healed: healedExisting, changed: healedChanged } = healPendaftarRecordWithDetails(mergedExisting, settings);
                     if (hasEnrichment || healedChanged) {
-                        await db.pendaftar.put({ ...healedExisting, id: existingPendaftar.id, lastModified: Date.now() });
+                        const savedExisting = { ...healedExisting, id: existingPendaftar.id, lastModified: Date.now() };
+                        await db.pendaftar.put(savedExisting);
+                        workingExistingPool[existingIdx] = savedExisting;
                         updatedCount++;
                     }
                     continue;
                 }
 
                 await db.pendaftar.put(newPendaftar);
-                existingByNameMap.set(nameKey, newPendaftar);
+                workingExistingPool.push(newPendaftar);
                 addedCount++;
             }
 
+            const providerLabel = usedProviders.size > 0 ? Array.from(usedProviders).join(', ') : 'Cloud PSB';
             if (addedCount > 0 || updatedCount > 0) {
                 onUpdateList();
                 const msgParts = [];
                 if (addedCount > 0) msgParts.push(`${addedCount} pendaftar baru ditarik`);
                 if (updatedCount > 0) msgParts.push(`${updatedCount} data pendaftar dilengkapi`);
-                showToast(`Berhasil: ${msgParts.join(' & ')} dari Google Sheet.`, 'success');
+                showToast(`Berhasil: ${msgParts.join(' & ')} dari ${providerLabel}.`, 'success');
             } else {
-                showToast('Tidak ada data baru. Semua data di Sheet sudah sinkron dengan aplikasi.', 'info');
+                showToast(`Tidak ada data baru. Semua data di ${providerLabel} sudah sinkron dengan aplikasi.`, 'info');
             }
 
         } catch (e: any) {
             console.error(e);
-            showAlert('Gagal Tarik Data', `Terjadi kesalahan: ${e.message}. Pastikan script sudah di-deploy sebagai Web App (Exec: Me, Access: Anyone).`);
+            showAlert('Gagal Tarik Data Cloud', `Terjadi kesalahan: ${e.message}. Pastikan endpoint backend aktif & dapat diakses.`);
         } finally {
             setIsSyncing(false);
         }
     };
 
-    const handleProcessWA = () => {
+    const handleProcessWA = async () => {
         if (!canWrite || !waInput.trim()) return;
         
         try {
@@ -451,10 +578,14 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 const encoded = backupMatch[1].trim();
                 // Decode: Base64 -> String (escaped) -> String (UTF-8)
                 const jsonString = decodeURIComponent(escape(atob(encoded)));
-                const data = JSON.parse(jsonString);
+                let data = JSON.parse(jsonString);
+                const env = tryParseE2eeEnvelope(data);
+                if (env) {
+                    data = await decryptAnyEnvelope(env);
+                }
                 
                 processPendaftarData(data);
-                showToast('Data Backup Terenkripsi berhasil diproses!', 'success');
+                showToast(env ? 'Data Backup E2EE berhasil didekripsi & diproses!' : 'Data Backup Terenkripsi berhasil diproses!', 'success');
                 setWaInput('');
                 setIsWaModalOpen(false);
                 return;
@@ -463,7 +594,11 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             // Fallback to Old JSON Format
             const jsonMatch = waInput.match(/PSB_START([\s\S]*?)PSB_END/);
             if (jsonMatch && jsonMatch[1]) {
-                const data = JSON.parse(jsonMatch[1].trim());
+                let data = JSON.parse(jsonMatch[1].trim());
+                const env = tryParseE2eeEnvelope(data);
+                if (env) {
+                    data = await decryptAnyEnvelope(env);
+                }
                 processPendaftarData(data);
                 showToast('Data JSON berhasil diimpor.', 'success');
                 setWaInput('');
@@ -473,9 +608,9 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
             showToast('Format pesan tidak valid. Pastikan menyalin kode PSB_BACKUP_START atau PSB_START.', 'error');
 
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            showToast('Gagal memproses data. Kode mungkin rusak atau tidak lengkap.', 'error');
+            showToast(e?.message?.includes('E2EE_LOCKED') ? e.message : 'Gagal memproses data. Kode mungkin rusak atau tidak lengkap.', 'error');
         }
     }
 
@@ -514,12 +649,13 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             ...data,
             id: generateSyncSafeId(),
             alamat: alamatObj,
-            jenjangId: parseInt(data.jenjangId) || settings.jenjang[0]?.id || 0,
+            jenjangId: resolveJenjangIdFromInput(data.jenjangId || data.jenjang, settings, settings.psbConfig?.targetJenjangId || settings.jenjang[0]?.id || 0),
             tanggalDaftar: data.tanggalDaftar || new Date().toISOString(),
             tanggalMasuk: data.tanggalDaftar || new Date().toISOString(),
             status: 'Baru',
             kewarganegaraan: data.kewarganegaraan || 'WNI',
-            gelombang: settings.psbConfig.activeGelombang,
+            gelombang: Number(data.gelombang) || settings.psbConfig.activeGelombang,
+            tahunAjaran: data.tahunAjaran || data.tahunAjaranAktif || activePsbTa,
             customData: Object.keys(customDataObj).length > 0 ? JSON.stringify(customDataObj) : (data.customData || '{}'),
             deleted: false,
             lastModified: Date.now(),
@@ -710,8 +846,36 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             anakKe: pendaftar.anakKe,
             jumlahSaudara: pendaftar.jumlahSaudara,
 
-            // Notes and Custom Fields Migration
-            catatan: pendaftar.catatan || customData.catatan || undefined,
+            // Notes, PSB Selection Summary, and Custom Fields Migration
+            catatan: (() => {
+                const lines: string[] = [];
+                if (pendaftar.catatan || customData.catatan) {
+                    lines.push(String(pendaftar.catatan || customData.catatan).trim());
+                }
+                const regNo = getPsbRegistrationNumber(pendaftar, settings.jenjang.find(j => j.id === targetJenjangId)?.nama);
+                const berkasDone = pendaftar.berkasFisik ? [
+                    pendaftar.berkasFisik.kk && 'KK',
+                    pendaftar.berkasFisik.akta && 'Akta',
+                    pendaftar.berkasFisik.ijazahSkl && 'Ijazah/SKL',
+                    pendaftar.berkasFisik.suratSehat && 'Ket. Sehat',
+                    pendaftar.berkasFisik.pasFoto && 'Pas Foto'
+                ].filter(Boolean) as string[] : [];
+                const avgUjian = calculatePsbAverageScore(pendaftar.nilaiUjian);
+                const psbMetaParts: string[] = [`No. Reg PSB: **${regNo}**`];
+                if (pendaftar.tahunAjaran) psbMetaParts.push(`TA Masuk: ${pendaftar.tahunAjaran}`);
+                if (pendaftar.jalurPendaftaran) psbMetaParts.push(`Jalur: ${pendaftar.jalurPendaftaran}`);
+                if (berkasDone.length > 0) psbMetaParts.push(`Berkas Posko: ${berkasDone.length}/5 (${berkasDone.join(', ')})`);
+                if (avgUjian > 0) {
+                    psbMetaParts.push(`Skor Ujian PSB: **${avgUjian}** (${pendaftar.nilaiUjian?.rekomendasi || 'Direkomendasikan'})`);
+                }
+                if (pendaftar.nilaiUjian?.catatanUjian) {
+                    psbMetaParts.push(`Catatan Penguji: ${pendaftar.nilaiUjian.catatanUjian}`);
+                }
+                if (psbMetaParts.length > 0) {
+                    lines.push(`---\n**Rekap Seleksi PSB:**\n- ${psbMetaParts.join('\n- ')}`);
+                }
+                return lines.length > 0 ? lines.join('\n\n') : undefined;
+            })(),
             customData: pendaftar.customData || (Object.keys(customData).length > 0 ? JSON.stringify(customData) : undefined),
 
             riwayatStatus: [firstRiwayat],
@@ -729,20 +893,31 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         const rawList = Array.isArray(pendaftarOrList) ? pendaftarOrList : [pendaftarOrList];
         if (rawList.length === 0) return;
 
-        // Guard against duplicate migration into Data Santri
+        // Guard against duplicate migration into Data Santri (checks live santriList + same batch)
         const alreadyMigratedNames: string[] = [];
+        const workingSantriPool: Santri[] = [...santriList];
         const list = rawList.filter((p) => {
             const cleanNik = (p.nik || '').trim();
             const cleanNisn = (p.nisn || '').trim();
             const cleanNama = (p.namaLengkap || '').trim().toLowerCase();
-            const isDuplicateInSantri = santriList.some(s => {
+            const cleanDob = (p.tanggalLahir || '').trim().slice(0, 10);
+            const isDuplicateInSantri = workingSantriPool.some(s => {
                 if (s.deleted) return false;
+                if (p.santriId && s.id === p.santriId) return true;
                 if (cleanNik && cleanNik.length >= 8 && (s.nik || '').trim() === cleanNik) return true;
                 if (cleanNisn && cleanNisn.length >= 6 && (s.nisn || '').trim() === cleanNisn) return true;
                 if (
-                    p.status === 'Diterima' &&
+                    cleanNama &&
+                    cleanDob &&
                     (s.namaLengkap || '').trim().toLowerCase() === cleanNama &&
-                    (s.tanggalLahir || '') === (p.tanggalLahir || '')
+                    (s.tanggalLahir || '').trim().slice(0, 10) === cleanDob
+                ) {
+                    return true;
+                }
+                if (
+                    p.status === 'Diterima' &&
+                    cleanNama &&
+                    (s.namaLengkap || '').trim().toLowerCase() === cleanNama
                 ) {
                     return true;
                 }
@@ -769,7 +944,29 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             const newSantriList: Santri[] = [];
             const newTagihanList: Tagihan[] = [];
             const updatedPendaftarList: Pendaftar[] = [];
-            const workingSantriPool: Santri[] = [...santriList];
+
+            // Hitung periode tagihan wajar berdasarkan jatuhTempo atau awal tahun ajaran aktif/PSB
+            const nowDate = new Date();
+            let billingMonth = nowDate.getMonth() + 1;
+            let billingYear = nowDate.getFullYear();
+            if (billingOption?.jatuhTempo) {
+                const jtDate = new Date(billingOption.jatuhTempo);
+                if (!isNaN(jtDate.getTime())) {
+                    billingMonth = jtDate.getMonth() + 1;
+                    billingYear = jtDate.getFullYear();
+                }
+            } else {
+                const targetAcadYear = settings.academicYears?.find(
+                    ay => ay.labelMasehi === activePsbTa || ay.isActive
+                );
+                if (targetAcadYear && targetAcadYear.masehiStartYear && targetAcadYear.masehiStartMonth) {
+                    const acadStart = new Date(targetAcadYear.masehiStartYear, targetAcadYear.masehiStartMonth - 1, 1);
+                    if (acadStart > nowDate) {
+                        billingMonth = targetAcadYear.masehiStartMonth;
+                        billingYear = targetAcadYear.masehiStartYear;
+                    }
+                }
+            }
 
             list.forEach((pendaftar) => {
                 const santriId = generateSyncSafeId();
@@ -796,9 +993,10 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                         deskripsi: list.length > 1
                             ? `${billingOption.deskripsi || 'Daftar Ulang Santri Baru'} - ${pendaftar.namaLengkap}`
                             : (billingOption.deskripsi || `Daftar Ulang - ${pendaftar.namaLengkap}`),
-                        bulan: new Date().getMonth() + 1,
-                        tahun: new Date().getFullYear(),
+                        bulan: billingMonth,
+                        tahun: billingYear,
                         nominal: billingOption.nominal,
+                        jatuhTempo: billingOption.jatuhTempo,
                         status: 'Belum Lunas',
                         deleted: false,
                         lastModified: now
@@ -808,6 +1006,8 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 updatedPendaftarList.push({
                     ...pendaftar,
                     status: 'Diterima',
+                    nis: newSantri.nis || pendaftar.nis,
+                    santriId,
                     jenjangId: placementOption?.perPendaftar?.[pendaftar.id]?.jenjangId ?? placementOption?.jenjangId ?? pendaftar.jenjangId,
                     deleted: false,
                     lastModified: now
@@ -915,7 +1115,13 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const handleSavePendaftar = async (data: Omit<Pendaftar, 'id'>) => {
         if (!canWrite) return;
         const newId = generateSyncSafeId();
-        const newRecord: Pendaftar = { ...data, id: newId, deleted: false, lastModified: Date.now() } as Pendaftar;
+        const newRecord: Pendaftar = {
+            ...data,
+            id: newId,
+            tahunAjaran: data.tahunAjaran || activePsbTa,
+            deleted: false,
+            lastModified: Date.now()
+        } as Pendaftar;
         await db.pendaftar.put(newRecord);
         await logActivity('INSERT', 'pendaftar', newId, null, { namaLengkap: newRecord.namaLengkap, status: newRecord.status }, currentUser?.username || 'Admin');
         onUpdateList();
@@ -925,7 +1131,11 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const handleUpdatePendaftar = async (data: Pendaftar) => {
         if (!canWrite) return;
         const existing = await db.pendaftar.get(data.id);
-        const updated = { ...data, lastModified: Date.now() };
+        const updated = {
+            ...data,
+            tahunAjaran: data.tahunAjaran || existing?.tahunAjaran || activePsbTa,
+            lastModified: Date.now()
+        };
         await db.pendaftar.put(updated);
         await logActivity('UPDATE', 'pendaftar', data.id, existing ? { namaLengkap: existing.namaLengkap, status: existing.status } : null, { namaLengkap: updated.namaLengkap, status: updated.status }, currentUser?.username || 'Admin');
         onUpdateList();
@@ -933,7 +1143,8 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     }
 
     const handleDownloadArchive = async () => {
-        if (pendaftarList.length === 0) {
+        const exportSource = filteredData.length > 0 ? filteredData : yearScopedData;
+        if (exportSource.length === 0) {
             showAlert('Kosong', 'Tidak ada data pendaftar untuk diarsipkan.');
             return;
         }
@@ -946,7 +1157,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         try {
             showToast('Menyiapkan arsip dokumen...', 'info');
             
-            for (const p of pendaftarList) {
+            for (const p of exportSource) {
                 const customData = p.customData ? JSON.parse(p.customData) : {};
                 const files = Object.keys(customData).filter(key => {
                     const val = customData[key];
@@ -999,6 +1210,8 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             ...d,
             id: d.id || generateSyncSafeId(),
             status: d.status || 'Baru',
+            tahunAjaran: d.tahunAjaran || activePsbTa,
+            gelombang: d.gelombang || settings.psbConfig.activeGelombang,
             tanggalDaftar: d.tanggalDaftar || new Date().toISOString(),
             tanggalMasuk: d.tanggalDaftar || new Date().toISOString(),
             jalurPendaftaran: d.jalurPendaftaran || 'Reguler',
@@ -1056,21 +1269,21 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                     <span className="xs:hidden truncate">+ Santri</span>
                                 </button>
 
-                                {/* Row 1, Col 2: Tombol Google Sync & Pengaturan GAS */}
+                                {/* Row 1, Col 2: Tombol Tarik Data Cloud & Pengaturan Backend */}
                                 <div className="inline-flex rounded-xl shadow-2xs overflow-hidden h-8 sm:h-9 border border-emerald-700 min-w-0">
                                     <button 
-                                        onClick={scriptUrl ? handleGoogleSync : () => setIsGasModalOpen(true)}
+                                        onClick={scriptUrl || (settings.psbConfig?.templates || []).some(t => t.googleScriptUrl) ? handleGoogleSync : () => setIsGasModalOpen(true)}
                                         disabled={isSyncing}
                                         className="bg-emerald-700 hover:bg-emerald-800 text-white px-1.5 sm:px-3 py-1 sm:py-2 text-[11px] sm:text-xs flex-1 flex items-center justify-center gap-1 sm:gap-1.5 disabled:bg-emerald-400 font-semibold whitespace-nowrap transition-colors min-w-0"
-                                        title={scriptUrl ? "Tarik data terbaru dari Google Sheet" : "Atur link Google Apps Script untuk menarik data"}
+                                        title={scriptUrl ? `Tarik data pendaftar terbaru dari ${getPsbCloudProviderMeta(settings.psbConfig?.backendProvider).name}` : "Atur koneksi Cloud PSB (GAS / Cloudflare / Supabase) untuk menarik data"}
                                     >
-                                        {isSyncing ? <i className="bi bi-arrow-repeat animate-spin text-xs"></i> : <i className="bi bi-file-earmark-spreadsheet-fill text-xs shrink-0"></i>}
-                                        <span className="truncate">Tarik Sheet</span>
+                                        {isSyncing ? <i className="bi bi-arrow-repeat animate-spin text-xs"></i> : <i className="bi bi-cloud-arrow-down-fill text-xs shrink-0"></i>}
+                                        <span className="truncate">Tarik Cloud</span>
                                     </button>
                                     <button
                                         onClick={() => setIsGasModalOpen(true)}
                                         className="bg-emerald-800 hover:bg-emerald-900 text-white px-1.5 sm:px-2 py-1 sm:py-2 border-l border-emerald-600 text-xs flex items-center justify-center transition-colors shrink-0"
-                                        title="Pengaturan Koneksi Google Apps Script (GAS)"
+                                        title="Pengaturan Koneksi Cloud PSB (GAS + Drive / Cloudflare D1 & R2 / Supabase)"
                                     >
                                         <i className="bi bi-gear-fill text-[11px]"></i>
                                     </button>
@@ -1207,6 +1420,19 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                             className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-teal-500 focus:border-teal-500"
                         />
                     </div>
+                    <select
+                        value={filterTahunAjaran}
+                        onChange={e => setFilterTahunAjaran(e.target.value)}
+                        className="border border-gray-300 rounded-lg px-3 py-2 text-sm sm:w-44 bg-white font-semibold text-teal-800"
+                        title="Filter Tahun Ajaran Pendaftaran"
+                    >
+                        <option value="__all__">Semua Tahun Ajaran</option>
+                        {tahunAjaranOptions.map(ta => (
+                            <option key={ta} value={ta}>
+                                {ta === activePsbTa ? `TA ${ta} (Aktif)` : `TA ${ta}`}
+                            </option>
+                        ))}
+                    </select>
                     <select
                         value={filterStatus}
                         onChange={e => setFilterStatus(e.target.value)}
@@ -1844,6 +2070,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     onClose={() => setIsArchiveModalOpen(false)}
                     settings={settings}
                     config={settings.psbConfig}
+                    onSaveConfig={onSaveConfig}
                 />
             )}
         </div>

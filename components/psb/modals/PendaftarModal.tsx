@@ -5,6 +5,7 @@ import { loadFirebasePsbUploadRuntime } from '../../../utils/lazyFirebaseRuntime
 import { isFirebaseClientConfigReady } from '../../../firebaseStorage';
 import { getPsbRegistrationNumber, calculatePsbAverageScore, healPendaftarRecordWithDetails, normalizePhoneLocal, resolveCustomFieldLabel, getAllConfiguredCustomFields, PSB_PENDIDIKAN_OPTIONS, PSB_PENGHASILAN_OPTIONS, PSB_PEKERJAAN_OPTIONS, withCurrentOption, getPsbAcademicYearOptions } from '../utils/psbUtils';
 import { openExternalLinkSafe } from '../../../services/waService';
+import { SAFE_IMG, SAFE_DOC, isSafeHttpUrl, openPreview } from '../../../utils/safePreview';
 import { MarkdownEditor } from '../../common/MarkdownEditor';
 import { MarkdownViewer } from '../../common/MarkdownViewer';
 
@@ -460,8 +461,8 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
 
     const renderCustomValue = (key: string, val: any) => {
         const stringVal = String(val || '');
-        const isUrl = stringVal.startsWith('http');
-        const isBase64Image = stringVal.startsWith('data:image');
+        const isUrl = isSafeHttpUrl(stringVal);
+        const isBase64Image = SAFE_IMG.test(stringVal);
 
         if (isUrl) {
             return (
@@ -483,14 +484,8 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                     <img src={stringVal} alt={key} className="max-h-40 rounded border p-1 bg-white" />
                     <button 
                         type="button"
-                        onClick={async () => {
-                            try {
-                                const res = await fetch(stringVal);
-                                const blob = await res.blob();
-                                const blobUrl = URL.createObjectURL(blob);
-                                openExternalLinkSafe(blobUrl);
-                                setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-                            } catch {
+                        onClick={() => {
+                            if (!openPreview(stringVal, SAFE_IMG)) {
                                 showAlert('Gagal Membuka', 'Pratinjau berkas tidak dapat dibuka di peramban ini.');
                             }
                         }}
@@ -1284,7 +1279,7 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                                         </button>
                                                         {fileVal && (
                                                             <>
-                                                                {typeof fileVal === 'string' && fileVal.startsWith('http') ? (
+                                                                {isSafeHttpUrl(fileVal) ? (
                                                                     <a
                                                                         href={fileVal}
                                                                         target="_blank"
@@ -1294,21 +1289,16 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                                                     >
                                                                         <i className="bi bi-box-arrow-up-right"></i>
                                                                     </a>
-                                                                ) : (
+                                                                ) : typeof fileVal === 'string' && SAFE_DOC.test(fileVal) ? (
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() => {
-                                                                            if (typeof fileVal === 'string') {
-                                                                                const w = window.open();
-                                                                                if (w) w.document.write(`<iframe src="${fileVal}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
-                                                                            }
-                                                                        }}
+                                                                        onClick={() => openPreview(fileVal, SAFE_DOC)}
                                                                         className="px-2.5 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-semibold"
                                                                         title="Lihat Berkas"
                                                                     >
                                                                         <i className="bi bi-eye"></i>
                                                                     </button>
-                                                                )}
+                                                                ) : null}
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => handleRemoveFile(activeKey)}

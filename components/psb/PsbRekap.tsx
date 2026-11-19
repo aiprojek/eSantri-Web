@@ -12,6 +12,7 @@ import { logActivity } from '../../services/logService';
 import { openExternalLinkSafe } from '../../services/waService';
 import { decryptPsbCloudRowsWithReport, fetchPsbFromCloudAdapter, getPsbCloudProviderMeta, isPsbCloudEndpointValid } from '../../services/psbCloudService';
 import { decryptAnyEnvelope, tryParseE2eeEnvelope } from '../../services/e2eeService';
+import { sanitizePendaftar } from '../../utils/sanitizePendaftar';
 import { LoadingFallback } from '../common/LoadingFallback';
 import { PsbExamCardModal } from './modals/PsbExamCardModal';
 import { PsbAcceptanceModal, PsbBillingOption, PsbPlacementOption } from './modals/PsbAcceptanceModal';
@@ -210,12 +211,12 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                         }, settings);
                         const duplicate = workingPool.some(existing => isSamePendaftarIdentity(existing, healedItem, activePsbTa));
                         if (!duplicate) {
-                            const prepared: Pendaftar = {
+                            const prepared: Pendaftar = sanitizePendaftar({
                                 ...healedItem,
                                 id: generateSyncSafeId(),
                                 deleted: false,
                                 lastModified: healedItem.lastModified || Date.now()
-                            };
+                            });
                             workingPool.push(prepared);
                             itemsWithId.push(prepared);
                         }
@@ -535,7 +536,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     }
                     const { healed: healedExisting, changed: healedChanged } = healPendaftarRecordWithDetails(mergedExisting, settings);
                     if (hasEnrichment || healedChanged) {
-                        const savedExisting = { ...healedExisting, id: existingPendaftar.id, lastModified: Date.now() };
+                        const savedExisting = sanitizePendaftar({ ...healedExisting, id: existingPendaftar.id, lastModified: Date.now() });
                         await db.pendaftar.put(savedExisting);
                         workingExistingPool[existingIdx] = savedExisting;
                         updatedCount++;
@@ -543,8 +544,9 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     continue;
                 }
 
-                await db.pendaftar.put(newPendaftar);
-                workingExistingPool.push(newPendaftar);
+                const cleanNewPendaftar = sanitizePendaftar(newPendaftar);
+                await db.pendaftar.put(cleanNewPendaftar);
+                workingExistingPool.push(cleanNewPendaftar);
                 addedCount++;
             }
 
@@ -660,7 +662,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             deleted: false,
             lastModified: Date.now(),
         };
-        const newPendaftar = healPendaftarRecord(rawPendaftar, settings);
+        const newPendaftar = sanitizePendaftar(healPendaftarRecord(rawPendaftar, settings));
         db.pendaftar.put(newPendaftar).then(() => {
             void logActivity('INSERT', 'pendaftar', newPendaftar.id, null, { namaLengkap: newPendaftar.namaLengkap, source: 'WhatsApp' }, currentUser?.username || 'Admin');
             onUpdateList();
@@ -1206,7 +1208,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
     const handleBulkSave = async (data: Partial<Pendaftar>[]) => {
         const now = Date.now();
-        const newItems = data.map(d => ({
+        const newItems = data.map(d => sanitizePendaftar({
             ...d,
             id: d.id || generateSyncSafeId(),
             status: d.status || 'Baru',
@@ -1217,7 +1219,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             jalurPendaftaran: d.jalurPendaftaran || 'Reguler',
             deleted: false,
             lastModified: now
-        } as Pendaftar));
+        }));
         
         await db.pendaftar.bulkPut(newItems);
         onUpdateList();

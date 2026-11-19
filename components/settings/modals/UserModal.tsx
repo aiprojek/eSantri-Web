@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserPermissions, AccessLevel } from '../../../types';
 import { useAppContext } from '../../../AppContext';
-import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS, DEFAULT_WALI_KELAS_PERMISSIONS, ROLE_TEMPLATES } from '../../../services/authService';
+import { hashSecret, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS, DEFAULT_WALI_KELAS_PERMISSIONS, ROLE_TEMPLATES } from '../../../services/authService';
 import { CURRENT_PERMISSION_VERSION, normalizeUserPermissions } from '../../../services/permissionMigrationService';
 import { generateSyncSafeId } from '../../../utils/idGenerator';
 
@@ -79,13 +79,20 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         // Hashing Logic
         let passwordHash = userData?.passwordHash || '';
         if (password) {
-            passwordHash = await hashString(password);
+            passwordHash = await hashSecret(password);
         }
 
         let securityAnswerHash = userData?.securityAnswerHash || '';
         if (securityAnswer) {
             // Hash answer in lowercase for case-insensitive comparison later
-            securityAnswerHash = await hashString(securityAnswer.toLowerCase().trim());
+            securityAnswerHash = await hashSecret(securityAnswer.toLowerCase().trim());
+        }
+
+        const trimmedQuestion = securityQuestion.trim();
+        const isSecurityConfigured = Boolean(trimmedQuestion && securityAnswerHash);
+        if (trimmedQuestion && !securityAnswerHash) {
+            showAlert('Input Tidak Lengkap', 'Jawaban Keamanan wajib diisi jika Anda menetapkan pertanyaan keamanan baru.');
+            return;
         }
 
         const newUser: User = {
@@ -95,9 +102,11 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             role,
             permissions,
             passwordHash,
-            securityQuestion: securityQuestion.trim(),
+            securityQuestion: trimmedQuestion,
             securityAnswerHash,
             isDefaultAdmin: userData?.isDefaultAdmin,
+            mustChangePassword: password ? false : userData?.mustChangePassword,
+            mustSetupSecurity: isSecurityConfigured ? false : userData?.mustSetupSecurity,
             permissionVersion: CURRENT_PERMISSION_VERSION,
             lastModified: Date.now(),
         };

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { PondokSettings, User } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 import { db } from '../../../db';
-import { hashString, ADMIN_PERMISSIONS, generateRecoveryKey } from '../../../services/authService';
+import { hashSecret, ADMIN_PERMISSIONS, generateRecoveryKey, generateInitialPassword } from '../../../services/authService';
 import { CURRENT_PERMISSION_VERSION, migrateUserPermissions, normalizeUserPermissions } from '../../../services/permissionMigrationService';
 import { UserModal } from '../modals/UserModal';
 import { BulkUserFromTeacherModal } from '../modals/BulkUserFromTeacherModal';
@@ -22,6 +22,7 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
+    const [initialPassword, setInitialPassword] = useState<string | null>(null);
     
     // New State for Bulk Modal
     const [isBulkTeacherModalOpen, setIsBulkTeacherModalOpen] = useState(false);
@@ -46,12 +47,13 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
             }
 
             const generatedKey = generateRecoveryKey();
-            const keyHash = await hashString(generatedKey);
+            const keyHash = await hashSecret(generatedKey);
+            const generatedPassword = generateInitialPassword(12);
             
             const defaultAdmin: User = {
                 id: generateSyncSafeId(),
                 username: 'admin',
-                passwordHash: await hashString('admin123'),
+                passwordHash: await hashSecret(generatedPassword),
                 fullName: 'Administrator',
                 role: 'admin',
                 permissions: normalizeUserPermissions({
@@ -63,17 +65,19 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
                     permissions: ADMIN_PERMISSIONS as any,
                     isDefaultAdmin: true,
                 } as User),
-                securityQuestion: 'Apa nama aplikasi ini?',
-                securityAnswerHash: await hashString('esantri'),
+                securityQuestion: '',
+                securityAnswerHash: '',
                 recoveryKeyHash: keyHash,
                 isDefaultAdmin: true,
+                mustSetupSecurity: true,
                 permissionVersion: CURRENT_PERMISSION_VERSION,
                 lastModified: Date.now(),
             };
             await db.users.add(defaultAdmin);
             setUsers([defaultAdmin]);
             
-            setRecoveryKey(generatedKey); // Show key to user
+            setRecoveryKey(generatedKey); // Show key once to user
+            setInitialPassword(generatedPassword); // Show initial random password once to user
             
             handleInputChange('multiUserMode', true);
             return;
@@ -162,7 +166,7 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
             'Kunci darurat yang lama tidak akan berlaku lagi. Pastikan Anda menyimpan kunci yang baru.',
             async () => {
                 const newKey = generateRecoveryKey();
-                const newHash = await hashString(newKey);
+                const newHash = await hashSecret(newKey);
                 
                 await db.users.update(currentUser.id, { recoveryKeyHash: newHash });
                 setRecoveryKey(newKey);
@@ -198,12 +202,22 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
                 </p>
             </div>
 
-            {/* Recovery Key Modal Display */}
+            {/* Recovery Key & Initial Password Modal Display */}
             {recoveryKey && (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-4 animate-fade-in-down">
                     <h3 className="text-red-800 font-bold flex items-center gap-2 mb-2">
-                        <i className="bi bi-key-fill"></i> KUNCI PEMULIHAN DARURAT
+                        <i className="bi bi-key-fill"></i> {initialPassword ? 'KREDENSIAL AWAL ADMIN & KUNCI PEMULIHAN' : 'KUNCI PEMULIHAN DARURAT'}
                     </h3>
+                    {initialPassword && (
+                        <div className="mb-4 rounded-lg border border-red-200 bg-white p-3">
+                            <p className="text-xs font-semibold text-red-800 mb-2">
+                                Password awal acak untuk username <code className="bg-red-50 px-1.5 py-0.5 rounded">admin</code> (hanya ditampilkan sekali):
+                            </p>
+                            <div className="select-all rounded border border-red-100 bg-red-50/50 p-2 text-center font-mono text-base font-bold tracking-wider text-gray-900">
+                                {initialPassword}
+                            </div>
+                        </div>
+                    )}
                     <p className="text-sm text-red-700 mb-3">
                         Simpan kode ini di tempat yang sangat aman (Tulis di kertas/Password Manager). Kode ini adalah <strong>satu-satunya cara</strong> untuk mereset password Admin jika Anda lupa password DAN jawaban keamanan.
                     </p>
@@ -211,10 +225,32 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
                         {recoveryKey}
                     </div>
                     <div className="mt-3 text-center">
-                        <button onClick={() => setRecoveryKey(null)} className="text-sm text-red-600 underline hover:text-red-800">Saya sudah menyimpannya, tutup.</button>
+                        <button onClick={() => { setRecoveryKey(null); setInitialPassword(null); }} className="text-sm text-red-600 underline hover:text-red-800">Saya sudah menyimpannya, tutup.</button>
                     </div>
                 </div>
             )}
+
+            {localSettings.multiUserMode && (() => {
+                const adminNeedsSecurity = users.find(u => u.isDefaultAdmin && (!u.securityQuestion || !u.securityAnswerHash || u.mustSetupSecurity));
+                if (!adminNeedsSecurity) return null;
+                return (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-sm text-amber-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                            <div className="font-semibold">Pertanyaan Keamanan Admin Belum Diatur</div>
+                            <div className="mt-0.5 text-xs text-amber-800">
+                                Atur pertanyaan dan jawaban keamanan pribadi untuk akun <strong>{adminNeedsSecurity.username}</strong> sekarang atau saat login pertama.
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => { setEditingUser(adminNeedsSecurity); setIsUserModalOpen(true); }}
+                            className="shrink-0 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-amber-700"
+                        >
+                            Atur Sekarang
+                        </button>
+                    </div>
+                );
+            })()}
 
             {localSettings.multiUserMode && (
                 <>

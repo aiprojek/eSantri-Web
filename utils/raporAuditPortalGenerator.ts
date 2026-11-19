@@ -1498,27 +1498,55 @@ export const generateRaporAuditPortalHtml = (options: GenerateRaporAuditPortalOp
             return Number.isInteger(r2) ? String(r2) : String(Number(r2.toFixed(2)));
         }
 
+        const SAFE_FORMULA_IDS = new Set([
+            'rowId', 'getValue', 'average', 'sum', 'excelMin', 'excelMax',
+            'excelAbs', 'excelInt', 'excelTrunc', 'excelMod', 'excelPower', 'excelSqrt',
+            'excelRound', 'excelRoundUp', 'excelRoundDown', 'excelFixed',
+            'excelPredikat', 'angkaKeArab', 'terbilang',
+            'excelCmp', 'excelIsBlank', 'excelCountA', 'excelCountBlank',
+            'excelIf', 'excelIfs', 'excelIfError', 'excelAnd', 'excelOr', 'excelNot',
+            'excelConcat', 'excelConcatSpasi', 'excelUpper', 'excelLower', 'excelProper',
+            'excelSentence', 'excelTrim', 'excelLen', 'excelLeft', 'excelRight', 'excelMid',
+            'excelCount', 'excelCountIf', 'excelSumIf', 'excelAverageIf', 'excelKkm', 'rata2Kelas',
+            'true', 'false', 'null'
+        ]);
+        function isSafeCompiledExpr(expr) {
+            const stripped = String(expr || '').replace(/"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*'/g, ' null ');
+            if (/[;{}\\[\\]\`$\\\\]|=>/.test(stripped)) return false;
+            if (/[^a-zA-Z0-9_+\\-*/%<>=!&|?:.,()\\s]/.test(stripped)) return false;
+            const noDec = stripped.replace(/\\b\\d+\\.\\d+\\b/g, ' 0 ');
+            if (noDec.indexOf('.') !== -1) return false;
+            const ids = noDec.match(/\\b[a-zA-Z_][a-zA-Z0-9_]*\\b/g) || [];
+            for (let i = 0; i < ids.length; i++) {
+                if (!SAFE_FORMULA_IDS.has(ids[i])) return false;
+            }
+            return true;
+        }
         const compiledExprCache = new Map();
         const noopRata2Kelas = function() { return null; };
         function evalCompiledJs(exprJs, rowId, getValueFn, rata2KelasFn) {
             if (!exprJs) return null;
             let fn = compiledExprCache.get(exprJs);
             if (!fn) {
-                try {
-                    fn = new Function(
-                        'rowId', 'getValue', 'average', 'sum', 'excelMin', 'excelMax',
-                        'excelAbs', 'excelInt', 'excelTrunc', 'excelMod', 'excelPower', 'excelSqrt',
-                        'excelRound', 'excelRoundUp', 'excelRoundDown', 'excelFixed',
-                        'excelPredikat', 'angkaKeArab', 'terbilang',
-                        'excelCmp', 'excelIsBlank', 'excelCountA', 'excelCountBlank',
-                        'excelIf', 'excelIfs', 'excelIfError', 'excelAnd', 'excelOr', 'excelNot',
-                        'excelConcat', 'excelConcatSpasi', 'excelUpper', 'excelLower', 'excelProper',
-                        'excelSentence', 'excelTrim', 'excelLen', 'excelLeft', 'excelRight', 'excelMid',
-                        'excelCount', 'excelCountIf', 'excelSumIf', 'excelAverageIf', 'excelKkm', 'rata2Kelas',
-                        'return (' + exprJs + ');'
-                    );
-                } catch (e) {
+                if (!isSafeCompiledExpr(exprJs)) {
                     fn = function() { return null; };
+                } else {
+                    try {
+                        fn = new Function(
+                            'rowId', 'getValue', 'average', 'sum', 'excelMin', 'excelMax',
+                            'excelAbs', 'excelInt', 'excelTrunc', 'excelMod', 'excelPower', 'excelSqrt',
+                            'excelRound', 'excelRoundUp', 'excelRoundDown', 'excelFixed',
+                            'excelPredikat', 'angkaKeArab', 'terbilang',
+                            'excelCmp', 'excelIsBlank', 'excelCountA', 'excelCountBlank',
+                            'excelIf', 'excelIfs', 'excelIfError', 'excelAnd', 'excelOr', 'excelNot',
+                            'excelConcat', 'excelConcatSpasi', 'excelUpper', 'excelLower', 'excelProper',
+                            'excelSentence', 'excelTrim', 'excelLen', 'excelLeft', 'excelRight', 'excelMid',
+                            'excelCount', 'excelCountIf', 'excelSumIf', 'excelAverageIf', 'excelKkm', 'rata2Kelas',
+                            'return (' + exprJs + ');'
+                        );
+                    } catch (e) {
+                        fn = function() { return null; };
+                    }
                 }
                 compiledExprCache.set(exprJs, fn);
             }

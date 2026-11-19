@@ -6,6 +6,8 @@ import { migrateUserPermissions } from './permissionMigrationService';
 import { setAuditSyncMute } from './logService';
 import { mergePortalConfig } from './portalGasService';
 import { decryptBytesSym, E2EE_CHANGED_EVENT, encryptBytesSym, tryParseE2eeEnvelope } from './e2eeService';
+import { sanitizePendaftar } from '../utils/sanitizePendaftar';
+import { mergeSyncedUserCredentials, sanitizeUserForExternalSync } from './authService';
 
 const MASTER_FILENAME = 'master_data.json';
 const MASTER_CONFIG_FILENAME = 'master_config.json';
@@ -400,9 +402,10 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
                 
                 if (json.data && Array.isArray(json.data.pendaftar)) {
                     json.data.pendaftar.forEach((p: any) => {
-                         const key = `${String(p.tahunAjaran || '').trim().toLowerCase()}|${String(p.namaLengkap || '').trim().toLowerCase()}|${String(p.nik || p.nomorHpWali || p.tanggalLahir || p.id || '').trim().toLowerCase()}`;
+                         const itemToPush = tryParseE2eeEnvelope(p) ? p : sanitizePendaftar(p);
+                         const key = `${String(itemToPush.tahunAjaran || '').trim().toLowerCase()}|${String(itemToPush.namaLengkap || '').trim().toLowerCase()}|${String(itemToPush.nik || itemToPush.nomorHpWali || itemToPush.tanggalLahir || itemToPush.id || '').trim().toLowerCase()}`;
                          if (!seenIds.has(key)) {
-                             allPendaftar.push(p);
+                             allPendaftar.push(itemToPush);
                              seenIds.add(key);
                          }
                     });
@@ -483,9 +486,14 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
     // UPDATE: Compress Payload before upload
     const settingsRows = await db.settings.toArray();
     const e2eeMeta = settingsRows[0]?.e2eeConfig;
+    const e2eeSyncEnabled = Boolean(e2eeMeta?.enabled && e2eeMeta?.modules?.sync);
+    if (Array.isArray(data.users)) {
+        data.users = data.users.map((u: any) => sanitizeUserForExternalSync(u, e2eeSyncEnabled));
+    }
+
     const compressedBuffer = await compressData(
         payload,
-        e2eeMeta?.enabled && e2eeMeta?.modules?.sync ? { attachPublicE2eeMeta: e2eeMeta } : undefined
+        e2eeSyncEnabled ? { attachPublicE2eeMeta: e2eeMeta } : undefined
     );
 
     const filename = `${new Date().getTime()}_${username.replace(/\s+/g, '_')}.json`;
@@ -592,7 +600,9 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
                     const lTime = lItem.lastModified || 0;
                     const mTime = mItem.lastModified || 0;
                     if (mTime >= lTime) {
-                        itemsToPut.push(tableName === 'inventaris' ? mergeInventarisSubLogs(mItem, lItem) : mItem);
+                        let chosen = tableName === 'inventaris' ? mergeInventarisSubLogs(mItem, lItem) : mItem;
+                        if (tableName === 'users') chosen = mergeSyncedUserCredentials(chosen, lItem);
+                        itemsToPut.push(tableName === 'pendaftar' ? sanitizePendaftar(chosen) : chosen);
                     } else if (tableName === 'inventaris') {
                         const mergedInv = mergeInventarisSubLogs(lItem, mItem);
                         if (effectivePushBaseline > 0 && lTime > effectivePushBaseline && lTime <= newWatermarkMs) {
@@ -602,7 +612,7 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
                         itemsToPut.push(mergedInv);
                     }
                 } else {
-                    itemsToPut.push(mItem);
+                    itemsToPut.push(tableName === 'pendaftar' ? sanitizePendaftar(mItem) : mItem);
                 }
             }
 
@@ -904,16 +914,18 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
                 const locItem = localMap.get(recKey) as any;
                 
                 if (locItem) {
-                    const incTime = incItem.lastModified || 0;
+                    const effectiveIncItem = tableName === 'users' ? mergeSyncedUserCredentials(incItem, locItem) : incItem;
+                    const incTime = effectiveIncItem.lastModified || 0;
                     const locTime = locItem.lastModified || 0;
                     
-                    const { lastModified: t1, ...contentInc } = incItem;
+                    const { lastModified: t1, ...contentInc } = effectiveIncItem;
                     const { lastModified: t2, ...contentLoc } = locItem;
                     const isDiff = JSON.stringify(contentInc) !== JSON.stringify(contentLoc);
 
                     if (isDiff) {
                         if (incTime > locTime) {
-                            itemsToPut.push(tableName === 'inventaris' ? mergeInventarisSubLogs(incItem, locItem) : incItem);
+                            const chosen = tableName === 'inventaris' ? mergeInventarisSubLogs(effectiveIncItem, locItem) : effectiveIncItem;
+                            itemsToPut.push(tableName === 'pendaftar' ? sanitizePendaftar(chosen) : chosen);
                         } else {
                              const alreadyResolved = resolvedConflicts?.find(r => r.tableName === tableName && r.recordId === recKey);
                              if (!alreadyResolved) {
@@ -922,16 +934,17 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
                                      tableName,
                                      recordId: recKey,
                                      localData: locItem,
-                                     cloudData: incItem,
+                                     cloudData: effectiveIncItem,
                                      resolved: false
                                  });
                              } else {
-                                 itemsToPut.push(tableName === 'inventaris' ? mergeInventarisSubLogs(incItem, locItem) : incItem); 
+                                 const chosen = tableName === 'inventaris' ? mergeInventarisSubLogs(effectiveIncItem, locItem) : effectiveIncItem;
+                                 itemsToPut.push(tableName === 'pendaftar' ? sanitizePendaftar(chosen) : chosen); 
                              }
                         }
                     }
                 } else {
-                    itemsToPut.push(incItem);
+                    itemsToPut.push(tableName === 'pendaftar' ? sanitizePendaftar(incItem) : incItem);
                 }
             }
             
@@ -1073,16 +1086,18 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         settings: await db.settings.toArray()
     };
 
+    const settingsRows = await db.settings.toArray();
+    const e2eeMeta = settingsRows[0]?.e2eeConfig;
+    const e2eeSyncEnabled = Boolean(e2eeMeta?.enabled && e2eeMeta?.modules?.sync);
+
     const masterConfig = {
         timestamp: new Date().toISOString(),
-        users: await db.users.toArray(),
-        settings: await db.settings.toArray()
+        users: (await db.users.toArray()).map((u) => sanitizeUserForExternalSync(u, e2eeSyncEnabled)),
+        settings: settingsRows
     };
 
     // UPDATE: Compress Data (and encrypt if E2EE sync enabled) before Upload
-    const settingsRows = await db.settings.toArray();
-    const e2eeMeta = settingsRows[0]?.e2eeConfig;
-    const compressOpts = e2eeMeta?.enabled && e2eeMeta?.modules?.sync ? { attachPublicE2eeMeta: e2eeMeta } : undefined;
+    const compressOpts = e2eeSyncEnabled ? { attachPublicE2eeMeta: e2eeMeta } : undefined;
     const compressedMaster = await compressData(masterData, compressOpts);
     const compressedConfig = await compressData(masterConfig, compressOpts);
 
@@ -1195,7 +1210,16 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
 
     if (data) {
         if (data.users) {
-            const normalizedUsers = (data.users as any[]).map((user) => migrateUserPermissions(user as any).user);
+            const existingUsers = await db.users.toArray();
+            const existingById = new Map(existingUsers.map((u) => [u.id, u]));
+            const existingByUsername = new Map(existingUsers.map((u) => [String(u.username || '').toLowerCase(), u]));
+            const normalizedUsers = (data.users as any[]).map((rawUser) => {
+                const localMatch =
+                    existingById.get(rawUser?.id) ||
+                    existingByUsername.get(String(rawUser?.username || '').toLowerCase());
+                const migrated = migrateUserPermissions(rawUser as any).user;
+                return mergeSyncedUserCredentials(migrated, localMatch);
+            });
             await db.users.clear();
             await db.users.bulkPut(normalizedUsers);
         }

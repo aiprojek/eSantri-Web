@@ -108,7 +108,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({
     const encryptedPortalLink = portalConfig.provider === 'firebase'
         ? `${originUrl}/?portal=true&tenant=${encodeURIComponent(firebaseTenantId)}`
         : encryptedKey
-            ? `${originUrl}/?portal=true&k=${encodeURIComponent(encryptedKey)}`
+            ? `${originUrl}/?portal=true#k=${encodeURIComponent(encryptedKey)}`
             : portalConfig.portalId?.trim()
                 ? `${originUrl}/?portal=true&tenant=${encodeURIComponent(portalConfig.portalId.trim())}`
                 : `${originUrl}/?portal=true`;
@@ -407,9 +407,9 @@ export const TabPortal: React.FC<TabPortalProps> = ({
             case 'gas':
             default:
                 return {
-                    title: 'Opsi 2: Tautan Portal Terenkripsi (Parameter ?k=ep2_...)',
+                    title: 'Opsi 2: Tautan Portal Terenkripsi (Fragment #k=ep2_...)',
                     badge: 'Tanpa Hosting Tambahan',
-                    desc: 'Tautan langsung yang menyamarkan URL GAS menjadi parameter pendek ?k=ep2_...:',
+                    desc: 'Tautan langsung yang menyamarkan URL GAS & token ke dalam fragment URL #k=ep2_... (tidak terkirim ke server log):',
                 };
         }
     };

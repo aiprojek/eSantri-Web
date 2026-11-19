@@ -2,6 +2,7 @@ import type { Pendaftar, PondokSettings, PsbConfig } from '../types';
 import { liteDb, doc, getDoc, setDoc, serverTimestamp } from '../firebaseLite';
 import { storage, ref, uploadBytes, getDownloadURL } from '../firebaseStorage';
 import { encryptObjectHybridWithPublicKey, isWebCryptoAvailable } from './e2eeService';
+import { assertSafePsbUploadFile, sanitizePendaftar, sanitizePsbSubmissionFields } from '../utils/sanitizePendaftar';
 
 export const fetchPublicPortalSettings = async (tenantId: string) => {
     const tenantDoc = await getDoc(doc(liteDb, 'publicPortals', tenantId));
@@ -69,23 +70,25 @@ export const submitPortalPsbRegistration = async ({
 
     const useE2ee = Boolean(pubSpki && keyId && isWebCryptoAvailable());
 
+    const cleanFields = sanitizePsbSubmissionFields(fields || {});
     const customData: Record<string, unknown> = {};
     const uploadPromises: Promise<void>[] = [];
 
-    for (const key of Object.keys(fields)) {
+    for (const key of Object.keys(cleanFields)) {
         if (!key.startsWith('custom_')) {
             continue;
         }
 
         const fieldId = key.replace('custom_', '');
-        const value = fields[key];
+        const value = cleanFields[key];
 
         if (value instanceof File) {
+            assertSafePsbUploadFile(value);
             const fieldLabel = config.customFields?.find((field) => field.id === fieldId)?.label || fieldId;
             const safeLabel = fieldLabel.replace(/[^a-z0-9]/gi, '_').toLowerCase();
             const safeName = useE2ee
                 ? 'terenkripsi'
-                : String(fields.namaLengkap || 'TanpaNama').replace(/[^a-z0-9]/gi, '_');
+                : String(cleanFields.namaLengkap || 'TanpaNama').replace(/[^a-z0-9]/gi, '_');
             const filename = `${safeLabel}-${safeName}-${Date.now()}`;
             const storageRef = ref(storage, `tenants/${tenantId}/psb/${filename}`);
 
@@ -107,9 +110,9 @@ export const submitPortalPsbRegistration = async ({
         tanggalDaftar: new Date().toISOString(),
         tanggalMasuk: new Date().toISOString(),
         status: 'Baru',
-        jalurPendaftaran: (fields.jalurPendaftaran as string) || 'Reguler',
+        jalurPendaftaran: (cleanFields.jalurPendaftaran as string) || 'Reguler',
         gelombang: config.activeGelombang || 1,
-        ...(fields.jenjangId !== undefined ? { jenjangId: Number(fields.jenjangId) || undefined } : {}),
+        ...(cleanFields.jenjangId !== undefined ? { jenjangId: Number(cleanFields.jenjangId) || undefined } : {}),
         berkasFisik: {
             kk: false,
             akta: false,
@@ -132,7 +135,7 @@ export const submitPortalPsbRegistration = async ({
         const sensitiveBio: Record<string, unknown> = {
             nomorRegistrasi: regNumber,
         };
-        for (const [k, v] of Object.entries(fields)) {
+        for (const [k, v] of Object.entries(cleanFields)) {
             if (k.startsWith('custom_')) {
                 const fId = k.replace('custom_', '');
                 if (!(v instanceof File)) {
@@ -155,18 +158,22 @@ export const submitPortalPsbRegistration = async ({
             }
         }
         docPayload = {
-            ...baseMeta,
-            namaLengkap: '[TERENKRIPSI E2EE]',
-            customData: JSON.stringify(sanitizedCustomData),
-            id: parseInt(pendaftarId, 10),
+            ...sanitizePendaftar({
+                ...baseMeta,
+                namaLengkap: '[TERENKRIPSI E2EE]',
+                customData: JSON.stringify(sanitizedCustomData),
+                id: parseInt(pendaftarId, 10),
+            }),
             createdAt: serverTimestamp(),
         };
     } else {
         docPayload = {
-            ...baseMeta,
-            ...fields,
-            customData: JSON.stringify(customData),
-            id: parseInt(pendaftarId, 10),
+            ...sanitizePendaftar({
+                ...baseMeta,
+                ...cleanFields,
+                customData: JSON.stringify(customData),
+                id: parseInt(pendaftarId, 10),
+            }),
             createdAt: serverTimestamp(),
         };
     }

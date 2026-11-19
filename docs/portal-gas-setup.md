@@ -92,8 +92,9 @@ Payload contoh `submitPortalPsb`:
 }
 ```
 
-## Catatan
+## Catatan Keamanan Tautan
 
-- Query `?gas=...` pada URL portal masih didukung.
-- Jika `?gas` tidak ada, portal akan gagal load kecuali URL GAS tersedia di browser (localStorage).
-- Rekomendasi operasional: selalu bagikan URL portal yang sudah mengandung parameter `gas`.
+- Untuk tautan portal berbasis GAS manual, kirim token pada URL fragment (`#token=...`) atau gunakan kunci terenkripsi pada fragment (`#k=ep2_...`), misalnya `https://domain-anda/?portal=true&gas=...#token=...` atau `https://domain-anda/?portal=true#k=ep2_...`. Fragment (`#`) tidak dikirim ke server web dan tidak tercatat di log/header `Referer`.
+- Tautan lama dengan parameter query (`?token=...` atau `?k=...`) tetap didukung untuk kompatibilitas sementara; setelah dibaca oleh aplikasi, parameter sensitif tersebut otomatis dihapus dari URL melalui `history.replaceState`.
+- Jika `?gas` maupun `#k` tidak ada, portal akan memakai cache lokal bila pernah dibuka sebelumnya atau gagal load bila belum tersedia.
+- Rekomendasi operasional: selalu bagikan URL portal yang dihasilkan dari menu `Pengaturan > Portal Wali` (menggunakan `#k=ep2_...`).

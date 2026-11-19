@@ -8,20 +8,23 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
+    "test": "vitest run",
     "check:tauri-version": "node scripts/check-tauri-version.js",
     "tauri": "tauri"
   },
   "dependencies": {
+    "@types/dompurify": "^3.0.5",
     "@types/uuid": "^9.0.8",
     "@zxing/browser": "^0.2.0",
     "bootstrap-icons": "^1.11.3",
     "date-fns": "^3.3.1",
     "dexie": "4.4.7",
     "dexie-react-hooks": "1.1.7",
+    "dompurify": "^3.4.18",
     "firebase": "^12.12.0",
     "html2canvas": "^1.4.1",
-    "jspdf": "^2.5.1",
-    "jspdf-autotable": "^3.8.2",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "jszip": "^3.10.1",
     "motion": "^12.38.0",
     "qrcode": "^1.5.4",
@@ -32,7 +35,7 @@
     "recharts": "^3.8.1",
     "uuid": "^9.0.1",
     "webdav": "^5.7.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.5.11",
@@ -46,6 +49,7 @@
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.5.3",
-    "vite": "^5.4.1"
+    "vite": "^5.4.1",
+    "vitest": "^2.1.9"
   }
 }

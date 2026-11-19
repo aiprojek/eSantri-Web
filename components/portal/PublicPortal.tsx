@@ -102,9 +102,88 @@ const PORTAL_THEMES: Record<string, {
     }
 };
 
+let cachedPortalUrlConn: {
+    cipherKey: string;
+    gasEndpoint: string;
+    gasApiKey: string;
+} | null = null;
+
+const parseHashParams = (hash: string): URLSearchParams => {
+    const raw = (hash || '').replace(/^#/, '');
+    if (!raw) return new URLSearchParams();
+    if (raw.startsWith('/')) {
+        const qIdx = raw.indexOf('?');
+        return qIdx >= 0 ? new URLSearchParams(raw.slice(qIdx + 1)) : new URLSearchParams();
+    }
+    return raw.includes('=') ? new URLSearchParams(raw) : new URLSearchParams();
+};
+
+const scrubSensitivePortalParamsFromUrl = (url: URL) => {
+    try {
+        let changed = false;
+        if (url.searchParams.has('token')) {
+            url.searchParams.delete('token');
+            changed = true;
+        }
+        if (url.searchParams.has('k')) {
+            url.searchParams.delete('k');
+            changed = true;
+        }
+        if (url.hash) {
+            const rawHash = url.hash.slice(1);
+            if (rawHash.startsWith('/')) {
+                const qIdx = rawHash.indexOf('?');
+                if (qIdx >= 0) {
+                    const routePart = rawHash.slice(0, qIdx);
+                    const hp = new URLSearchParams(rawHash.slice(qIdx + 1));
+                    let hashChanged = false;
+                    if (hp.has('token')) { hp.delete('token'); hashChanged = true; }
+                    if (hp.has('k')) { hp.delete('k'); hashChanged = true; }
+                    if (hashChanged) {
+                        const rest = hp.toString();
+                        url.hash = rest ? `${routePart}?${rest}` : routePart;
+                        changed = true;
+                    }
+                }
+            } else if (rawHash.includes('=')) {
+                const hp = new URLSearchParams(rawHash);
+                let hashChanged = false;
+                if (hp.has('token')) { hp.delete('token'); hashChanged = true; }
+                if (hp.has('k')) { hp.delete('k'); hashChanged = true; }
+                if (hashChanged) {
+                    const rest = hp.toString();
+                    url.hash = rest ? `#${rest}` : '';
+                    changed = true;
+                }
+            }
+        }
+        if (changed && typeof window !== 'undefined' && window.history?.replaceState) {
+            const nextRelativeUrl = `${url.pathname}${url.search}${url.hash}`;
+            window.history.replaceState(window.history.state, '', nextRelativeUrl);
+        }
+    } catch {
+        // Ignore history.replaceState restrictions
+    }
+};
+
 const resolvePortalConnectionFromUrl = (fallbackTenantId: string) => {
     const url = new URL(window.location.href);
-    const cipherKey = url.searchParams.get('k') || '';
+    const hashParams = parseHashParams(url.hash);
+
+    const urlCipherKey = hashParams.get('k') || url.searchParams.get('k') || '';
+    const urlGasEndpoint = hashParams.get('gas') || url.searchParams.get('gas') || '';
+    const urlGasApiKey = hashParams.get('token') || url.searchParams.get('token') || '';
+
+    if (urlCipherKey || urlGasEndpoint || urlGasApiKey) {
+        cachedPortalUrlConn = {
+            cipherKey: urlCipherKey || cachedPortalUrlConn?.cipherKey || '',
+            gasEndpoint: urlGasEndpoint || cachedPortalUrlConn?.gasEndpoint || '',
+            gasApiKey: urlGasApiKey || cachedPortalUrlConn?.gasApiKey || '',
+        };
+        scrubSensitivePortalParamsFromUrl(url);
+    }
+
+    const cipherKey = cachedPortalUrlConn?.cipherKey || '';
     if (cipherKey) {
         const decoded = decodePortalKey(cipherKey);
         if (decoded && decoded.gasEndpoint) {
@@ -116,8 +195,9 @@ const resolvePortalConnectionFromUrl = (fallbackTenantId: string) => {
             };
         }
     }
-    const gasEndpoint = url.searchParams.get('gas') || localStorage.getItem('esantri_portal_gas_url') || '';
-    const gasApiKey = url.searchParams.get('token') || localStorage.getItem('esantri_portal_gas_token') || '';
+
+    const gasEndpoint = cachedPortalUrlConn?.gasEndpoint || localStorage.getItem('esantri_portal_gas_url') || '';
+    const gasApiKey = cachedPortalUrlConn?.gasApiKey || localStorage.getItem('esantri_portal_gas_token') || '';
     return {
         portalId: fallbackTenantId,
         gasEndpoint,
@@ -129,8 +209,10 @@ const resolvePortalConnectionFromUrl = (fallbackTenantId: string) => {
 export const PublicPortal: React.FC = () => {
     const searchParams = new URLSearchParams(window.location.search);
     const hashStr = window.location.hash || '';
-    const hashClean = hashStr.replace(/^#\/?/, '');
-    const hashParts = hashClean.split('/').filter(p => p !== '');
+    const hashRoutePart = hashStr.startsWith('#/')
+        ? hashStr.slice(2).split('?')[0]
+        : (!hashStr.includes('=') ? hashStr.replace(/^#\/?/, '') : '');
+    const hashParts = hashRoutePart.split('/').filter(p => p !== '');
     const [pathParts] = useState<string[]>(
         hashParts.length > 0 ? hashParts : window.location.pathname.split('/').filter(p => p !== '')
     );

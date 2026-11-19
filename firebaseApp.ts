@@ -1,4 +1,5 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import firebaseConfig from './firebase-applet-config.json';
 
 const isPlaceholder = (value?: string) => !value || value.startsWith('VITE_') || value.includes('YOUR_') || value === 'placeholder';
@@ -45,6 +46,22 @@ export const isFirebaseClientConfigReady = Boolean(
 );
 
 let _firebaseApp: FirebaseApp | null = null;
+let _appCheckInitialized = false;
+
+const maybeInitializeAppCheck = (app: FirebaseApp) => {
+  if (_appCheckInitialized || typeof window === 'undefined') return;
+  const siteKey = import.meta.env.VITE_FIREBASE_APP_CHECK_SITE_KEY;
+  if (!siteKey || isPlaceholder(siteKey)) return;
+  try {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(siteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+    _appCheckInitialized = true;
+  } catch (err) {
+    console.warn('Firebase App Check initialization skipped:', err);
+  }
+};
 
 export const getFirebaseApp = (): FirebaseApp | null => {
   if (!isFirebaseClientConfigReady) {
@@ -52,11 +69,13 @@ export const getFirebaseApp = (): FirebaseApp | null => {
   }
   const existingApps = getApps();
   if (existingApps.length > 0) {
+    maybeInitializeAppCheck(existingApps[0]);
     return existingApps[0];
   }
   if (!_firebaseApp) {
     _firebaseApp = initializeApp(activeFirebaseConfig);
   }
+  maybeInitializeAppCheck(_firebaseApp);
   return _firebaseApp;
 };
 

@@ -17,6 +17,9 @@ const PORTAL_ID_DEFAULT = "ganti-portal-id-di-sini";
 const API_TOKEN = ""; // contoh: 'isi-token-rahasia'
 const PAYLOAD_CHUNK_SIZE = 45000; // aman di bawah limit 50.000 char per sel
 const PAYLOAD_MAX_PARTS = 20; // total kapasitas ~900.000 char
+const MAX_POST_BYTES = 100000; // batas ukuran request POST
+const MAX_PSB_RAW_JSON = 45000; // batas aman JSON di sel Google Sheets
+const PSB_RATE_LIMIT_PER_MIN = 20; // maksimal submit PSB per portalId per menit
 
 function doGet(e) {
   try {
@@ -35,7 +38,14 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    const body = JSON.parse(e.postData.contents || "{}");
+    const rawContents = (e && e.postData && e.postData.contents) ? String(e.postData.contents) : "{}";
+    if (rawContents.length > MAX_POST_BYTES) {
+      return jsonResponse({
+        success: false,
+        message: "Ukuran payload melebihi batas yang diizinkan.",
+      });
+    }
+    const body = JSON.parse(rawContents);
     const action = (body.action || "").trim();
 
     if (action === "upsertPortalConfig") {
@@ -244,38 +254,122 @@ function handleUpsertPortalConfig(body) {
   return { success: true, message: "Portal config tersimpan." };
 }
 
+function escapeSheetCell(val) {
+  const s = val === null || val === undefined ? "" : String(val);
+  // Cegah Spreadsheet Formula Injection di Google Sheets / Excel
+  if (/^[=+\-@\t\r]/.test(s)) {
+    return "'" + s;
+  }
+  return s;
+}
+
+function sanitizePsbString(val, maxLen) {
+  if (val === null || val === undefined) return "";
+  let s = typeof val === "string" ? val : (typeof val === "number" || typeof val === "boolean" ? String(val) : "");
+  if (!s) return "";
+  const lower = s.trim().toLowerCase();
+  if (lower.indexOf("javascript:") === 0 || lower.indexOf("vbscript:") === 0 || lower.indexOf("data:text/html") === 0) {
+    return "";
+  }
+  if (s.length > maxLen) {
+    s = s.slice(0, maxLen);
+  }
+  return escapeSheetCell(s);
+}
+
+function checkPsbRateLimit(portalId) {
+  const cache = CacheService.getScriptCache();
+  const key = "psb_rl_" + portalId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 60);
+  const current = Number(cache.get(key) || "0");
+  if (current >= PSB_RATE_LIMIT_PER_MIN) {
+    throw new Error("Terlalu banyak percobaan pendaftaran. Silakan tunggu 1 menit.");
+  }
+  cache.put(key, String(current + 1), 60);
+}
+
 function handleSubmitPortalPsb(body) {
+  // Honeypot check untuk meredam spam bot tanpa memutus form publik
+  const hpVal = body._hp || body.website_hp || (body.fields && (body.fields._hp || body.fields._website));
+  if (hpVal && String(hpVal).trim() !== "") {
+    return { success: true, message: "Pendaftaran berhasil tersimpan." };
+  }
+
   const portalId = resolvePortalId(body.portalId);
   const apiKey = (body.apiKey || "").trim();
-  const fields = body.fields || {};
-  const submittedAt = body.submittedAt || new Date().toISOString();
+  const rawFields = body.fields && typeof body.fields === "object" && !Array.isArray(body.fields) ? body.fields : {};
+  const submittedAt = sanitizePsbString(body.submittedAt || new Date().toISOString(), 64);
   if (!authCheck(apiKey)) throw new Error("API key tidak valid.");
 
-  const sh = ensureSheet(SHEET_PSB, [
-    "submittedAt",
-    "portalId",
-    "namaLengkap",
-    "nisn",
-    "nik",
-    "jenisKelamin",
-    "tanggalLahir",
-    "namaWali",
-    "teleponWali",
-    "rawJson",
-  ]);
+  checkPsbRateLimit(portalId);
 
-  sh.appendRow([
-    submittedAt,
-    portalId,
-    fields.namaLengkap || "",
-    fields.nisn || "",
-    fields.nik || "",
-    fields.jenisKelamin || "",
-    fields.tanggalLahir || "",
-    fields.namaWali || "",
-    fields.teleponWali || "",
-    JSON.stringify(fields),
-  ]);
+  const STANDARD_LIMITS = {
+    namaLengkap: 200,
+    nisn: 50,
+    nik: 50,
+    jenisKelamin: 30,
+    tanggalLahir: 64,
+    namaWali: 200,
+    teleponWali: 50,
+    nomorHpWali: 50,
+    tempatLahir: 150,
+    asalSekolah: 250,
+    jalurPendaftaran: 100,
+    tahunAjaran: 50,
+    catatan: 2000,
+  };
+
+  const cleanFields = {};
+  const fieldKeys = Object.keys(rawFields);
+  for (let i = 0; i < fieldKeys.length && i < 80; i++) {
+    const k = fieldKeys[i];
+    if (!k || k === "__proto__" || k === "constructor" || k === "prototype" || k.length > 100) continue;
+    const limit = STANDARD_LIMITS[k] || 2000;
+    const v = rawFields[k];
+    if (Array.isArray(v)) {
+      cleanFields[k] = v.slice(0, 30).map(function (x) { return sanitizePsbString(x, 200); });
+    } else if (typeof v === "boolean" || typeof v === "number") {
+      cleanFields[k] = v;
+    } else {
+      cleanFields[k] = sanitizePsbString(v, limit);
+    }
+  }
+
+  let rawJsonStr = JSON.stringify(cleanFields);
+  if (rawJsonStr.length > MAX_PSB_RAW_JSON) {
+    throw new Error("Data formulir melebihi batas ukuran maksimum per pendaftaran.");
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try {
+    const sh = ensureSheet(SHEET_PSB, [
+      "submittedAt",
+      "portalId",
+      "namaLengkap",
+      "nisn",
+      "nik",
+      "jenisKelamin",
+      "tanggalLahir",
+      "namaWali",
+      "teleponWali",
+      "rawJson",
+    ]);
+
+    sh.appendRow([
+      submittedAt,
+      sanitizePsbString(portalId, 100),
+      cleanFields.namaLengkap || "",
+      cleanFields.nisn || "",
+      cleanFields.nik || "",
+      cleanFields.jenisKelamin || "",
+      cleanFields.tanggalLahir || "",
+      cleanFields.namaWali || "",
+      cleanFields.teleponWali || cleanFields.nomorHpWali || "",
+      rawJsonStr,
+    ]);
+  } finally {
+    lock.releaseLock();
+  }
 
   return { success: true, message: "Pendaftaran berhasil tersimpan." };
 }

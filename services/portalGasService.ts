@@ -14,6 +14,7 @@ import {
     sanitizeFirebasePortalEntryId,
 } from './e2eeService';
 import { isFirebaseClientConfigReady } from '../firebaseApp';
+import { sanitizePsbSubmissionFields } from '../utils/sanitizePendaftar';
 
 interface PortalFetchResponse {
     success?: boolean;
@@ -486,12 +487,13 @@ export const submitPortalPsbToGas = async (
     fields: Record<string, any>,
     apiKey?: string
 ): Promise<PortalFetchResponse> => {
+    const cleanFields = sanitizePsbSubmissionFields(fields || {});
     // Hindari menggandakan payload base64 file (cukup dikirim sekali pada summary/payload utama)
     const sanitizedSummaryFields: Record<string, any> = {};
-    Object.keys(fields || {}).forEach((k) => {
-        const val = fields[k];
-        if (val && typeof val === 'object' && val.isFile) {
-            sanitizedSummaryFields[k] = `[FILE_UPLOAD: ${val.name || k}]`;
+    Object.keys(cleanFields).forEach((k) => {
+        const val = cleanFields[k];
+        if (val && typeof val === 'object' && (val as any).isFile) {
+            sanitizedSummaryFields[k] = `[FILE_UPLOAD: ${(val as any).name || k}]`;
         } else {
             sanitizedSummaryFields[k] = val;
         }
@@ -506,7 +508,7 @@ export const submitPortalPsbToGas = async (
             action: 'submitPortalPsb',
             portalId,
             apiKey,
-            ...fields,
+            ...cleanFields,
             fields: sanitizedSummaryFields,
             submittedAt: new Date().toISOString(),
         }),

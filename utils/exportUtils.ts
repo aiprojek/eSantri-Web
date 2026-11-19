@@ -1055,8 +1055,7 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
                 }
             });
 
-            // @ts-ignore
-            doc.autoTable({
+            autoTable(doc, {
                 html: table,
                 startY: yPos,
                 theme: 'grid',

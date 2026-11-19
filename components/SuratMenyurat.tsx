@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import DOMPurify from 'dompurify';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { 
@@ -35,6 +36,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { loadXLSX } from '../utils/lazyClientLibs';
 import { generateSyncSafeId } from '../utils/idGenerator';
+import { esc, processSuratContent } from '../utils/suratTemplateUtils';
+export { esc, processSuratContent };
 
 const TEXT_ALIGN_CLASS: Record<'left' | 'center' | 'right', string> = {
     left: 'text-left',
@@ -626,7 +629,7 @@ const ArsipViewerModal: React.FC<{
 
                             {arsip.perihal && (arsip.showJudulSnapshot !== false) && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{arsip.perihal}</h3>}
 
-                            <div className="text-justify leading-relaxed font-sans" dangerouslySetInnerHTML={{ __html: arsip.isiSurat }} />
+                            <div className="text-justify leading-relaxed font-sans" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(arsip.isiSurat || '') }} />
 
                             <div className="mt-8">
                                 {arsip.tempatTanggalConfig?.show && arsip.tempatTanggalConfig.position !== 'top-right' && (
@@ -1150,110 +1153,13 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
     // Full Variable Inserter & Replacer
     const getProcessedContent = (santri: Santri | undefined) => {
         if (!template) return '';
-        let content = customContent;
-        
-        const namaPondok = settings.namaPonpes || 'Pondok Pesantren';
-        const alamatPondok = settings.alamat || '';
-        const mudir = settings.tenagaPengajar?.find(t => t.id === settings.mudirAamId);
-        const pimpinanPondok = mudir?.nama || 'Pimpinan Pondok Pesantren';
-
-        // General / Institute Placeholders
-        content = content.replace(/{TANGGAL}/g, formattedTanggalSurat);
-        content = content.replace(/{NOMOR_SURAT}/g, nomorSurat || '...../...../.....');
-        content = content.replace(/{NAMA_PONDOK}/g, namaPondok);
-        content = content.replace(/{NAMA_YAYASAN}/g, settings.namaYayasan || '');
-        content = content.replace(/{NSPP}/g, settings.nspp || '-');
-        content = content.replace(/{NPSN}/g, settings.npsn || '-');
-        content = content.replace(/{ALAMAT_PONDOK}/g, alamatPondok);
-        content = content.replace(/{PIMPINAN_PONDOK}/g, pimpinanPondok);
-
-        if (Array.isArray(settings.customInfoFields)) {
-            settings.customInfoFields.forEach((field) => {
-                if (field && field.label) {
-                    const cleanKey = field.label.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-                    if (cleanKey) {
-                        content = content.split(`{${cleanKey}}`).join(field.value || '-');
-                    }
-                }
-            });
-        }
-
-        if (santri) {
-            // Data Pribadi
-            content = content.replace(/{NAMA_SANTRI}/g, santri.namaLengkap);
-            content = content.replace(/{NIS}/g, santri.nis);
-            content = content.replace(/{NISN}/g, santri.nisn || '-');
-            content = content.replace(/{NIK}/g, santri.nik || '-');
-            content = content.replace(/{NO_KK}/g, santri.nik || '-');
-            content = content.replace(/{TEMPAT_LAHIR}/g, santri.tempatLahir || '');
-            content = content.replace(/{TANGGAL_LAHIR}/g, santri.tanggalLahir ? new Date(santri.tanggalLahir).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
-            content = content.replace(/{JENIS_KELAMIN}/g, santri.jenisKelamin || '-');
-            
-            // TTL support
-            content = content.replace(/{TTL}/g, `${santri.tempatLahir || '-'}, ${santri.tanggalLahir ? new Date(santri.tanggalLahir).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}`);
-
-            // Data Pendidikan & Asrama
-            content = content.replace(/{JENJANG}/g, settings.jenjang.find(j => j.id === santri.jenjangId)?.nama || '');
-            content = content.replace(/{KELAS}/g, settings.kelas.find(k => k.id === santri.kelasId)?.nama || '');
-            content = content.replace(/{ROMBEL}/g, settings.rombel.find(r => r.id === santri.rombelId)?.nama || '');
-            
-            const kamarItem = settings.kamar?.find(k => k.id === santri.kamarId);
-            const asramaGedung = kamarItem ? settings.gedungAsrama?.find(g => g.id === kamarItem.gedungId)?.nama : '-';
-            content = content.replace(/{ASRAMA}/g, asramaGedung || '-');
-            content = content.replace(/{KAMAR}/g, kamarItem?.nama || '-');
-            content = content.replace(/{ANGKATAN}/g, santri.tanggalMasuk ? String(new Date(santri.tanggalMasuk).getFullYear()) : '-');
-
-            // Data Orang Tua & Wali
-            content = content.replace(/{NAMA_AYAH}/g, santri.namaAyah || '');
-            content = content.replace(/{NAMA_IBU}/g, santri.namaIbu || '');
-            content = content.replace(/{NAMA_WALI}/g, santri.namaWali || '');
-            
-            const waliSmart = santri.namaWali || santri.namaAyah || santri.namaIbu || '';
-            content = content.replace(/{ORTU_WALI}/g, waliSmart);
-            content = content.replace(/{WALI}/g, waliSmart);
-            
-            const santriPhone = santri.telepon || santri.teleponAyah || santri.teleponIbu || santri.teleponWali || '-';
-            content = content.replace(/{NO_HP}/g, santriPhone);
-
-            // Alamat
-            content = content.replace(/{ALAMAT}/g, santri.alamat.detail);
-            
-            const fullAddress = [
-                santri.alamat.detail,
-                santri.alamat.desaKelurahan ? `Desa ${santri.alamat.desaKelurahan}` : '',
-                santri.alamat.kecamatan ? `Kec. ${santri.alamat.kecamatan}` : '',
-                santri.alamat.kabupatenKota ? `${santri.alamat.kabupatenKota}` : '',
-                santri.alamat.provinsi
-            ].filter(Boolean).join(', ');
-            content = content.replace(/{ALAMAT_LENGKAP}/g, fullAddress);
-
-        } else {
-            const dots = '...................................';
-            content = content.replace(/{NAMA_SANTRI}/g, dots);
-            content = content.replace(/{NIS}/g, '................');
-            content = content.replace(/{NISN}/g, '................');
-            content = content.replace(/{NIK}/g, '................');
-            content = content.replace(/{NO_KK}/g, '................');
-            content = content.replace(/{TEMPAT_LAHIR}/g, dots);
-            content = content.replace(/{TANGGAL_LAHIR}/g, dots);
-            content = content.replace(/{TTL}/g, dots);
-            content = content.replace(/{JENIS_KELAMIN}/g, dots);
-            content = content.replace(/{JENJANG}/g, dots);
-            content = content.replace(/{KELAS}/g, dots);
-            content = content.replace(/{ROMBEL}/g, dots);
-            content = content.replace(/{ASRAMA}/g, dots);
-            content = content.replace(/{KAMAR}/g, dots);
-            content = content.replace(/{ANGKATAN}/g, dots);
-            content = content.replace(/{NAMA_AYAH}/g, dots);
-            content = content.replace(/{NAMA_IBU}/g, dots);
-            content = content.replace(/{NAMA_WALI}/g, dots);
-            content = content.replace(/{ORTU_WALI}/g, dots);
-            content = content.replace(/{WALI}/g, dots);
-            content = content.replace(/{NO_HP}/g, dots);
-            content = content.replace(/{ALAMAT}/g, dots);
-            content = content.replace(/{ALAMAT_LENGKAP}/g, dots);
-        }
-        return content;
+        return processSuratContent({
+            content: customContent,
+            settings,
+            formattedTanggalSurat,
+            nomorSurat,
+            santri,
+        });
     };
 
     // Editor formatting helper
@@ -1937,7 +1843,7 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                                                 <div 
                                                     className="font-sans text-black text-justify leading-relaxed flex-grow p-0" 
                                                     style={{ fontSize: '11.5pt' }} 
-                                                    dangerouslySetInnerHTML={{ __html: getProcessedContent(currentSantri) }} 
+                                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(getProcessedContent(currentSantri)) }} 
                                                 />
                                             )}
                                             

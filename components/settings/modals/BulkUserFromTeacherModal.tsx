@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { TenagaPengajar, User, UserPermissions, AccessLevel } from '../../../types';
-import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS, ROLE_TEMPLATES } from '../../../services/authService';
+import { hashSecret, generateInitialPassword, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS, ROLE_TEMPLATES } from '../../../services/authService';
 import { CURRENT_PERMISSION_VERSION, normalizeUserPermissions } from '../../../services/permissionMigrationService';
 import { useAppContext } from '../../../AppContext';
 import { generateSyncSafeId } from '../../../utils/idGenerator';
@@ -27,7 +27,7 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
 
     const { showToast } = useAppContext();
     const [selectedTeacherIds, setSelectedTeacherIds] = useState<number[]>([]);
-    const [defaultPassword, setDefaultPassword] = useState('123456');
+    const [defaultPassword, setDefaultPassword] = useState(() => generateInitialPassword(10));
     const [isProcessing, setIsProcessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [defaultPermissionPreset, setDefaultPermissionPreset] = useState<PermissionPresetId>('default');
@@ -157,8 +157,7 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
 
         setIsProcessing(true);
         try {
-            const passwordHash = await hashString(defaultPassword);
-            const securityAnswerHash = await hashString('esantri'); // Default answer for generated users
+            const passwordHash = await hashSecret(defaultPassword);
             const resolvePermissionsFromPreset = (config: BulkUserConfig): UserPermissions => {
                 if (config.role === 'admin' || config.permissionPreset === 'admin') {
                     return ADMIN_PERMISSIONS as UserPermissions;
@@ -198,8 +197,10 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                         role: config.role,
                         permissions: finalPermissions,
                     } as User),
-                    securityQuestion: 'Apa nama aplikasi ini? (Default)',
-                    securityAnswerHash: securityAnswerHash,
+                    securityQuestion: '',
+                    securityAnswerHash: '',
+                    mustChangePassword: true,
+                    mustSetupSecurity: true,
                     isDefaultAdmin: false,
                     permissionVersion: CURRENT_PERMISSION_VERSION,
                     deleted: false,
@@ -294,13 +295,23 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                 <div className="p-5 flex-shrink-0 space-y-4 border-b">
                     <div className="flex gap-4 items-end">
                         <div className="flex-grow">
-                            <label className="block text-xs font-bold text-gray-600 mb-1">Password Default untuk Semua</label>
-                            <input 
-                                type="text" 
-                                value={defaultPassword} 
-                                onChange={e => setDefaultPassword(e.target.value)}
-                                className="w-full border border-gray-300 rounded-lg p-2 text-sm bg-yellow-50 focus:bg-white transition-colors"
-                            />
+                            <label className="block text-xs font-bold text-gray-600 mb-1">Password Awal Sementara (Wajib Diganti Saat Login)</label>
+                            <div className="flex gap-1.5">
+                                <input 
+                                    type="text" 
+                                    value={defaultPassword} 
+                                    onChange={e => setDefaultPassword(e.target.value)}
+                                    className="w-full border border-gray-300 rounded-lg p-2 text-sm font-mono bg-yellow-50 focus:bg-white transition-colors"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setDefaultPassword(generateInitialPassword(10))}
+                                    className="shrink-0 px-2.5 py-2 border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-100"
+                                    title="Buat password acak baru"
+                                >
+                                    <i className="bi bi-arrow-clockwise"></i> Acak
+                                </button>
+                            </div>
                         </div>
                         <div className="flex-grow">
                             <label className="block text-xs font-bold text-gray-600 mb-1">Cari Nama</label>

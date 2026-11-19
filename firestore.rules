@@ -62,20 +62,173 @@ service cloud.firestore {
         data.expiresAt > request.time;
     }
 
+    function isOptStr(data, field, maxLen) {
+      return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isOptNum(data, field) {
+      return !(field in data) || (data[field] is int || data[field] is number);
+    }
+
+    function isValidAlamatMap(addr) {
+      return addr is map &&
+        addr.keys().hasOnly(['detail', 'desaKelurahan', 'kecamatan', 'kabupatenKota', 'provinsi', 'kodePos']) &&
+        isOptStr(addr, 'detail', 500) &&
+        isOptStr(addr, 'desaKelurahan', 200) &&
+        isOptStr(addr, 'kecamatan', 200) &&
+        isOptStr(addr, 'kabupatenKota', 200) &&
+        isOptStr(addr, 'provinsi', 200) &&
+        isOptStr(addr, 'kodePos', 20);
+    }
+
+    function isValidBerkasFisikMap(b) {
+      return b is map &&
+        b.keys().hasOnly(['kk', 'akta', 'ijazahSkl', 'suratSehat', 'pasFoto', 'catatanBerkas', 'checkedAt', 'checkedBy']) &&
+        (!('kk' in b) || b.kk is bool) &&
+        (!('akta' in b) || b.akta is bool) &&
+        (!('ijazahSkl' in b) || b.ijazahSkl is bool) &&
+        (!('suratSehat' in b) || b.suratSehat is bool) &&
+        (!('pasFoto' in b) || b.pasFoto is bool) &&
+        isOptStr(b, 'catatanBerkas', 1000) &&
+        isOptStr(b, 'checkedAt', 100) &&
+        isOptStr(b, 'checkedBy', 200);
+    }
+
+    function isValidNilaiUjianMap(n) {
+      return n is map &&
+        n.keys().hasOnly(['bacaQuran', 'tulisArab', 'wawancara', 'pengetahuanUmum', 'rekomendasi', 'catatanUjian', 'penguji', 'tanggalUjian', 'ruangUjian']) &&
+        isOptNum(n, 'bacaQuran') &&
+        isOptNum(n, 'tulisArab') &&
+        isOptNum(n, 'wawancara') &&
+        isOptNum(n, 'pengetahuanUmum') &&
+        (!('rekomendasi' in n) || n.rekomendasi in ['Lulus', 'Dipertimbangkan', 'Tidak Lulus']) &&
+        isOptStr(n, 'catatanUjian', 1000) &&
+        isOptStr(n, 'penguji', 200) &&
+        isOptStr(n, 'tanggalUjian', 100) &&
+        isOptStr(n, 'ruangUjian', 200);
+    }
+
     function isValidPublicPendaftar(data) {
       return data is map &&
-        data.keys().size() <= 65 &&
-        data.keys().hasAll(['id', 'namaLengkap', 'status']) &&
+        data.keys().hasAll([
+          'id', 'nis', 'namaLengkap', 'jenisKelamin', 'tempatLahir', 'tanggalLahir',
+          'kewarganegaraan', 'alamat', 'namaAyah', 'namaIbu', 'jenjangId', 'kelasId',
+          'rombelId', 'tanggalMasuk', 'jenisSantri', 'tanggalDaftar', 'status', 'customData'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'nis', 'namaLengkap', 'jenisKelamin', 'tempatLahir', 'tanggalLahir',
+          'kewarganegaraan', 'alamat', 'namaAyah', 'namaIbu', 'jenjangId', 'kelasId',
+          'rombelId', 'tanggalMasuk', 'jenisSantri', 'tanggalDaftar', 'status', 'customData',
+          'nisn', 'nik', 'namaHijrah',
+          'nikAyah', 'statusAyah', 'pekerjaanAyah', 'pendidikanAyah', 'penghasilanAyah', 'teleponAyah', 'tanggalLahirAyah', 'tempatLahirAyah', 'alamatAyah',
+          'nikIbu', 'statusIbu', 'pekerjaanIbu', 'pendidikanIbu', 'penghasilanIbu', 'teleponIbu', 'tanggalLahirIbu', 'tempatLahirIbu', 'alamatIbu',
+          'namaWali', 'nikWali', 'statusWali', 'statusHidupWali', 'pekerjaanWali', 'pendidikanWali', 'penghasilanWali', 'teleponWali', 'tanggalLahirWali', 'tempatLahirWali', 'alamatWali',
+          'tanggalStatus', 'berkebutuhanKhusus', 'riwayatPenyakit', 'hobi', 'citaCita', 'jarakKePondok', 'statusKeluarga',
+          'sekolahAsal', 'asalSekolah', 'alamatSekolahAsal', 'nomorIjazahSebelumnya', 'tahunLulusSebelumnya',
+          'namaPanggilan', 'agama', 'statusAnak', 'golonganDarah',
+          'telepon', 'noHp', 'noHpAyah', 'noHpIbu', 'noHpWali', 'nomorHpWali',
+          'desaKelurahan', 'kecamatan', 'kabupatenKota', 'kodePos',
+          'catatan', 'nomorRegistrasi', 'jalurPendaftaran', 'tahunAjaran',
+          'anakKe', 'jumlahSaudara', 'tinggiBadan', 'beratBadan',
+          'gedungId', 'kamarId', 'halaqahId', 'targetJuz', 'gelombang', 'santriId', 'lastModified',
+          'fotoUrl', 'berkasFisik', 'nilaiUjian', 'deleted', 'createdAt'
+        ]) &&
         (data.id is int || data.id is number) &&
-        data.namaLengkap is string &&
-        data.namaLengkap.size() >= 1 &&
-        data.namaLengkap.size() <= 200 &&
+        data.nis is string && data.nis.size() <= 100 &&
+        data.namaLengkap is string && data.namaLengkap.size() >= 1 && data.namaLengkap.size() <= 200 &&
+        data.jenisKelamin in ['Laki-laki', 'Perempuan'] &&
+        data.tempatLahir is string && data.tempatLahir.size() <= 150 &&
+        data.tanggalLahir is string && data.tanggalLahir.size() <= 64 &&
+        data.kewarganegaraan in ['WNI', 'WNA', 'Keturunan'] &&
+        isValidAlamatMap(data.alamat) &&
+        data.namaAyah is string && data.namaAyah.size() <= 200 &&
+        data.namaIbu is string && data.namaIbu.size() <= 200 &&
+        (data.jenjangId is int || data.jenjangId is number) &&
+        (data.kelasId is int || data.kelasId is number) &&
+        (data.rombelId is int || data.rombelId is number) &&
+        data.tanggalMasuk is string && data.tanggalMasuk.size() <= 64 &&
+        data.jenisSantri is string && data.jenisSantri.size() <= 100 &&
+        data.tanggalDaftar is string && data.tanggalDaftar.size() <= 64 &&
         data.status == 'Baru' &&
+        data.customData is string && data.customData.size() <= 50000 &&
         (!('deleted' in data) || data.deleted == false) &&
-        (!('catatan' in data) || data.catatan == null || (data.catatan is string && data.catatan.size() <= 2000)) &&
-        (!('customData' in data) || data.customData == null || (data.customData is string && data.customData.size() <= 50000)) &&
-        (!('nomorRegistrasi' in data) || data.nomorRegistrasi == null || (data.nomorRegistrasi is string && data.nomorRegistrasi.size() <= 100)) &&
-        (!('nomorHpWali' in data) || data.nomorHpWali == null || (data.nomorHpWali is string && data.nomorHpWali.size() <= 50));
+        (!('createdAt' in data) || data.createdAt == request.time) &&
+        isOptStr(data, 'nisn', 50) &&
+        isOptStr(data, 'nik', 50) &&
+        isOptStr(data, 'namaHijrah', 200) &&
+        isOptStr(data, 'nikAyah', 50) &&
+        isOptStr(data, 'statusAyah', 60) &&
+        isOptStr(data, 'pekerjaanAyah', 150) &&
+        isOptStr(data, 'pendidikanAyah', 150) &&
+        isOptStr(data, 'penghasilanAyah', 150) &&
+        isOptStr(data, 'teleponAyah', 50) &&
+        isOptStr(data, 'tanggalLahirAyah', 64) &&
+        isOptStr(data, 'tempatLahirAyah', 150) &&
+        (!('alamatAyah' in data) || isValidAlamatMap(data.alamatAyah)) &&
+        isOptStr(data, 'nikIbu', 50) &&
+        isOptStr(data, 'statusIbu', 60) &&
+        isOptStr(data, 'pekerjaanIbu', 150) &&
+        isOptStr(data, 'pendidikanIbu', 150) &&
+        isOptStr(data, 'penghasilanIbu', 150) &&
+        isOptStr(data, 'teleponIbu', 50) &&
+        isOptStr(data, 'tanggalLahirIbu', 64) &&
+        isOptStr(data, 'tempatLahirIbu', 150) &&
+        (!('alamatIbu' in data) || isValidAlamatMap(data.alamatIbu)) &&
+        isOptStr(data, 'namaWali', 200) &&
+        isOptStr(data, 'nikWali', 50) &&
+        isOptStr(data, 'statusWali', 100) &&
+        isOptStr(data, 'statusHidupWali', 60) &&
+        isOptStr(data, 'pekerjaanWali', 150) &&
+        isOptStr(data, 'pendidikanWali', 150) &&
+        isOptStr(data, 'penghasilanWali', 150) &&
+        isOptStr(data, 'teleponWali', 50) &&
+        isOptStr(data, 'tanggalLahirWali', 64) &&
+        isOptStr(data, 'tempatLahirWali', 150) &&
+        (!('alamatWali' in data) || isValidAlamatMap(data.alamatWali)) &&
+        isOptStr(data, 'tanggalStatus', 64) &&
+        isOptStr(data, 'berkebutuhanKhusus', 300) &&
+        isOptStr(data, 'riwayatPenyakit', 500) &&
+        (!('hobi' in data) || (data.hobi is list && data.hobi.size() <= 30 && (data.hobi.size() == 0 || (data.hobi[0] is string && data.hobi[0].size() <= 100)))) &&
+        isOptStr(data, 'citaCita', 200) &&
+        isOptStr(data, 'jarakKePondok', 100) &&
+        isOptStr(data, 'statusKeluarga', 100) &&
+        isOptStr(data, 'sekolahAsal', 250) &&
+        isOptStr(data, 'asalSekolah', 250) &&
+        isOptStr(data, 'alamatSekolahAsal', 500) &&
+        isOptStr(data, 'nomorIjazahSebelumnya', 100) &&
+        isOptStr(data, 'tahunLulusSebelumnya', 20) &&
+        isOptStr(data, 'namaPanggilan', 100) &&
+        isOptStr(data, 'agama', 50) &&
+        isOptStr(data, 'statusAnak', 100) &&
+        isOptStr(data, 'golonganDarah', 20) &&
+        isOptStr(data, 'telepon', 50) &&
+        isOptStr(data, 'noHp', 50) &&
+        isOptStr(data, 'noHpAyah', 50) &&
+        isOptStr(data, 'noHpIbu', 50) &&
+        isOptStr(data, 'noHpWali', 50) &&
+        isOptStr(data, 'nomorHpWali', 50) &&
+        isOptStr(data, 'desaKelurahan', 200) &&
+        isOptStr(data, 'kecamatan', 200) &&
+        isOptStr(data, 'kabupatenKota', 200) &&
+        isOptStr(data, 'kodePos', 20) &&
+        isOptStr(data, 'catatan', 2000) &&
+        isOptStr(data, 'nomorRegistrasi', 100) &&
+        isOptStr(data, 'jalurPendaftaran', 100) &&
+        isOptStr(data, 'tahunAjaran', 50) &&
+        isOptNum(data, 'anakKe') &&
+        isOptNum(data, 'jumlahSaudara') &&
+        isOptNum(data, 'tinggiBadan') &&
+        isOptNum(data, 'beratBadan') &&
+        isOptNum(data, 'gedungId') &&
+        isOptNum(data, 'kamarId') &&
+        isOptNum(data, 'halaqahId') &&
+        isOptNum(data, 'targetJuz') &&
+        isOptNum(data, 'gelombang') &&
+        isOptNum(data, 'santriId') &&
+        isOptNum(data, 'lastModified') &&
+        isOptStr(data, 'fotoUrl', 200000) &&
+        (!('berkasFisik' in data) || isValidBerkasFisikMap(data.berkasFisik)) &&
+        (!('nilaiUjian' in data) || isValidNilaiUjianMap(data.nilaiUjian));
     }
 
     function isValidPublicPortalEntry(data) {

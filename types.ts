@@ -78,6 +78,8 @@ export interface User {
     securityAnswerHash?: string;
     recoveryKeyHash?: string;
     isDefaultAdmin?: boolean;
+    mustChangePassword?: boolean;
+    mustSetupSecurity?: boolean;
     lastLogin?: string;
     permissionVersion?: number;
     deleted?: boolean;

@@ -5,6 +5,8 @@ import { setAuditSyncMute } from './logService';
 import { encodePortalKey, mergePortalConfig } from './portalGasService';
 import { isFirebaseClientConfigReady } from '../firebaseApp';
 import { decryptAnyEnvelope, E2EE_CHANGED_EVENT, encryptObjectSym, isDeviceUnlockedForConfig, isE2eeEnvelope, tryParseE2eeEnvelope } from './e2eeService';
+import { sanitizePendaftar } from '../utils/sanitizePendaftar';
+import { mergeSyncedUserCredentials, sanitizeUserForExternalSync } from './authService';
 import {
   db as fdb,
   collection,
@@ -189,11 +191,14 @@ const flushPendingFbE2eeQueue = async (tenantId: string): Promise<void> => {
 
 const prepareFirestoreDocForPush = async (tableName: string, payload: any): Promise<any> => {
     const e2eeCfg = await getLocalSyncE2eeConfig();
+    const safePayload = tableName === 'users'
+        ? sanitizeUserForExternalSync(payload, Boolean(e2eeCfg))
+        : payload;
     if (!e2eeCfg) {
-        return sanitizeForFirestore(payload);
+        return sanitizeForFirestore(safePayload);
     }
 
-    const envelope = await encryptObjectSym(payload, e2eeCfg, `fs-${tableName}`);
+    const envelope = await encryptObjectSym(safePayload, e2eeCfg, `fs-${tableName}`);
     if (tableName === 'settings') {
         return sanitizeForFirestore({
             id: 'main',
@@ -458,14 +463,17 @@ export const startFirebaseSync = (tenantId: string) => {
                         const cloudTime = getTime(docData.lastModified);
                         const localTime = localItem ? getTime(localItem.lastModified) : 0;
 
-                        const normalizedDoc = { ...docData };
+                        const normalizedDocBase = { ...docData };
                         if (isNum && targetId !== undefined) {
                             if (tableName === 'saldoSantri') {
-                                normalizedDoc.santriId = targetId;
+                                normalizedDocBase.santriId = targetId;
                             } else {
-                                normalizedDoc.id = targetId;
+                                normalizedDocBase.id = targetId;
                             }
                         }
+                        const normalizedDoc = tableName === 'users'
+                            ? mergeSyncedUserCredentials(normalizedDocBase, localItem)
+                            : normalizedDocBase;
 
                         if (!localItem || cloudTime > localTime) {
                             if (tableName === 'inventaris' && localItem) {
@@ -497,14 +505,14 @@ export const startFirebaseSync = (tenantId: string) => {
                                     normalizedDoc.statusPinjam = mergedLoans.some((l: any) => l.status === 'Dipinjam') ? 'Dipinjam' : 'Tersedia';
                                 }
                             }
-                            return normalizedDoc;
+                            return tableName === 'pendaftar' ? sanitizePendaftar(normalizedDoc) : normalizedDoc;
                         }
 
                         if (cloudTime === localTime) {
                             const { lastModified: _cloudTime, ...cloudData } = normalizedDoc;
                             const { lastModified: _localTime, ...localData } = localItem;
                             if (JSON.stringify(cloudData) !== JSON.stringify(localData)) {
-                                return normalizedDoc;
+                                return tableName === 'pendaftar' ? sanitizePendaftar(normalizedDoc) : normalizedDoc;
                             }
                         }
 
@@ -669,8 +677,12 @@ export const downloadAllFromFirebase = async (tenantId: string) => {
                         if (unwrapped.e2eeConfig) discoveredLockedMeta = unwrapped.e2eeConfig;
                     }
                 }
+                const localUserById = new Map(localUsers.map((u) => [u.id, u]));
                 const filteredItems = decryptedUsers.filter((user) => !user.isDefaultAdmin || !localUsers.some((localUser) => localUser.isDefaultAdmin));
-                const normalizedUsers = filteredItems.map((user) => migrateUserPermissions(user as any).user);
+                const normalizedUsers = filteredItems.map((user) => {
+                    const migrated = migrateUserPermissions(user as any).user;
+                    return mergeSyncedUserCredentials(migrated, localUserById.get(migrated.id));
+                });
                 if (normalizedUsers.length > 0) {
                     await db.users.bulkPut(normalizedUsers);
                 }
@@ -718,17 +730,19 @@ export const downloadAllFromFirebase = async (tenantId: string) => {
                     }
                     const item = unwrapped.data;
                     const rawId = item.id ?? item.santriId ?? _docId;
+                    let normItem: any;
                     if (isNum && rawId !== undefined && !isNaN(Number(rawId))) {
                         if (tableName === 'saldoSantri') {
-                            normalizedItems.push({ ...item, santriId: Number(rawId) });
+                            normItem = { ...item, santriId: Number(rawId) };
                         } else {
-                            normalizedItems.push({ ...item, id: Number(rawId) });
+                            normItem = { ...item, id: Number(rawId) };
                         }
                     } else if (rawId !== undefined && item.id === undefined && tableName !== 'saldoSantri') {
-                        normalizedItems.push({ ...item, id: rawId });
+                        normItem = { ...item, id: rawId };
                     } else {
-                        normalizedItems.push(item);
+                        normItem = item;
                     }
+                    normalizedItems.push(tableName === 'pendaftar' ? sanitizePendaftar(normItem) : normItem);
                 }
                 if (normalizedItems.length > 0) {
                     await (db as any)[tableName].bulkPut(normalizedItems);
@@ -918,10 +932,10 @@ export const syncPsbWithFirebaseHub = async (tenantId: string) => {
             const localTime = localItem ? getTime(localItem.lastModified) : 0;
 
             if (!localItem) {
-                await db.pendaftar.put(cloudItem);
+                await db.pendaftar.put(sanitizePendaftar(cloudItem));
                 pulledCount++;
             } else if (cloudTime > localTime) {
-                await db.pendaftar.put({ ...localItem, ...cloudItem });
+                await db.pendaftar.put(sanitizePendaftar({ ...localItem, ...cloudItem }));
                 pulledCount++;
             }
         }

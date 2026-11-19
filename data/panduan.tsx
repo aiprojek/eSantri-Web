@@ -171,7 +171,7 @@ export const panduanData: PanduanSectionData[] = [
                             <ol className="list-decimal pl-4 space-y-1 text-gray-700">
                                 <li>Buka menu <strong>Pengaturan &gt; User &amp; Keamanan</strong> (atau <em>Pengaturan &gt; Akun</em>).</li>
                                 <li>Nyalakan toggle <strong>"Aktifkan Mode Multi-User"</strong>.</li>
-                                <li>Sistem otomatis membuatkan akun Super Admin default dengan username: <code>admin</code> dan password awal: <code>admin123</code>. Segera perbarui kata sandi admin ini.</li>
+                                <li>Sistem otomatis membuatkan akun Super Admin dengan username: <code>admin</code> dan <strong>password awal acak</strong> yang ditampilkan satu kali bersama Kunci Pemulihan Darurat. Catat segera, dan atur pertanyaan keamanan pribadi Anda saat login pertama.</li>
                             </ol>
                         </div>
 
@@ -215,8 +215,8 @@ export const panduanData: PanduanSectionData[] = [
                             </p>
                             <ul className="list-disc pl-4 space-y-1 text-gray-700 text-[11px]">
                                 <li><strong>Auto-Generate Username:</strong> Nama guru otomatis dibersihkan dari gelar akademik (misal: <em>Dr., S.Pd, Lc, M.Pd</em>) menjadi username standar tanpa spasi.</li>
-                                <li><strong>Password Awal Default:</strong> Diatur seragam ke <code>123456</code> (dapat langsung disesuaikan di tabel sebelum disimpan).</li>
-                                <li><strong>Pertanyaan Keamanan Otomatis:</strong> Diatur ke pertanyaan: <em>"Apa nama aplikasi ini?"</em> dengan jawaban: <code>esantri</code> untuk fasilitas lupa password mandiri.</li>
+                                <li><strong>Password Awal Acak Sementara:</strong> Sistem membuatkan password sementara acak yang dapat Anda sesuaikan sebelum disimpan. Setiap pengguna wajib menggantinya pada login pertama.</li>
+                                <li><strong>Pertanyaan Keamanan Pribadi:</strong> Setiap pengguna wajib mengatur pertanyaan dan jawaban keamanan mereka sendiri pada saat login pertama.</li>
                             </ul>
                         </div>
 

@@ -1,4 +1,8 @@
 # Cloudflare Pages Headers Configuration
+# Global Report-Only CSP (audit violations in DevTools/report before enforcing)
+/*
+  Content-Security-Policy-Report-Only: default-src 'self' data: blob:; script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; frame-src 'self' blob:; base-uri 'self'; form-action 'self'
+
 # Ensure Service Worker and HTML entry points are never cached by edge or browser
 
 /sw.js

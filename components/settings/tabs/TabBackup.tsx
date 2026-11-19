@@ -10,6 +10,11 @@ import {
     migrateUserPermissions,
     type PermissionMigrationItem,
 } from '../../../services/permissionMigrationService';
+import {
+    decryptBackupPayload,
+    isEncryptedBackupEnvelope,
+    type EncryptedBackupEnvelope,
+} from '../../../utils/encryptedBackup';
 
 interface TabBackupProps {
     localSettings: PondokSettings;
@@ -192,6 +197,15 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
     const [isResetting, setIsResetting] = useState(false);
     const [isDeletingSample, setIsDeletingSample] = useState(false);
     const restoreInputRef = useRef<HTMLInputElement>(null);
+    // Optional encrypted backup state
+    const [encryptBackup, setEncryptBackup] = useState(false);
+    const [backupPassword, setBackupPassword] = useState('');
+    const [backupPasswordConfirm, setBackupPasswordConfirm] = useState('');
+    const [isDownloadingBackup, setIsDownloadingBackup] = useState(false);
+    // Encrypted restore modal state
+    const [pendingEncryptedEnvelope, setPendingEncryptedEnvelope] = useState<EncryptedBackupEnvelope | null>(null);
+    const [restorePassword, setRestorePassword] = useState('');
+    const [isDecryptingRestore, setIsDecryptingRestore] = useState(false);
 
     const handleBackupConfigChange = (frequency: BackupFrequency) => {
         setLocalSettings(prev => ({
@@ -245,6 +259,148 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
         );
     };
 
+    const handleDownloadBackupClick = async () => {
+        if (encryptBackup) {
+            if (backupPassword.length < 6) {
+                showToast('Password enkripsi cadangan minimal 6 karakter.', 'error');
+                return;
+            }
+            if (backupPassword !== backupPasswordConfirm) {
+                showToast('Konfirmasi password enkripsi tidak cocok.', 'error');
+                return;
+            }
+            setIsDownloadingBackup(true);
+            try {
+                await downloadBackup({ password: backupPassword });
+                setBackupPassword('');
+                setBackupPasswordConfirm('');
+                showToast('Cadangan terenkripsi (AES-GCM) berhasil diunduh.', 'success');
+            } catch (err) {
+                showToast((err as Error)?.message || 'Gagal membuat cadangan terenkripsi.', 'error');
+            } finally {
+                setIsDownloadingBackup(false);
+            }
+            return;
+        }
+        await downloadBackup();
+    };
+
+    const proceedWithParsedBackup = (data: unknown) => {
+        if (!data || typeof data !== 'object') {
+            throw new Error('File cadangan tidak valid atau rusak.');
+        }
+
+        const payload = data as BackupPayload;
+        const restorePlan: Array<(typeof RESTORE_TABLE_CONFIG)[number] & { rows: unknown[] }> = [];
+        for (const cfg of RESTORE_TABLE_CONFIG) {
+            const rows = getArrayFromBackup(payload, cfg.key, cfg.aliases);
+            if (rows) {
+                restorePlan.push({ ...cfg, rows });
+            }
+        }
+
+        if (restorePlan.length === 0) {
+            throw new Error('Tidak ada tabel backup yang dikenali. Pastikan file berasal dari eSantri.');
+        }
+
+        const backupSettingsArr = getArrayFromBackup(payload, 'settings', ['config']) as Array<Partial<PondokSettings>> | null;
+        const incomingE2ee = backupSettingsArr?.[0]?.e2eeConfig;
+        const currentE2ee = localSettings.e2eeConfig;
+        let e2eeWarning = '';
+        if (currentE2ee?.enabled) {
+            if (!incomingE2ee?.enabled) {
+                e2eeWarning = `\n\nPERINGATAN KUNCI E2EE: Enkripsi E2EE saat ini AKTIF (Key ID: ${currentE2ee.keyId}), sedangkan file backup ini TIDAK mengaktifkan E2EE. Setelah restore, perangkat tidak akan membawa konfigurasi kunci aktif sehingga data cloud/formulir lama yang sudah terenkripsi tidak bisa didekripsi kecuali Anda memulihkan via File Kunci Darurat (.txt).`;
+            } else if (incomingE2ee.keyId !== currentE2ee.keyId) {
+                e2eeWarning = `\n\nPERINGATAN PERBEDAAN KUNCI E2EE: File backup memakai Key ID berbeda (${incomingE2ee.keyId}) dibanding kunci aktif saat ini (${currentE2ee.keyId}). Pastikan Anda memiliki password/File Kunci Darurat untuk Key ID baru maupun lama.`;
+            }
+        } else if (incomingE2ee?.enabled) {
+            e2eeWarning = `\n\nINFO KUNCI E2EE: File backup ini membawa konfigurasi E2EE aktif (Key ID: ${incomingE2ee.keyId}). Setelah restore, masukkan Master Password E2EE yang sesuai.`;
+        }
+        
+        showConfirmation(
+            'Konfirmasi Pemulihan Data',
+            `PERHATIAN: Data yang tersedia pada file backup akan menggantikan data saat ini. Lanjutkan pemulihan?${e2eeWarning}`,
+            async () => {
+                try {
+                    const permissionMigrationItems: PermissionMigrationItem[] = [];
+                    const txTables = restorePlan.map((item) => item.table);
+                    await (db as any).transaction('rw', ...txTables, async () => {
+                        for (const item of restorePlan) {
+                            await item.table.clear();
+                            if (item.rows.length === 0) continue;
+
+                            if (item.key === 'users') {
+                                const normalizedUsers = (item.rows as any[]).map((rawUser) => {
+                                    const result = migrateUserPermissions(rawUser as any);
+                                    if (result.changed) {
+                                        permissionMigrationItems.push({
+                                            userId: result.user.id,
+                                            username: result.user.username,
+                                            role: result.user.role,
+                                            fromVersion: (rawUser as any)?.permissionVersion ?? 0,
+                                            toVersion: result.user.permissionVersion ?? CURRENT_PERMISSION_VERSION,
+                                            reason: result.reason,
+                                        });
+                                    }
+                                    return result.user;
+                                });
+                                await item.table.bulkPut(normalizedUsers);
+                            } else {
+                                await item.table.bulkPut(item.rows);
+                            }
+                        }
+                    });
+
+                    const restoredKeys = restorePlan.map((item) => item.key);
+                    const restoredLabels = RESTORE_TABLE_CONFIG
+                        .filter((cfg) => restoredKeys.includes(cfg.key))
+                        .map((cfg) => cfg.label);
+                    const skippedLabels = RESTORE_TABLE_CONFIG
+                        .filter((cfg) => !restoredKeys.includes(cfg.key))
+                        .map((cfg) => cfg.label);
+
+                    showToast(`Restore berhasil untuk ${restorePlan.length} tabel. Aplikasi akan dimuat ulang.`, 'success');
+                    const migrationSummary = permissionMigrationItems.length > 0
+                        ? `\n\nMigrasi Permission Otomatis (${permissionMigrationItems.length} user, target v${CURRENT_PERMISSION_VERSION}):\n${permissionMigrationItems
+                            .slice(0, 15)
+                            .map((item) => `- ${item.username} (${item.role}): ${item.reason}`)
+                            .join('\n')}${permissionMigrationItems.length > 15 ? '\n- ...dan lainnya' : ''}`
+                        : '\n\nMigrasi Permission Otomatis: tidak ada user legacy yang perlu dimigrasi.';
+
+                    showAlert(
+                        'Laporan Hasil Restore',
+                        `Data diperbarui (${restoredLabels.length}): ${restoredLabels.join(', ') || '-'}\n\nTidak ditemukan di file backup (${skippedLabels.length}): ${skippedLabels.join(', ') || '-'}${migrationSummary}`
+                    );
+                    setTimeout(() => window.location.reload(), 1500);
+                } catch(dbError) {
+                    console.error('Failed to restore data to DB:', dbError);
+                    showToast('Gagal memulihkan data. Lihat konsol untuk detail.', 'error');
+                }
+            },
+            { confirmText: 'Ya, Pulihkan Data', confirmColor: 'red' }
+        );
+    };
+
+    const handleDecryptAndRestore = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!pendingEncryptedEnvelope) return;
+        if (!restorePassword) {
+            showToast('Masukkan password cadangan.', 'error');
+            return;
+        }
+        setIsDecryptingRestore(true);
+        try {
+            const decrypted = await decryptBackupPayload(pendingEncryptedEnvelope, restorePassword);
+            setPendingEncryptedEnvelope(null);
+            setRestorePassword('');
+            proceedWithParsedBackup(decrypted);
+        } catch (err) {
+            showToast((err as Error)?.message || 'Password salah atau file cadangan rusak.', 'error');
+        } finally {
+            setIsDecryptingRestore(false);
+        }
+    };
+
     const handleRestoreHandler = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
@@ -255,100 +411,13 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
                 const jsonString = e.target?.result as string;
                 const data = JSON.parse(jsonString);
 
-                if (!data || typeof data !== 'object') {
-                    throw new Error('File cadangan tidak valid atau rusak.');
+                if (isEncryptedBackupEnvelope(data)) {
+                    setPendingEncryptedEnvelope(data);
+                    setRestorePassword('');
+                    return;
                 }
 
-                const payload = data as BackupPayload;
-                const restorePlan: Array<(typeof RESTORE_TABLE_CONFIG)[number] & { rows: unknown[] }> = [];
-                for (const cfg of RESTORE_TABLE_CONFIG) {
-                    const rows = getArrayFromBackup(payload, cfg.key, cfg.aliases);
-                    if (rows) {
-                        restorePlan.push({ ...cfg, rows });
-                    }
-                }
-
-                if (restorePlan.length === 0) {
-                    throw new Error('Tidak ada tabel backup yang dikenali. Pastikan file berasal dari eSantri.');
-                }
-
-                const backupSettingsArr = getArrayFromBackup(payload, 'settings', ['config']) as Array<Partial<PondokSettings>> | null;
-                const incomingE2ee = backupSettingsArr?.[0]?.e2eeConfig;
-                const currentE2ee = localSettings.e2eeConfig;
-                let e2eeWarning = '';
-                if (currentE2ee?.enabled) {
-                    if (!incomingE2ee?.enabled) {
-                        e2eeWarning = `\n\nPERINGATAN KUNCI E2EE: Enkripsi E2EE saat ini AKTIF (Key ID: ${currentE2ee.keyId}), sedangkan file backup ini TIDAK mengaktifkan E2EE. Setelah restore, perangkat tidak akan membawa konfigurasi kunci aktif sehingga data cloud/formulir lama yang sudah terenkripsi tidak bisa didekripsi kecuali Anda memulihkan via File Kunci Darurat (.txt).`;
-                    } else if (incomingE2ee.keyId !== currentE2ee.keyId) {
-                        e2eeWarning = `\n\nPERINGATAN PERBEDAAN KUNCI E2EE: File backup memakai Key ID berbeda (${incomingE2ee.keyId}) dibanding kunci aktif saat ini (${currentE2ee.keyId}). Pastikan Anda memiliki password/File Kunci Darurat untuk Key ID baru maupun lama.`;
-                    }
-                } else if (incomingE2ee?.enabled) {
-                    e2eeWarning = `\n\nINFO KUNCI E2EE: File backup ini membawa konfigurasi E2EE aktif (Key ID: ${incomingE2ee.keyId}). Setelah restore, masukkan Master Password E2EE yang sesuai.`;
-                }
-                
-                showConfirmation(
-                    'Konfirmasi Pemulihan Data',
-                    `PERHATIAN: Data yang tersedia pada file backup akan menggantikan data saat ini. Lanjutkan pemulihan?${e2eeWarning}`,
-                    async () => {
-                        try {
-                            const permissionMigrationItems: PermissionMigrationItem[] = [];
-                            const txTables = restorePlan.map((item) => item.table);
-                            await (db as any).transaction('rw', ...txTables, async () => {
-                                for (const item of restorePlan) {
-                                    await item.table.clear();
-                                    if (item.rows.length === 0) continue;
-
-                                    if (item.key === 'users') {
-                                        const normalizedUsers = (item.rows as any[]).map((rawUser) => {
-                                            const result = migrateUserPermissions(rawUser as any);
-                                            if (result.changed) {
-                                                permissionMigrationItems.push({
-                                                    userId: result.user.id,
-                                                    username: result.user.username,
-                                                    role: result.user.role,
-                                                    fromVersion: (rawUser as any)?.permissionVersion ?? 0,
-                                                    toVersion: result.user.permissionVersion ?? CURRENT_PERMISSION_VERSION,
-                                                    reason: result.reason,
-                                                });
-                                            }
-                                            return result.user;
-                                        });
-                                        await item.table.bulkPut(normalizedUsers);
-                                    } else {
-                                        await item.table.bulkPut(item.rows);
-                                    }
-                                }
-                            });
-
-                            const restoredKeys = restorePlan.map((item) => item.key);
-                            const restoredLabels = RESTORE_TABLE_CONFIG
-                                .filter((cfg) => restoredKeys.includes(cfg.key))
-                                .map((cfg) => cfg.label);
-                            const skippedLabels = RESTORE_TABLE_CONFIG
-                                .filter((cfg) => !restoredKeys.includes(cfg.key))
-                                .map((cfg) => cfg.label);
-
-                            showToast(`Restore berhasil untuk ${restorePlan.length} tabel. Aplikasi akan dimuat ulang.`, 'success');
-                            const migrationSummary = permissionMigrationItems.length > 0
-                                ? `\n\nMigrasi Permission Otomatis (${permissionMigrationItems.length} user, target v${CURRENT_PERMISSION_VERSION}):\n${permissionMigrationItems
-                                    .slice(0, 15)
-                                    .map((item) => `- ${item.username} (${item.role}): ${item.reason}`)
-                                    .join('\n')}${permissionMigrationItems.length > 15 ? '\n- ...dan lainnya' : ''}`
-                                : '\n\nMigrasi Permission Otomatis: tidak ada user legacy yang perlu dimigrasi.';
-
-                            showAlert(
-                                'Laporan Hasil Restore',
-                                `Data diperbarui (${restoredLabels.length}): ${restoredLabels.join(', ') || '-'}\n\nTidak ditemukan di file backup (${skippedLabels.length}): ${skippedLabels.join(', ') || '-'}${migrationSummary}`
-                            );
-                           setTimeout(() => window.location.reload(), 1500);
-                        } catch(dbError) {
-                            console.error('Failed to restore data to DB:', dbError);
-                            showToast('Gagal memulihkan data. Lihat konsol untuk detail.', 'error');
-                        }
-                    },
-                    { confirmText: 'Ya, Pulihkan Data', confirmColor: 'red' }
-                );
-
+                proceedWithParsedBackup(data);
             } catch (parseError) {
                 console.error('Failed to parse backup file:', parseError);
                 showToast('Gagal membaca file cadangan. Pastikan file tersebut adalah file JSON yang valid dari eSantri.', 'error');
@@ -398,16 +467,64 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
                                     ))}
                                 </div>
                             </div>
-                            {localSettings.e2eeConfig?.enabled && (
+                            {localSettings.e2eeConfig?.enabled && !encryptBackup && (
                                 <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-[11px] text-amber-900 flex items-start gap-2">
                                     <i className="bi bi-shield-exclamation text-amber-600 shrink-0 mt-0.5 text-sm"></i>
                                     <span className="leading-relaxed">
-                                        <strong>Catatan Keamanan E2EE:</strong> File backup lokal <code>.JSON</code> ini berisi salinan database dalam bentuk teks biasa (tidak terenkripsi E2EE) agar selalu dapat dipulihkan darurat. Simpan file ini di media offline yang aman dan hindari mengunggahnya ke cloud publik tanpa enkripsi.
+                                        <strong>Catatan Keamanan E2EE:</strong> File backup lokal <code>.JSON</code> standar berisi teks biasa agar selalu dapat dipulihkan darurat. Aktifkan opsi enkripsi di bawah bila Anda ingin menyimpannya di cloud atau media bersama.
                                     </span>
                                 </div>
                             )}
+                            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2.5">
+                                <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-800">
+                                    <input
+                                        type="checkbox"
+                                        checked={encryptBackup}
+                                        onChange={(e) => {
+                                            setEncryptBackup(e.target.checked);
+                                            if (!e.target.checked) {
+                                                setBackupPassword('');
+                                                setBackupPasswordConfirm('');
+                                            }
+                                        }}
+                                        className="rounded text-teal-600 focus:ring-teal-500"
+                                    />
+                                    <span>Enkripsi file cadangan dengan password (AES-GCM)</span>
+                                </label>
+                                {encryptBackup && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                        <input
+                                            type="password"
+                                            value={backupPassword}
+                                            onChange={(e) => setBackupPassword(e.target.value)}
+                                            placeholder="Password enkripsi (min. 6 karakter)"
+                                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs"
+                                        />
+                                        <input
+                                            type="password"
+                                            value={backupPasswordConfirm}
+                                            onChange={(e) => setBackupPasswordConfirm(e.target.value)}
+                                            placeholder="Ulangi password enkripsi"
+                                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs"
+                                        />
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        <button onClick={downloadBackup} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 sm:w-auto"><i className="bi bi-download"></i><span>Unduh Cadangan Data (.JSON)</span></button>
+                        <button
+                            onClick={handleDownloadBackupClick}
+                            disabled={isDownloadingBackup}
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 sm:w-auto"
+                        >
+                            <i className={encryptBackup ? 'bi bi-file-earmark-lock-fill' : 'bi bi-download'}></i>
+                            <span>
+                                {isDownloadingBackup
+                                    ? 'Mengenkripsi...'
+                                    : encryptBackup
+                                        ? 'Unduh Cadangan Terenkripsi (.JSON)'
+                                        : 'Unduh Cadangan Data (.JSON)'}
+                            </span>
+                        </button>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between">
                         <div>
@@ -499,6 +616,44 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
                     </div>
                 </div>
             </SectionCard>
+            {pendingEncryptedEnvelope && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4">
+                    <form onSubmit={handleDecryptAndRestore} className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl border-t-4 border-teal-600 space-y-4">
+                        <div className="flex items-center gap-2 text-slate-800">
+                            <i className="bi bi-file-earmark-lock2-fill text-teal-600 text-xl"></i>
+                            <h3 className="text-lg font-bold">Cadangan Terenkripsi Terdeteksi</h3>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                            File ini dilindungi enkripsi AES-256-GCM (dibuat {new Date(pendingEncryptedEnvelope.createdAt).toLocaleString('id-ID')}). Masukkan password untuk mendekripsi dan memulihkan data.
+                        </p>
+                        <input
+                            type="password"
+                            value={restorePassword}
+                            onChange={(e) => setRestorePassword(e.target.value)}
+                            placeholder="Masukkan password cadangan..."
+                            autoFocus
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            required
+                        />
+                        <div className="flex justify-end gap-2 pt-1">
+                            <button
+                                type="button"
+                                onClick={() => { setPendingEncryptedEnvelope(null); setRestorePassword(''); }}
+                                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isDecryptingRestore}
+                                className="rounded-lg bg-teal-600 px-4 py-2 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
+                            >
+                                {isDecryptingRestore ? 'Mendekripsi...' : 'Dekripsi & Lanjutkan'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
         </div>
     );
 };

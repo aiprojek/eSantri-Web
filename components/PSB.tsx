@@ -11,6 +11,7 @@ import { HeaderTabs } from './common/HeaderTabs';
 import { getPsbAcademicYearOptions, healPendaftarRecord } from './psb/utils/psbUtils';
 import { generateSyncSafeId } from '../utils/idGenerator';
 import { logActivity } from '../services/logService';
+import { sanitizePendaftar } from '../utils/sanitizePendaftar';
 
 const PsbDashboard = React.lazy(() => import('./psb/PsbDashboard').then((module) => ({ default: module.PsbDashboard })));
 const PsbRekap = React.lazy(() => import('./psb/PsbRekap').then((module) => ({ default: module.PsbRekap })));
@@ -60,7 +61,7 @@ const PSB: React.FC = () => {
                 const data = JSON.parse(match[1].trim());
                 const now = Date.now();
                 const newId = generateSyncSafeId();
-                const newPendaftar = healPendaftarRecord({
+                const newPendaftar = sanitizePendaftar(healPendaftarRecord({
                     ...data,
                     id: newId,
                     jenjangId: parseInt(data.jenjangId) || psbConfig.targetJenjangId || 0,
@@ -71,7 +72,7 @@ const PSB: React.FC = () => {
                     tahunAjaran: data.tahunAjaran || data.tahunAjaranAktif || currentPsbYear,
                     deleted: false,
                     lastModified: now,
-                }, settings);
+                }, settings));
                 db.pendaftar.put(newPendaftar).then(() => {
                     void logActivity('INSERT', 'pendaftar', newId, null, { namaLengkap: newPendaftar.namaLengkap, source: 'WhatsApp' }, currentUser?.username || 'Admin');
                     fetchPendaftar();

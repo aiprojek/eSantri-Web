@@ -455,7 +455,7 @@ const rewriteExcelOperatorsRecursive = (expr: string): string => {
 };
 
 // --- HELPER: CONVERT EXCEL SYNTAX TO JS ---
-const convertFormulaToJs = (expression: string): string => {
+const convertFormulaToJsUnchecked = (expression: string): string => {
     let raw = (expression || '').trim();
     if (raw.startsWith('=')) {
         raw = raw.substring(1).trim();
@@ -539,6 +539,45 @@ const convertFormulaToJs = (expression: string): string => {
 
         return js;
     }).join('');
+};
+
+const ALLOWED_FORMULA_IDENTIFIERS = new Set([
+    'rowId', 'getValue', 'average', 'sum', 'excelMin', 'excelMax',
+    'excelAbs', 'excelInt', 'excelTrunc', 'excelMod', 'excelPower', 'excelSqrt',
+    'excelRound', 'excelRoundUp', 'excelRoundDown', 'excelFixed',
+    'excelPredikat', 'angkaKeArab', 'terbilang',
+    'excelCmp', 'excelIsBlank', 'excelCountA', 'excelCountBlank',
+    'excelIf', 'excelIfs', 'excelIfError', 'excelAnd', 'excelOr', 'excelNot',
+    'excelConcat', 'excelConcatSpasi', 'excelUpper', 'excelLower', 'excelProper',
+    'excelSentence', 'excelTrim', 'excelLen', 'excelLeft', 'excelRight', 'excelMid',
+    'excelCount', 'excelCountIf', 'excelSumIf', 'excelAverageIf', 'excelKkm', 'rata2Kelas',
+    'true', 'false', 'null'
+]);
+
+export const isSafeCompiledFormulaJs = (exprJs: string): boolean => {
+    const trimmed = (exprJs || '').trim();
+    if (!trimmed) return true;
+    // Strip single and double quoted string literals before validating code structure
+    const stripped = trimmed.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, ' null ');
+    // Reject statement separators, blocks, arrays/bracket indexing, template literals, backslashes, or arrow functions
+    if (/[;{}\[\]`$\\]|=>/.test(stripped)) return false;
+    // Allow only whitelisted punctuation, operators, whitespace, digits, dots, and identifiers
+    if (/[^a-zA-Z0-9_+\-*/%<>=!&|?:.,()\s]/.test(stripped)) return false;
+    // Dots may only appear as numeric decimal separators, never as property access (e.g. window.location)
+    const noDecimals = stripped.replace(/\b\d+\.\d+\b/g, ' 0 ');
+    if (noDecimals.includes('.')) return false;
+    // Verify every bare identifier is in the formula runtime allowlist
+    const identifiers = noDecimals.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g) || [];
+    for (const id of identifiers) {
+        if (!ALLOWED_FORMULA_IDENTIFIERS.has(id)) return false;
+    }
+    return true;
+};
+
+export const convertFormulaToJs = (expression: string): string => {
+    const compiled = convertFormulaToJsUnchecked(expression);
+    if (!compiled) return '';
+    return isSafeCompiledFormulaJs(compiled) ? compiled : 'null';
 };
 
 export interface GeneratorConfig {

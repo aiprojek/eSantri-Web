@@ -178,24 +178,43 @@ export function parseMarkdownToHtml(markdown: string): string {
 export function formatInlineMarkdown(text: string): string {
     if (!text) return '';
 
-    let out = escapeHtml(text);
+    const sanitizedInput = text.replace(/\u0000/g, '');
+    let out = escapeHtml(sanitizedInput);
+    const protectedTokens: string[] = [];
+    const protect = (htmlFragment: string): string => {
+        const token = `\u0000MDPROT${protectedTokens.length}\u0000`;
+        protectedTokens.push(htmlFragment);
+        return token;
+    };
 
-    // Inline code `code`
-    out = out.replace(/`([^`]+)`/g, '<code class="bg-gray-100 text-teal-700 px-1.5 py-0.5 rounded text-xs font-mono font-semibold">$1</code>');
+    const formatInlineTextOnly = (input: string): string => {
+        let formatted = input;
+        formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-gray-900">$1</strong>');
+        formatted = formatted.replace(/__([^_]+)__/g, '<strong class="font-bold text-gray-900">$1</strong>');
+        formatted = formatted.replace(/\*([^*]+)\*/g, '<em class="italic text-gray-800">$1</em>');
+        formatted = formatted.replace(/_([^_]+)_/g, '<em class="italic text-gray-800">$1</em>');
+        formatted = formatted.replace(/~~([^~]+)~~/g, '<del class="line-through text-gray-400">$1</del>');
+        return formatted;
+    };
 
-    // Bold **text** or __text__
-    out = out.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-gray-900">$1</strong>');
-    out = out.replace(/__([^_]+)__/g, '<strong class="font-bold text-gray-900">$1</strong>');
+    // Inline code `code` (protected before links/emphasis)
+    out = out.replace(/`([^`]+)`/g, (_m, code) =>
+        protect(`<code class="bg-gray-100 text-teal-700 px-1.5 py-0.5 rounded text-xs font-mono font-semibold">${code}</code>`)
+    );
 
-    // Italic *text* or _text_
-    out = out.replace(/\*([^*]+)\*/g, '<em class="italic text-gray-800">$1</em>');
-    out = out.replace(/_([^_]+)_/g, '<em class="italic text-gray-800">$1</em>');
+    // Markdown links [text](url) MUST run before italic/bold so URLs like https://x.com/my_file_name_v2.pdf are not mangled
+    out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, label, url) =>
+        protect(`<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-teal-600 hover:text-teal-800 underline font-medium">${formatInlineTextOnly(label)}</a>`)
+    );
 
-    // Strikethrough ~~text~~
-    out = out.replace(/~~([^~]+)~~/g, '<del class="line-through text-gray-400">$1</del>');
+    // Protect bare http(s) URLs from _underscore_ italic matching
+    out = out.replace(/(https?:\/\/[^\s<>"']+)/g, (url) => protect(url));
 
-    // Simple markdown link [text](url)
-    out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-teal-600 hover:text-teal-800 underline font-medium">$1</a>');
+    // Bold, italic, strikethrough on remaining plain text
+    out = formatInlineTextOnly(out);
+
+    // Restore protected fragments
+    out = out.replace(/\u0000MDPROT(\d+)\u0000/g, (_m, idx) => protectedTokens[Number(idx)] ?? '');
 
     return out;
 }

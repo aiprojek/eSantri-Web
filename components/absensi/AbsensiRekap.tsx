@@ -405,8 +405,8 @@ export const AbsensiRekap: React.FC = () => {
             }
 
             if (type === 'pdf') {
-                const { jsPDF } = await loadJsPdf();
-                await loadJsPdfAutoTable();
+                const [{ jsPDF }, autoTableModule] = await Promise.all([loadJsPdf(), loadJsPdfAutoTable()]);
+                const autoTable = autoTableModule.default || (autoTableModule as any);
                 const doc = new jsPDF('landscape', 'mm', 'a4');
 
                 monthRange.forEach((month, idx) => {
@@ -442,7 +442,7 @@ export const AbsensiRekap: React.FC = () => {
                         ];
                     });
 
-                    (doc as any).autoTable({
+                    autoTable(doc, {
                         head: headers,
                         body: rows,
                         startY: 30,

@@ -26,7 +26,7 @@ interface AppContextType {
   backupModal: any;
   onSaveSettings: (newSettings: PondokSettings) => Promise<void>;
   onUpdateSettings: (newSettings: PondokSettings) => Promise<void>;
-  downloadBackup: () => Promise<void>;
+  downloadBackup: (options?: { password?: string }) => Promise<void>;
   triggerBackupCheck: (forceAction?: boolean) => void;
   closeBackupModal: () => void;
   

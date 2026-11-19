@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../AppContext';
 import { db } from '../db';
-import { hashString } from '../services/authService';
+import { hashSecret, verifySecret } from '../services/authService';
 import { User } from '../types';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { loadSyncService } from '../utils/lazyCloudServices';
@@ -16,13 +16,19 @@ export const LoginScreen: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     
     // Forgot Password State
-    const [view, setView] = useState<'login' | 'forgot' | 'reset' | 'emergency'>('login');
+    const [view, setView] = useState<'login' | 'forgot' | 'reset' | 'emergency' | 'setup_security'>('login');
     const [forgotUsername, setForgotUsername] = useState('');
     const [securityQuestion, setSecurityQuestion] = useState('');
     const [securityAnswer, setSecurityAnswer] = useState('');
     const [recoveryKeyInput, setRecoveryKeyInput] = useState('');
     const [targetUser, setTargetUser] = useState<User | null>(null);
     const [newPassword, setNewPassword] = useState('');
+    // First-login mandatory security / password setup
+    const [pendingLoginUser, setPendingLoginUser] = useState<User | null>(null);
+    const [setupQuestion, setSetupQuestion] = useState('');
+    const [setupAnswer, setSetupAnswer] = useState('');
+    const [setupNewPassword, setSetupNewPassword] = useState('');
+    const [setupConfirmPassword, setSetupConfirmPassword] = useState('');
 
     const handleGoogleLogin = async () => {
         setIsLoading(true);
@@ -58,10 +64,29 @@ export const LoginScreen: React.FC = () => {
                 return;
             }
 
-            const hashedInput = await hashString(password);
-            if (user.passwordHash === hashedInput) {
-                await db.users.update(user.id, { lastLogin: new Date().toISOString() });
-                login(user);
+            const pwCheck = await verifySecret(password, user.passwordHash);
+            if (pwCheck.valid) {
+                let effectiveUser = user;
+                if (pwCheck.needsRehash) {
+                    const upgradedHash = await hashSecret(password);
+                    const nowTs = Date.now();
+                    await db.users.update(user.id, { passwordHash: upgradedHash, lastModified: nowTs });
+                    effectiveUser = { ...user, passwordHash: upgradedHash, lastModified: nowTs };
+                }
+                const needsPasswordChange = !!effectiveUser.mustChangePassword;
+                const needsSecuritySetup = !!effectiveUser.mustSetupSecurity || !effectiveUser.securityQuestion?.trim() || !effectiveUser.securityAnswerHash;
+                if (needsPasswordChange || needsSecuritySetup) {
+                    setPendingLoginUser(effectiveUser);
+                    setSetupQuestion(effectiveUser.securityQuestion || '');
+                    setSetupAnswer('');
+                    setSetupNewPassword('');
+                    setSetupConfirmPassword('');
+                    setView('setup_security');
+                } else {
+                    const lastLogin = new Date().toISOString();
+                    await db.users.update(effectiveUser.id, { lastLogin });
+                    login({ ...effectiveUser, lastLogin });
+                }
             } else {
                 showToast('Username atau password salah.', 'error');
             }
@@ -119,8 +144,15 @@ export const LoginScreen: React.FC = () => {
         if (!targetUser || !securityAnswer) return;
         setIsLoading(true);
         try {
-            const hashedAnswer = await hashString(securityAnswer.toLowerCase().trim());
-            if (targetUser.securityAnswerHash === hashedAnswer) {
+            const normalizedAns = securityAnswer.toLowerCase().trim();
+            const ansCheck = await verifySecret(normalizedAns, targetUser.securityAnswerHash);
+            if (ansCheck.valid) {
+                if (ansCheck.needsRehash) {
+                    const upgradedAnswerHash = await hashSecret(normalizedAns);
+                    const nowTs = Date.now();
+                    await db.users.update(targetUser.id, { securityAnswerHash: upgradedAnswerHash, lastModified: nowTs });
+                    setTargetUser({ ...targetUser, securityAnswerHash: upgradedAnswerHash, lastModified: nowTs });
+                }
                 setView('reset');
             } else {
                 showToast('Jawaban salah.', 'error');
@@ -145,9 +177,17 @@ export const LoginScreen: React.FC = () => {
                 return;
             }
 
-            const hashedInput = await hashString(recoveryKeyInput.toUpperCase().trim());
-            if (admin.recoveryKeyHash === hashedInput) {
-                setTargetUser(admin);
+            const normalizedKey = recoveryKeyInput.toUpperCase().trim();
+            const keyCheck = await verifySecret(normalizedKey, admin.recoveryKeyHash);
+            if (keyCheck.valid) {
+                let effectiveAdmin = admin;
+                if (keyCheck.needsRehash) {
+                    const upgradedKeyHash = await hashSecret(normalizedKey);
+                    const nowTs = Date.now();
+                    await db.users.update(admin.id, { recoveryKeyHash: upgradedKeyHash, lastModified: nowTs });
+                    effectiveAdmin = { ...admin, recoveryKeyHash: upgradedKeyHash, lastModified: nowTs };
+                }
+                setTargetUser(effectiveAdmin);
                 setView('reset');
                 showToast('Kunci Darurat valid! Silakan reset password Admin.', 'success');
             } else {
@@ -162,8 +202,12 @@ export const LoginScreen: React.FC = () => {
         if (!targetUser || !newPassword) return;
         setIsLoading(true);
         try {
-            const newHash = await hashString(newPassword);
-            await db.users.update(targetUser.id, { passwordHash: newHash });
+            const newHash = await hashSecret(newPassword);
+            await db.users.update(targetUser.id, {
+                passwordHash: newHash,
+                mustChangePassword: false,
+                lastModified: Date.now(),
+            });
             showToast('Password berhasil diubah. Silakan login.', 'success');
             setView('login');
             setTargetUser(null);
@@ -173,6 +217,66 @@ export const LoginScreen: React.FC = () => {
             setRecoveryKeyInput('');
         } catch (e) {
             showToast('Gagal mereset password.', 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleCompleteFirstLoginSetup = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!pendingLoginUser) return;
+
+        const needsPasswordChange = !!pendingLoginUser.mustChangePassword;
+        const needsSecuritySetup = !!pendingLoginUser.mustSetupSecurity || !pendingLoginUser.securityQuestion?.trim() || !pendingLoginUser.securityAnswerHash;
+
+        if (needsPasswordChange) {
+            if (setupNewPassword.length < 6) {
+                showToast('Password baru minimal 6 karakter.', 'error');
+                return;
+            }
+            if (setupNewPassword !== setupConfirmPassword) {
+                showToast('Konfirmasi password baru tidak cocok.', 'error');
+                return;
+            }
+            const sameAsTemp = await verifySecret(setupNewPassword, pendingLoginUser.passwordHash);
+            if (sameAsTemp.valid) {
+                showToast('Password baru tidak boleh sama dengan password sementara.', 'error');
+                return;
+            }
+        }
+
+        if (needsSecuritySetup) {
+            if (!setupQuestion.trim() || !setupAnswer.trim()) {
+                showToast('Pertanyaan dan jawaban keamanan wajib diisi.', 'error');
+                return;
+            }
+        }
+
+        setIsLoading(true);
+        try {
+            const updates: Partial<User> = {
+                lastLogin: new Date().toISOString(),
+                lastModified: Date.now(),
+            };
+            if (needsPasswordChange) {
+                updates.passwordHash = await hashSecret(setupNewPassword);
+                updates.mustChangePassword = false;
+            }
+            if (needsSecuritySetup) {
+                updates.securityQuestion = setupQuestion.trim();
+                updates.securityAnswerHash = await hashSecret(setupAnswer.toLowerCase().trim());
+                updates.mustSetupSecurity = false;
+            }
+
+            await db.users.update(pendingLoginUser.id, updates);
+            const updatedUser: User = { ...pendingLoginUser, ...updates };
+            setPendingLoginUser(null);
+            setPassword('');
+            setView('login');
+            login(updatedUser);
+            showToast(`Selamat datang, ${updatedUser.fullName || updatedUser.username}!`, 'success');
+        } catch (e) {
+            showToast('Gagal menyimpan pengaturan keamanan awal.', 'error');
         } finally {
             setIsLoading(false);
         }
@@ -344,6 +448,106 @@ export const LoginScreen: React.FC = () => {
                         />
                         <button onClick={handleResetPassword} disabled={isLoading} className="w-full bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700">Simpan Password</button>
                     </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (view === 'setup_security' && pendingLoginUser) {
+        const needsPasswordChange = !!pendingLoginUser.mustChangePassword;
+        const needsSecuritySetup = !!pendingLoginUser.mustSetupSecurity || !pendingLoginUser.securityQuestion?.trim() || !pendingLoginUser.securityAnswerHash;
+        const commonQuestions = [
+            "Apa nama hewan peliharaan pertama Anda?",
+            "Di kota mana ibu Anda lahir?",
+            "Apa makanan favorit Anda saat kecil?",
+            "Siapa nama guru favorit Anda di SD?",
+            "Apa judul film favorit Anda?",
+            "Apa nama jalan tempat Anda tinggal saat kecil?"
+        ];
+        return (
+            <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-8 border-t-4 border-teal-600">
+                    <h2 className="text-xl font-bold text-gray-800 mb-2">Lengkapi Keamanan Akun</h2>
+                    <p className="text-sm text-gray-600 mb-4">
+                        Login awal terdeteksi untuk <strong>{pendingLoginUser.username}</strong>. Lengkapi pengaturan berikut sebelum masuk:
+                    </p>
+                    <form onSubmit={handleCompleteFirstLoginSetup} className="space-y-4">
+                        {needsPasswordChange && (
+                            <>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Password Baru (Minimal 6 karakter)</label>
+                                    <input
+                                        type="password"
+                                        value={setupNewPassword}
+                                        onChange={e => setSetupNewPassword(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Konfirmasi Password Baru</label>
+                                    <input
+                                        type="password"
+                                        value={setupConfirmPassword}
+                                        onChange={e => setSetupConfirmPassword(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                                        required
+                                    />
+                                </div>
+                            </>
+                        )}
+                        {needsSecuritySetup && (
+                            <>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Pertanyaan Keamanan</label>
+                                    <select
+                                        value={commonQuestions.includes(setupQuestion) ? setupQuestion : 'custom'}
+                                        onChange={e => {
+                                            if (e.target.value !== 'custom') setSetupQuestion(e.target.value);
+                                            else setSetupQuestion('');
+                                        }}
+                                        className="w-full border border-gray-300 rounded-lg p-2.5 text-sm mb-2 bg-white"
+                                    >
+                                        <option value="custom">-- Tulis Pertanyaan Sendiri --</option>
+                                        {commonQuestions.map(q => <option key={q} value={q}>{q}</option>)}
+                                    </select>
+                                    <input
+                                        type="text"
+                                        value={setupQuestion}
+                                        onChange={e => setSetupQuestion(e.target.value)}
+                                        placeholder="Ketik pertanyaan keamanan pribadi Anda..."
+                                        className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Jawaban Keamanan</label>
+                                    <input
+                                        type="text"
+                                        value={setupAnswer}
+                                        onChange={e => setSetupAnswer(e.target.value)}
+                                        placeholder="Jawaban Anda (tidak case-sensitive)"
+                                        className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                                        required
+                                    />
+                                </div>
+                            </>
+                        )}
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="w-full bg-teal-600 text-white font-bold py-2.5 rounded-lg hover:bg-teal-700 transition-colors disabled:bg-teal-400"
+                        >
+                            {isLoading ? 'Menyimpan...' : 'Simpan & Masuk'}
+                        </button>
+                    </form>
+                    <button
+                        type="button"
+                        onClick={() => { setPendingLoginUser(null); setView('login'); }}
+                        className="mt-4 w-full text-gray-500 text-sm hover:text-gray-700"
+                    >
+                        Batal, Kembali ke Login
+                    </button>
                 </div>
             </div>
         );

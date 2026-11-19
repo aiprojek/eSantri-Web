@@ -6,6 +6,7 @@ import { db, PondokSettingsWithId } from '../db';
 import { initialSettings, initialSantri } from '../data/mock';
 import { logActivity as logActivityHelper } from '../services/logService';
 import { CURRENT_PERMISSION_VERSION, migrateUserPermissions } from '../services/permissionMigrationService';
+import { encryptBackupPayload } from '../utils/encryptedBackup';
 
 interface SettingsContextType {
     settings: PondokSettingsWithId;
@@ -13,7 +14,7 @@ interface SettingsContextType {
     backupModal: BackupModalState;
     onSaveSettings: (newSettings: PondokSettings) => Promise<void>;
     onUpdateSettings: (newSettings: PondokSettings) => Promise<void>;
-    downloadBackup: () => Promise<void>;
+    downloadBackup: (options?: { password?: string }) => Promise<void>;
     triggerBackupCheck: (forceAction?: boolean) => void;
     closeBackupModal: () => void;
     logActivity: (tableName: string, operation: 'INSERT' | 'UPDATE' | 'DELETE', recordId: string, oldData?: any, newData?: any) => Promise<void>;
@@ -163,7 +164,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const onUpdateSettings = onSaveSettings;
 
-    const downloadBackup = async () => {
+    const downloadBackup = async (options?: { password?: string }) => {
         const data = {
             settings: await db.settings.toArray(), 
             santri: await db.santri.toArray(), 
@@ -211,9 +212,20 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             version: '3.0',
             timestamp: new Date().toISOString(),
         };
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const backupPassword =
+            options && typeof options === 'object' && 'password' in options && typeof options.password === 'string' && options.password.length > 0
+                ? options.password
+                : undefined;
+
+        const outputObj = backupPassword ? await encryptBackupPayload(data, backupPassword) : data;
+        const dateStamp = new Date().toISOString().slice(0, 10);
+        const fileName = backupPassword
+            ? `backup_esantri_encrypted_${dateStamp}.json`
+            : `backup_esantri_${dateStamp}.json`;
+
+        const blob = new Blob([JSON.stringify(outputObj, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-        const link = document.createElement('a'); link.href = url; link.download = `backup_esantri_${new Date().toISOString().slice(0, 10)}.json`;
+        const link = document.createElement('a'); link.href = url; link.download = fileName;
         document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
         
         const newSettings = { ...settings, backupConfig: { ...settings.backupConfig, lastBackup: new Date().toISOString() } };

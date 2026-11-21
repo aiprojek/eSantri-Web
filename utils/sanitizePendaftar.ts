@@ -219,8 +219,10 @@ export function sanitizeCustomDataJson(raw: unknown): string {
 
     let serialized = JSON.stringify(cleanObj);
     if (serialized.length > MAX_LEN_CUSTOM_DATA) {
-        // Pangkas entri terbesar satu per satu (prioritaskan menghapus base64 terlalu besar jika melebihi batas 50KB)
+        // Pangkas entri terbesar satu per satu (prioritaskan menghapus base64/teks non-E2EE terlalu besar; pertahankan __e2ee_bio terakhir)
         const keysByLen = Object.keys(cleanObj).sort((a, b) => {
+            if (a === '__e2ee_bio') return 1;
+            if (b === '__e2ee_bio') return -1;
             const la = JSON.stringify(cleanObj[a] ?? '').length;
             const lb = JSON.stringify(cleanObj[b] ?? '').length;
             return lb - la;

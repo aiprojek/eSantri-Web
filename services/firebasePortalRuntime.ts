@@ -167,10 +167,14 @@ export const submitPortalPsbRegistration = async ({
             createdAt: serverTimestamp(),
         };
     } else {
+        const safeNama = String(cleanFields.namaLengkap || '').trim() || 'Calon Santri';
         docPayload = {
             ...sanitizePendaftar({
                 ...baseMeta,
                 ...cleanFields,
+                namaLengkap: safeNama,
+                status: 'Baru',
+                deleted: false,
                 customData: JSON.stringify(customData),
                 id: parseInt(pendaftarId, 10),
             }),

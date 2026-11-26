@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../../db';
 import { PondokSettings, PortalConfig, PortalContact, PortalAnnouncementPost, PortalProvider } from '../../types';
 import { useAppContext } from '../../AppContext';
 import { SectionCard } from '../common/SectionCard';
@@ -13,6 +15,9 @@ import {
 } from '../../services/portalGasService';
 import { downloadStandalonePortalHtml } from '../../utils/portalStandaloneGenerator';
 import { auth, isFirebaseClientConfigReady } from '../../firebase';
+import { extractDriveFolderId } from '../psb/utils/psbUtils';
+import { generatePsbAdminKey, generatePsbPublicKey } from '../../services/psbCloudService';
+import { generatePortalPin, normalizePortalPin } from '../../services/e2eeService';
 
 interface TabPortalProps {
     localSettings: PondokSettings;
@@ -28,6 +33,8 @@ const DEFAULT_PORTAL_CONFIG: PortalConfig = {
     portalId: 'default-portal',
     gasEndpoint: '',
     gasApiKey: '',
+    gasPublicKey: '',
+    gasAdminKey: '',
     theme: 'teal',
     showFinance: true,
     showAcademic: true,
@@ -64,6 +71,18 @@ export const TabPortal: React.FC<TabPortalProps> = ({
     const [isSyncing, setIsSyncing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [showApiKey, setShowApiKey] = useState(false);
+    const [showAdminKey, setShowAdminKey] = useState(false);
+    const [pinSearch, setPinSearch] = useState('');
+    const [revealedPinIds, setRevealedPinIds] = useState<Record<number, boolean>>({});
+    const [showPinTable, setShowPinTable] = useState(false);
+    const [isPublishingWithPin, setIsPublishingWithPin] = useState(false);
+
+    const activeSantriList =
+        useLiveQuery(
+            () => db.santri.filter((s) => !s.deleted && (s.status || '').trim().toLowerCase() === 'aktif').toArray(),
+            []
+        ) || [];
+    const missingPinSantri = activeSantriList.filter((s) => !normalizePortalPin(s.portalPin));
 
     // State form pengumuman baru
     const [newPostTitle, setNewPostTitle] = useState('');
@@ -89,12 +108,15 @@ export const TabPortal: React.FC<TabPortalProps> = ({
         }));
     };
 
+    const effectiveGasPublicKey = (portalConfig.gasPublicKey || portalConfig.gasApiKey || '').trim();
+    const effectiveGasAdminKey = (portalConfig.gasAdminKey || '').trim();
+
     const encryptedKey =
         portalConfig.gasEndpoint?.trim() && portalConfig.portalId?.trim()
             ? encodePortalKey(
                   portalConfig.gasEndpoint.trim(),
                   portalConfig.portalId.trim(),
-                  portalConfig.gasApiKey?.trim() || ''
+                  effectiveGasPublicKey
               )
             : '';
 
@@ -119,6 +141,202 @@ export const TabPortal: React.FC<TabPortalProps> = ({
     const handleCopyText = (text: string, label: string) => {
         navigator.clipboard.writeText(text);
         showToast(`${label} berhasil disalin!`, 'success');
+    };
+
+    const generateMissingSantriPins = async (): Promise<number> => {
+        const currentList = await db.santri
+            .filter((s) => !s.deleted && (s.status || '').trim().toLowerCase() === 'aktif')
+            .toArray();
+        const missing = currentList.filter((s) => !normalizePortalPin(s.portalPin));
+        if (missing.length === 0) return 0;
+        const now = Date.now();
+        await db.santri.bulkPut(
+            missing.map((s) => ({
+                ...s,
+                portalPin: generatePortalPin(6),
+                lastModified: now,
+            }))
+        );
+        return missing.length;
+    };
+
+    const handleGenerateMissingPins = async () => {
+        if (!canWrite) return;
+        try {
+            const created = await generateMissingSantriPins();
+            if (created === 0) {
+                showToast('Semua santri aktif sudah memiliki PIN Portal.', 'info');
+            } else {
+                showToast(`Berhasil membuat PIN acak 6 digit untuk ${created} santri aktif.`, 'success');
+            }
+        } catch (err) {
+            showToast((err as Error)?.message || 'Gagal membuat PIN santri.', 'error');
+        }
+    };
+
+    const handleRegenerateSinglePin = async (santriId: number, nama: string) => {
+        if (!canWrite) return;
+        try {
+            const newPin = generatePortalPin(6);
+            await db.santri.update(santriId, {
+                portalPin: newPin,
+                lastModified: Date.now(),
+            });
+            setRevealedPinIds((prev) => ({ ...prev, [santriId]: true }));
+            showToast(`PIN baru untuk ${nama} dibuat. Jangan lupa klik Simpan & Sinkronkan Portal.`, 'success');
+        } catch (err) {
+            showToast((err as Error)?.message || 'Gagal mengacak ulang PIN santri.', 'error');
+        }
+    };
+
+    const handlePublishPortalWithPin = async () => {
+        if (!canWrite) return;
+        setIsPublishingWithPin(true);
+        try {
+            const createdCount = await generateMissingSantriPins();
+            const updatedConfig: PortalConfig = {
+                ...portalConfig,
+                portalRequirePin: true,
+            };
+            const nextSettings: PondokSettings = {
+                ...localSettings,
+                portalConfig: updatedConfig,
+            };
+            setLocalSettings(nextSettings);
+
+            const provider = updatedConfig.provider || 'gas';
+            const canRemoteSync =
+                (provider === 'gas' && Boolean(updatedConfig.gasEndpoint?.trim())) ||
+                (provider === 'cloudflare' && Boolean(updatedConfig.cloudflareWorkerUrl?.trim())) ||
+                (provider === 'supabase' && Boolean(updatedConfig.supabaseUrl?.trim() && updatedConfig.supabaseAnonKey?.trim())) ||
+                (provider === 'firebase' && Boolean(isFirebaseClientConfigReady && (localSettings.cloudSyncConfig?.firebasePairedTenantId?.trim() || auth?.currentUser?.uid)));
+
+            let syncedSettings = nextSettings;
+            let syncedMsg = '';
+            if (canRemoteSync) {
+                const res = await syncPortalData(nextSettings);
+                syncedSettings = {
+                    ...nextSettings,
+                    portalConfig: {
+                        ...updatedConfig,
+                        lastSyncedAt: res.syncedAt,
+                        lastSyncedCount: res.santriCount,
+                        lastPayloadSize: res.payloadSize,
+                    },
+                };
+                setLocalSettings(syncedSettings);
+                syncedMsg = ` dan menyinkronkan ${res.santriCount} santri ke ${res.providerName}`;
+            }
+
+            if (onSaveSettings) {
+                const dataToSave = { ...syncedSettings };
+                if (!dataToSave.cloudSyncConfig.dropboxAppKey && settings.cloudSyncConfig.dropboxAppKey) {
+                    dataToSave.cloudSyncConfig.dropboxAppKey = settings.cloudSyncConfig.dropboxAppKey;
+                }
+                if (!dataToSave.cloudSyncConfig.dropboxAppSecret && settings.cloudSyncConfig.dropboxAppSecret) {
+                    dataToSave.cloudSyncConfig.dropboxAppSecret = settings.cloudSyncConfig.dropboxAppSecret;
+                }
+                if (!dataToSave.cloudSyncConfig.webdavPassword && settings.cloudSyncConfig.webdavPassword) {
+                    dataToSave.cloudSyncConfig.webdavPassword = settings.cloudSyncConfig.webdavPassword;
+                }
+                await onSaveSettings(dataToSave);
+            }
+
+            showToast(
+                `Mode PIN Portal diaktifkan${createdCount > 0 ? ` (${createdCount} PIN baru dibuat)` : ''}${syncedMsg}.${!canRemoteSync && provider === 'standalone' ? ' Silakan unduh ulang HTML Mandiri.' : ''}`,
+                'success'
+            );
+        } catch (err) {
+            showToast((err as Error)?.message || 'Gagal menerbitkan ulang portal dengan PIN.', 'error');
+        } finally {
+            setIsPublishingWithPin(false);
+        }
+    };
+
+    const escapePinText = (val: string) =>
+        String(val || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+    const handleExportPinCsv = () => {
+        const escapeCsvCell = (raw: string) => {
+            const s = String(raw || '');
+            const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+            return `"${safe.replace(/"/g, '""')}"`;
+        };
+        const rows = [['NIS', 'Nama Lengkap', 'Tanggal Lahir', 'PIN Portal']];
+        activeSantriList.forEach((s) => {
+            rows.push([
+                s.nis || '',
+                s.namaLengkap || '',
+                s.tanggalLahir || '',
+                normalizePortalPin(s.portalPin) || '(Belum dibuat)',
+            ]);
+        });
+        const csv = rows.map((r) => r.map(escapeCsvCell).join(',')).join('\r\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `pin-portal-santri-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+    };
+
+    const handlePrintPinCards = () => {
+        if (activeSantriList.length === 0) {
+            showToast('Belum ada data santri aktif untuk dicetak.', 'info');
+            return;
+        }
+        const cardsHtml = activeSantriList
+            .map((s) => {
+                const pin = normalizePortalPin(s.portalPin) || 'BELUM ADA';
+                return `<div class="card">
+                    <div class="ponpes">${escapePinText(localSettings.namaPonpes || 'Pondok Pesantren')}</div>
+                    <div class="sub">Kartu Akses Portal Wali Santri</div>
+                    <div class="row"><span>Nama</span><strong>${escapePinText(s.namaLengkap || '-')}</strong></div>
+                    <div class="row"><span>NIS</span><strong>${escapePinText(s.nis || '-')}</strong></div>
+                    <div class="row"><span>Tgl Lahir</span><strong>${escapePinText(s.tanggalLahir || '-')}</strong></div>
+                    <div class="pin-box">PIN: <span>${escapePinText(pin)}</span></div>
+                </div>`;
+            })
+            .join('');
+
+        const docHtml = `<!DOCTYPE html><html lang="id"><head><meta charset="utf-8" /><title>Kartu PIN Portal Wali Santri</title>
+        <style>
+            body{font-family:sans-serif;padding:16px;color:#0f172a}
+            .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+            .card{border:1px solid #cbd5e1;border-radius:10px;padding:12px;page-break-inside:avoid}
+            .ponpes{font-size:12px;font-weight:800;color:#0f766e}
+            .sub{font-size:10px;color:#64748b;margin-bottom:8px}
+            .row{display:flex;justify-content:space-between;font-size:11px;margin:3px 0;border-bottom:1px dashed #e2e8f0;padding-bottom:2px}
+            .pin-box{margin-top:8px;padding:6px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:6px;text-align:center;font-size:13px;font-weight:800;letter-spacing:2px}
+        </style></head><body><div class="grid">${cardsHtml}</div></body></html>`;
+
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        iframe.srcdoc = docHtml;
+        iframe.onload = () => {
+            try {
+                iframe.contentWindow?.focus();
+                iframe.contentWindow?.print();
+            } finally {
+                setTimeout(() => {
+                    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+                }, 1500);
+            }
+        };
+        document.body.appendChild(iframe);
     };
 
     const handleDownloadStandalone = () => {
@@ -153,6 +371,10 @@ export const TabPortal: React.FC<TabPortalProps> = ({
         const provider = portalConfig.provider || 'gas';
         if (provider === 'gas' && !portalConfig.gasEndpoint?.trim()) {
             showToast('Isi URL Web App Google Apps Script (GAS) terlebih dahulu.', 'error');
+            return;
+        }
+        if (provider === 'gas' && effectiveGasAdminKey && effectiveGasAdminKey === effectiveGasPublicKey) {
+            showToast('Kunci Admin GAS (ADMIN_KEY) tidak boleh sama dengan Kunci Publik (PUBLIC_KEY).', 'error');
             return;
         }
         if (provider === 'cloudflare' && !portalConfig.cloudflareWorkerUrl?.trim()) {
@@ -313,7 +535,12 @@ export const TabPortal: React.FC<TabPortalProps> = ({
         );
     };
 
-    const gasScriptV2 = getPortalGasScriptV2(portalConfig.portalId || 'ponpes-alikhlas');
+    const gasScriptV2 = getPortalGasScriptV2(
+        portalConfig.portalId || 'ponpes-alikhlas',
+        extractDriveFolderId(localSettings.psbConfig?.driveFolderId || ''),
+        effectiveGasPublicKey,
+        effectiveGasAdminKey
+    );
 
     const getStandaloneCardInfo = () => {
         const p = portalConfig.provider || 'gas';
@@ -559,9 +786,9 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                             {(portalConfig.provider || 'gas') === 'firebase' ? (
                                 <>Mode <strong>Firebase Firestore</strong> kini mengisolasi setiap santri pada dokumen individual terenkripsi (<code>entries/{'{hash}'}</code>) sehingga wali hanya mengunduh data anaknya sendiri.</>
                             ) : ['supabase', 'standalone'].includes(portalConfig.provider || 'gas') ? (
-                                <>Penyedia <strong>{portalConfig.provider === 'supabase' ? 'Supabase REST' : 'HTML Mandiri Statis'}</strong> mengunduh daftar terenkripsi ke browser pengakses sebelum dicocokkan dengan NIS + Tanggal Lahir. Meski dilindungi enkripsi AES-GCM &amp; PBKDF2 100.000 iterasi (v2), untuk isolasi server-side penuh gunakan <strong>GAS v2.0</strong>, <strong>Cloudflare Worker</strong>, atau <strong>Firebase</strong>.</>
+                                <>Penyedia <strong>{portalConfig.provider === 'supabase' ? 'Supabase REST' : 'HTML Mandiri Statis'}</strong> mengunduh daftar terenkripsi ke browser pengakses sebelum dicocokkan dengan kredensial santri. Meski dilindungi enkripsi AES-GCM &amp; PBKDF2 600.000 iterasi (v3), untuk isolasi server-side penuh gunakan <strong>GAS v2.0</strong>, <strong>Cloudflare Worker</strong>, atau <strong>Firebase</strong>.</>
                             ) : (
-                                <>Enkripsi <strong>PBKDF2 100.000 iterasi (v2) + AES-GCM</strong> aktif. Pastikan Anda menekan tombol <strong>Sinkronkan Sekarang</strong> (dan generate ulang HTML jika memakai mode mandiri) setelah mengaktifkan/memperbarui E2EE Portal.</>
+                                <>Enkripsi <strong>PBKDF2 600.000 iterasi (v3) + AES-GCM</strong> aktif. Pastikan Anda menekan tombol <strong>Sinkronkan Sekarang</strong> (dan generate ulang HTML jika memakai mode mandiri) setelah mengaktifkan/memperbarui E2EE Portal.</>
                             )}
                         </div>
                     </div>
@@ -644,7 +871,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                                     </button>
                                 )}
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="md:col-span-2">
                                     <label className="block text-xs font-bold text-slate-700 mb-1">
                                         URL Web App Google Apps Script (Endpoint <code>/exec</code>)
@@ -658,16 +885,49 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                                        Token Rahasia API GAS (Opsional)
-                                    </label>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <label className="block text-xs font-bold text-slate-700">
+                                            Kunci Kirim Publik (<code>PUBLIC_KEY</code>)
+                                        </label>
+                                        {canWrite && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const nextPub = generatePsbPublicKey();
+                                                    setLocalSettings((prev) => ({
+                                                        ...prev,
+                                                        portalConfig: {
+                                                            ...DEFAULT_PORTAL_CONFIG,
+                                                            ...(prev.portalConfig || {}),
+                                                            gasPublicKey: nextPub,
+                                                            gasApiKey: nextPub,
+                                                        },
+                                                    }));
+                                                }}
+                                                className="text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-white border border-teal-300 px-2 py-0.5 rounded-md cursor-pointer"
+                                            >
+                                                <i className="bi bi-shuffle mr-1"></i>Acak Ulang
+                                            </button>
+                                        )}
+                                    </div>
                                     <div className="relative">
                                         <input
                                             type={canWrite && showApiKey ? 'text' : 'password'}
-                                            value={portalConfig.gasApiKey || ''}
+                                            value={portalConfig.gasPublicKey ?? portalConfig.gasApiKey ?? ''}
                                             readOnly={!canWrite}
-                                            onChange={(e) => handlePortalConfigChange('gasApiKey', e.target.value)}
-                                            placeholder="Kosongkan jika tidak memakai token"
+                                            onChange={(e) => {
+                                                const v = e.target.value;
+                                                setLocalSettings((prev) => ({
+                                                    ...prev,
+                                                    portalConfig: {
+                                                        ...DEFAULT_PORTAL_CONFIG,
+                                                        ...(prev.portalConfig || {}),
+                                                        gasPublicKey: v,
+                                                        gasApiKey: v,
+                                                    },
+                                                }));
+                                            }}
+                                            placeholder="pub_... (anti-penyalahgunaan & rotasi)"
                                             className="app-input block w-full p-2.5 pr-9 text-sm font-mono"
                                         />
                                         {canWrite && (
@@ -680,6 +940,47 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                                             </button>
                                         )}
                                     </div>
+                                    <p className="text-[11px] text-slate-500 mt-1">
+                                        Boleh tertanam di tautan/HTML publik (bukan rahasia — untuk baca profil publik &amp; kirim PSB).
+                                    </p>
+                                </div>
+                                <div>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <label className="block text-xs font-bold text-slate-700">
+                                            Kunci Admin (<code>ADMIN_KEY</code> — Rahasia)
+                                        </label>
+                                        {canWrite && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handlePortalConfigChange('gasAdminKey', generatePsbAdminKey(effectiveGasPublicKey))}
+                                                className="text-[11px] font-bold text-rose-700 hover:text-rose-900 bg-white border border-rose-300 px-2 py-0.5 rounded-md cursor-pointer"
+                                            >
+                                                <i className="bi bi-key-fill mr-1"></i>Acak Ulang
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="relative">
+                                        <input
+                                            type={canWrite && showAdminKey ? 'text' : 'password'}
+                                            value={portalConfig.gasAdminKey || ''}
+                                            readOnly={!canWrite}
+                                            onChange={(e) => handlePortalConfigChange('gasAdminKey', e.target.value)}
+                                            placeholder="adm_... (minimal 32 karakter)"
+                                            className="app-input block w-full p-2.5 pr-9 text-sm font-mono"
+                                        />
+                                        {canWrite && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAdminKey((prev) => !prev)}
+                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                            >
+                                                <i className={`bi ${showAdminKey ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                                            </button>
+                                        )}
+                                    </div>
+                                    <p className="text-[11px] text-rose-700 mt-1">
+                                        Disimpan lokal di perangkat Admin saja (tidak masuk ke tautan/HTML). Wajib untuk sinkronisasi &amp; baca pendaftar.
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -929,6 +1230,202 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                         </div>
                     </div>
                 </div>
+            </SectionCard>
+
+            {/* 1b. Keamanan Login Ganda: PIN Portal Wali Santri (CSPRNG 6 Digit) */}
+            <SectionCard
+                title="Keamanan Login Ganda: PIN Portal Santri (6 Digit)"
+                description="Tambahkan PIN acak 6 digit unik per santri sehingga login Portal Wali tidak hanya bergantung pada NIS dan Tanggal Lahir."
+                contentClassName="p-6 space-y-4"
+            >
+                {(!portalConfig.portalRequirePin || missingPinSantri.length > 0) && (
+                    <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950 space-y-2.5">
+                        <div className="flex items-start gap-2.5">
+                            <i className="bi bi-shield-exclamation text-amber-600 text-lg shrink-0 mt-0.5"></i>
+                            <div className="space-y-1">
+                                <div className="font-extrabold text-sm text-amber-900">
+                                    Rekomendasi Keamanan: Aktifkan PIN Portal untuk Semua Santri
+                                </div>
+                                <p className="leading-relaxed">
+                                    Login portal tanpa PIN (hanya NIS + Tanggal Lahir) mulai dideprekasi karena lebih mudah ditebak. Rekaman portal lama tetap kompatibel selama transisi, namun sebaiknya segera buat PIN 6 digit untuk semua santri aktif ({missingPinSantri.length} dari {activeSantriList.length} santri aktif belum memiliki PIN) lalu terbitkan ulang portal.
+                                </p>
+                            </div>
+                        </div>
+                        {canWrite && (
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    onClick={handlePublishPortalWithPin}
+                                    disabled={isPublishingWithPin}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white px-4 py-2 text-xs font-bold transition-colors disabled:opacity-60"
+                                >
+                                    <i className={`bi ${isPublishingWithPin ? 'bi-arrow-repeat animate-spin' : 'bi-shield-lock-fill'}`}></i>
+                                    {isPublishingWithPin ? 'Menerbitkan Ulang...' : 'Terbitkan ulang portal dengan PIN'}
+                                </button>
+                                {missingPinSantri.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={handleGenerateMissingPins}
+                                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-white hover:bg-amber-100 text-amber-900 px-3.5 py-2 text-xs font-bold transition-colors"
+                                    >
+                                        <i className="bi bi-key"></i>
+                                        Buat PIN Saja ({missingPinSantri.length} Kosong)
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+                    <label className="inline-flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={Boolean(portalConfig.portalRequirePin)}
+                            disabled={!canWrite}
+                            onChange={(e) => handlePortalConfigChange('portalRequirePin', e.target.checked)}
+                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                        />
+                        <div>
+                            <span className="text-sm font-bold text-slate-800 block">
+                                Wajibkan PIN 6 Digit saat Wali Santri Login
+                            </span>
+                            <span className="text-xs text-slate-500">
+                                Saat E2EE Portal aktif, PIN ikut memperkuat kunci enkripsi (<code>v4:</code> &amp; AES-GCM v3) sehingga data hanya bisa dibuka oleh pemilik NIS, Tanggal Lahir, dan PIN.
+                            </span>
+                        </div>
+                    </label>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-teal-100 px-3 py-1 text-[11px] font-bold text-teal-900">
+                            {activeSantriList.length - missingPinSantri.length} / {activeSantriList.length} Santri Ber-PIN
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setShowPinTable((prev) => !prev)}
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                        >
+                            <i className={`bi ${showPinTable ? 'bi-chevron-up' : 'bi-list-ul'} mr-1`}></i>
+                            {showPinTable ? 'Tutup Daftar PIN' : 'Kelola PIN Santri'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handlePrintPinCards}
+                            className="rounded-lg border border-teal-600 bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-800 hover:bg-teal-100"
+                        >
+                            <i className="bi bi-printer mr-1"></i>Cetak Kartu PIN
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleExportPinCsv}
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                        >
+                            <i className="bi bi-file-earmark-spreadsheet mr-1"></i>Ekspor CSV
+                        </button>
+                    </div>
+                </div>
+
+                {showPinTable && (
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <input
+                                type="search"
+                                value={pinSearch}
+                                onChange={(e) => setPinSearch(e.target.value)}
+                                placeholder="Cari nama atau NIS santri..."
+                                className="app-input w-full sm:w-72 p-2 text-xs"
+                            />
+                            {canWrite && missingPinSantri.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={handleGenerateMissingPins}
+                                    className="rounded-lg bg-teal-700 hover:bg-teal-800 text-white px-3 py-1.5 text-xs font-bold"
+                                >
+                                    <i className="bi bi-magic mr-1"></i>Isi {missingPinSantri.length} PIN Kosong
+                                </button>
+                            )}
+                        </div>
+                        <div className="max-h-72 overflow-auto border border-slate-100 rounded-lg">
+                            <table className="w-full text-left text-xs border-collapse">
+                                <thead className="bg-slate-50 text-slate-600 sticky top-0">
+                                    <tr>
+                                        <th className="p-2.5 border-b font-bold">NIS</th>
+                                        <th className="p-2.5 border-b font-bold">Nama Santri</th>
+                                        <th className="p-2.5 border-b font-bold">PIN Portal</th>
+                                        <th className="p-2.5 border-b font-bold text-right">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {activeSantriList
+                                        .filter((s) => {
+                                            const q = pinSearch.trim().toLowerCase();
+                                            if (!q) return true;
+                                            return (
+                                                (s.namaLengkap || '').toLowerCase().includes(q) ||
+                                                (s.nis || '').toLowerCase().includes(q)
+                                            );
+                                        })
+                                        .slice(0, 100)
+                                        .map((s) => {
+                                            const pin = normalizePortalPin(s.portalPin);
+                                            const isShown = Boolean(revealedPinIds[s.id]);
+                                            return (
+                                                <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                                    <td className="p-2.5 font-mono text-slate-700">{s.nis}</td>
+                                                    <td className="p-2.5 font-semibold text-slate-800">{s.namaLengkap}</td>
+                                                    <td className="p-2.5 font-mono">
+                                                        {pin ? (
+                                                            <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-0.5 font-bold tracking-widest text-slate-800">
+                                                                {isShown ? pin : '••••••'}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-amber-700 font-semibold italic">Belum dibuat</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-2.5 text-right space-x-1.5 whitespace-nowrap">
+                                                        {pin && (
+                                                            <>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setRevealedPinIds((prev) => ({ ...prev, [s.id]: !prev[s.id] }))
+                                                                    }
+                                                                    className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
+                                                                >
+                                                                    <i className={`bi ${isShown ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        handleCopyText(
+                                                                            `Portal Wali Santri\nNama: ${s.namaLengkap}\nNIS: ${s.nis}\nTanggal Lahir: ${s.tanggalLahir}\nPIN: ${pin}`,
+                                                                            `Info login ${s.namaLengkap}`
+                                                                        )
+                                                                    }
+                                                                    className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                                                                >
+                                                                    <i className="bi bi-clipboard mr-1"></i>Salin
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                        {canWrite && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRegenerateSinglePin(s.id, s.namaLengkap)}
+                                                                className="rounded border border-teal-200 bg-teal-50 px-2 py-1 text-[11px] font-bold text-teal-800 hover:bg-teal-100"
+                                                            >
+                                                                <i className="bi bi-shuffle mr-1"></i>{pin ? 'Acak Ulang' : 'Buat PIN'}
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
             </SectionCard>
 
             {/* 2. Hak Akses Modul Tampilan Wali Santri */}
@@ -1301,7 +1798,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({
                                     Kode Google Apps Script Portal Wali v2.0 (Server-Side Auth)
                                 </h3>
                                 <p className="text-xs text-slate-500 mt-0.5">
-                                    Salin kode di bawah ini ke editor <strong>Extensions &gt; Apps Script</strong> di Google Spreadsheet Anda, lalu klik <strong>Deploy &gt; New deployment (Web app, Anyone)</strong>.
+                                    Salin kode di bawah ini ke editor <strong>Extensions &gt; Apps Script</strong> di Google Spreadsheet Anda, lalu klik <strong>Deploy &gt; New deployment</strong> (pertama kali) atau <strong>Deploy &gt; Manage deployments &gt; Edit &gt; Version: New version</strong> saat memperbarui.
                                 </p>
                             </div>
                             <button

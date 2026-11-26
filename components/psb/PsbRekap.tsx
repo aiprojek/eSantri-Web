@@ -3,24 +3,36 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { Pendaftar, PondokSettings, Santri, RiwayatStatus, Tagihan, PendaftarStatus, PsbConfig, PsbCloudProvider } from '../../types';
 import { db } from '../../db';
-import { loadJsZip, loadSyncService } from '../../utils/lazyCloudServices';
+import { loadSyncService } from '../../utils/lazyCloudServices';
 import { loadFirebaseRealtimeRuntime } from '../../utils/lazyFirebaseRuntimes';
 import { buildStandardExportFileName } from '../../utils/exportFileName';
 import { generateSyncSafeId } from '../../utils/idGenerator';
 import { generateNis } from '../../utils/nisGenerator';
 import { logActivity } from '../../services/logService';
 import { openExternalLinkSafe } from '../../services/waService';
-import { decryptPsbCloudRowsWithReport, fetchPsbFromCloudAdapter, getPsbCloudProviderMeta, isPsbCloudEndpointValid } from '../../services/psbCloudService';
-import { decryptAnyEnvelope, tryParseE2eeEnvelope } from '../../services/e2eeService';
+import { buildPsbGasScriptV31, clearPsbGasProbeCache, decryptPsbCloudRowsWithReport, fetchPsbFromCloudWithMeta, generatePsbAdminKey, generatePsbPublicKey, getPsbCloudProviderMeta, isPsbCloudEndpointValid } from '../../services/psbCloudService';
+import { decryptAnyEnvelope, ensureDeviceVaultHydrated, isDeviceUnlockedForConfig, tryParseE2eeEnvelope } from '../../services/e2eeService';
 import { sanitizePendaftar } from '../../utils/sanitizePendaftar';
 import { LoadingFallback } from '../common/LoadingFallback';
 import { PsbExamCardModal } from './modals/PsbExamCardModal';
-import { PsbAcceptanceModal, PsbBillingOption, PsbPlacementOption } from './modals/PsbAcceptanceModal';
+import { PsbAcceptanceModal, PsbAttachmentOption, PsbBillingOption, PsbPlacementOption } from './modals/PsbAcceptanceModal';
 import { PsbPrintFormModal } from './modals/PsbPrintFormModal';
 import { PsbGasConfigModal } from './modals/PsbGasConfigModal';
 import { PsbAnnouncementModal } from './modals/PsbAnnouncementModal';
 import { PsbDashboardReportModal } from './modals/PsbDashboardReportModal';
 import { PsbArchiveHistoryModal } from './modals/PsbArchiveHistoryModal';
+import {
+    BERKAS_UNSUPPORTED_BACKEND_LABEL,
+    buildPsbArchiveZip,
+    canAccessSantriBerkas,
+    deleteCloudCopiesForPendaftarList,
+    DeleteCloudCopySummary,
+    isAttachmentBackendOfflineSupported,
+    linkPendaftarBerkasToSantri,
+    SaveAttachmentsProgress,
+    SaveAttachmentsSummary,
+    savePendaftarAttachmentsToDevice,
+} from '../../services/santriBerkasService';
 import {
     getPsbRegistrationNumber,
     calculatePsbAverageScore,
@@ -35,6 +47,7 @@ import {
     resolveJenjangIdFromInput,
     isSamePendaftarIdentity,
     getPsbAcademicYearOptions,
+    extractDriveFolderId,
     PSB_ALL_STANDARD_FIELD_KEYS
 } from './utils/psbUtils';
 
@@ -80,6 +93,22 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+    const [legacyGasAlert, setLegacyGasAlert] = useState<{ isLegacy: boolean; scriptVersion: number | null; copied: boolean } | null>(null);
+    const [quarantinedPlaintextRows, setQuarantinedPlaintextRows] = useState<{ rows: any[]; source: string } | null>(null);
+    const [isReencryptingPlaintext, setIsReencryptingPlaintext] = useState(false);
+
+    const canManageBerkas = canAccessSantriBerkas(currentUser);
+    const berkasBackendSupport = useMemo(() => isAttachmentBackendOfflineSupported(settings), [settings]);
+    const [isBulkBerkasModalOpen, setIsBulkBerkasModalOpen] = useState(false);
+    const [isPullingBulkBerkas, setIsPullingBulkBerkas] = useState(false);
+    const [bulkBerkasRaw, setBulkBerkasRaw] = useState(false);
+    const [bulkBerkasProgress, setBulkBerkasProgress] = useState<SaveAttachmentsProgress | null>(null);
+    const [bulkBerkasSummary, setBulkBerkasSummary] = useState<SaveAttachmentsSummary | null>(null);
+    const [isDeletingBulkCloud, setIsDeletingBulkCloud] = useState(false);
+    const [bulkCloudDeleteSummary, setBulkCloudDeleteSummary] = useState<DeleteCloudCopySummary | null>(null);
+    const [isZipArchiveModalOpen, setIsZipArchiveModalOpen] = useState(false);
+    const [zipFriendlyName, setZipFriendlyName] = useState(false);
+    const [zipProgress, setZipProgress] = useState<{ processedPendaftar: number; totalPendaftar: number; currentName: string; fileCount: number } | null>(null);
 
     // Submission method from settings
     const method = settings.psbConfig.submissionMethod === 'portal' ? 'hybrid' : settings.psbConfig.submissionMethod;
@@ -184,18 +213,34 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 const result = await syncPsbWithFirebaseHub(actualTenantId);
                 onUpdateList();
                 showToast(`Sinkronisasi Firebase Hub selesai! ${result.pulledCount} data ditarik, ${result.pushedCount} data diunggah ke Cloud. Total: ${result.total} pendaftar.`, 'success');
+                if (result.plaintextRejectedCount > 0) {
+                    showToast(`${result.plaintextRejectedCount} dokumen PSB plaintext di Firebase ditolak (buka Pusat Sinkronisasi Cloud untuk "Terima & enkripsi ulang").`, 'error');
+                }
                 return;
             }
 
             if (config.provider === 'dropbox') {
                 // Get valid token first to ensure auth
-                const { getValidDropboxToken, fetchPsbFromDropbox } = await loadSyncService();
+                const { getValidDropboxToken, fetchPsbFromDropboxWithReport } = await loadSyncService();
                 const token = await getValidDropboxToken(config);
-                const rawDropboxItems = await fetchPsbFromDropbox(token);
+                const dropboxReport = await fetchPsbFromDropboxWithReport(token);
+                const rawDropboxItems = dropboxReport.rows;
+                if (dropboxReport.rejectedPlaintextFiles.length > 0) {
+                    showToast(`${dropboxReport.rejectedPlaintextFiles.length} file inbox Dropbox plaintext ditolak (cek Pusat Sinkronisasi Cloud untuk "Terima & enkripsi ulang").`, 'error');
+                }
+                const requirePsbE2ee = Boolean(settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.psb);
                 const psbDecryptRes = rawDropboxItems.length > 0
-                    ? await decryptPsbCloudRowsWithReport(rawDropboxItems, settings.e2eeConfig?.enabled ? settings.e2eeConfig.keyId : undefined)
-                    : { rows: [], failedCount: 0, failedReasons: [] };
+                    ? await decryptPsbCloudRowsWithReport(
+                        rawDropboxItems,
+                        settings.e2eeConfig?.enabled ? settings.e2eeConfig.keyId : undefined,
+                        { requireEncrypted: requirePsbE2ee }
+                    )
+                    : { rows: [], failedCount: 0, failedReasons: [], rejectedPlaintextRows: [], rejectedPlaintextCount: 0 };
                 const newItems = psbDecryptRes.rows;
+                if (psbDecryptRes.rejectedPlaintextCount > 0) {
+                    setQuarantinedPlaintextRows({ rows: psbDecryptRes.rejectedPlaintextRows, source: 'Dropbox' });
+                    showToast(`${psbDecryptRes.rejectedPlaintextCount} baris PSB plaintext ditolak karena E2EE PSB aktif (tidak disimpan otomatis).`, 'error');
+                }
                 if (psbDecryptRes.failedCount > 0) {
                     showToast(`${psbDecryptRes.failedCount} berkas PSB di Dropbox memakai kunci E2EE lama/berbeda sehingga dilewati.`, 'info');
                 }
@@ -226,10 +271,10 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                         await db.pendaftar.bulkPut(itemsWithId);
                         onUpdateList();
                         showToast(`${itemsWithId.length} data pendaftar baru ditarik dari Dropbox.`, 'success');
-                    } else {
+                    } else if (psbDecryptRes.rejectedPlaintextCount === 0) {
                         showToast('Data di cloud sudah sinkron dengan lokal.', 'info');
                     }
-                } else {
+                } else if (psbDecryptRes.rejectedPlaintextCount === 0 && dropboxReport.rejectedPlaintextFiles.length === 0) {
                     showToast('Tidak ada data pendaftaran baru di Cloud (Folder Inbox).', 'info');
                 }
                 return;
@@ -243,12 +288,50 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         }
     };
 
+    const handleCopyLatestGasScript = async () => {
+        const currentPsb = settings.psbConfig;
+        let pubKey = (currentPsb?.cloudPublicKey || settings.portalConfig?.gasPublicKey || settings.portalConfig?.gasApiKey || '').trim();
+        let admKey = (currentPsb?.cloudAdminKey || settings.portalConfig?.gasAdminKey || '').trim();
+        let needsSave = false;
+        if (!pubKey) {
+            pubKey = generatePsbPublicKey();
+            needsSave = true;
+        }
+        if (admKey.length < 32 || admKey === pubKey) {
+            admKey = generatePsbAdminKey(pubKey);
+            needsSave = true;
+        }
+        if (needsSave && onSaveConfig && currentPsb) {
+            try {
+                await Promise.resolve(onSaveConfig({
+                    ...currentPsb,
+                    cloudPublicKey: pubKey,
+                    cloudAdminKey: admKey,
+                }));
+            } catch {
+                // tetap lanjut menyalin script
+            }
+        }
+        const cleanFolder = extractDriveFolderId(currentPsb?.driveFolderId || '');
+        const latestScript = buildPsbGasScriptV31(cleanFolder, pubKey, admKey);
+        await navigator.clipboard.writeText(latestScript.trim());
+        clearPsbGasProbeCache();
+        setLegacyGasAlert(prev => prev ? { ...prev, copied: true } : { isLegacy: true, scriptVersion: null, copied: true });
+        showToast('Skrip GAS terbaru disalin! Tempel ke Apps Script, Deploy > Manage deployments > Edit > Version: New version, lalu jalankan makeExistingFilesPrivate() & terbitkan ulang formulir.', 'success');
+    };
+
     const handleGoogleSync = async () => {
         if (!canWrite) return;
         const primaryProvider: PsbCloudProvider = settings.psbConfig?.backendProvider || 'gas';
-        const endpointConfigs = new Map<string, { endpointUrl: string; backendProvider: PsbCloudProvider; apiKey?: string }>();
+        const endpointConfigs = new Map<string, { endpointUrl: string; backendProvider: PsbCloudProvider; apiKey?: string; publicKey?: string; adminKey?: string }>();
 
-        const addEndpointIfValid = (url?: string, provider?: PsbCloudProvider, apiKey?: string) => {
+        const addEndpointIfValid = (
+            url?: string,
+            provider?: PsbCloudProvider,
+            apiKey?: string,
+            publicKey?: string,
+            adminKey?: string
+        ) => {
             const p: PsbCloudProvider = provider || primaryProvider || 'gas';
             const clean = (url || '').trim();
             if (!clean || !isPsbCloudEndpointValid(clean, p)) return;
@@ -257,21 +340,37 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 endpointConfigs.set(key, {
                     endpointUrl: clean,
                     backendProvider: p,
-                    apiKey: (apiKey || '').trim()
+                    apiKey: (apiKey || '').trim(),
+                    publicKey: (publicKey || '').trim(),
+                    adminKey: (adminKey || '').trim(),
                 });
             }
         };
 
-        addEndpointIfValid(scriptUrl, primaryProvider, settings.psbConfig?.cloudApiKey);
+        addEndpointIfValid(
+            scriptUrl,
+            primaryProvider,
+            settings.psbConfig?.cloudApiKey,
+            settings.psbConfig?.cloudPublicKey ?? settings.portalConfig?.gasPublicKey ?? settings.portalConfig?.gasApiKey,
+            settings.psbConfig?.cloudAdminKey ?? settings.portalConfig?.gasAdminKey
+        );
         (settings.psbConfig?.templates || []).forEach((t) => {
             addEndpointIfValid(
                 t.googleScriptUrl,
                 t.backendProvider || primaryProvider,
-                t.cloudApiKey ?? settings.psbConfig?.cloudApiKey
+                t.cloudApiKey ?? settings.psbConfig?.cloudApiKey,
+                t.cloudPublicKey ?? settings.psbConfig?.cloudPublicKey ?? settings.portalConfig?.gasPublicKey ?? settings.portalConfig?.gasApiKey,
+                t.cloudAdminKey ?? settings.psbConfig?.cloudAdminKey ?? settings.portalConfig?.gasAdminKey
             );
         });
         if (endpointConfigs.size === 0 && settings.portalConfig?.gasEndpoint) {
-            addEndpointIfValid(settings.portalConfig.gasEndpoint, 'gas', settings.portalConfig.gasApiKey);
+            addEndpointIfValid(
+                settings.portalConfig.gasEndpoint,
+                'gas',
+                settings.portalConfig.gasApiKey,
+                settings.portalConfig.gasPublicKey ?? settings.portalConfig.gasApiKey,
+                settings.portalConfig.gasAdminKey
+            );
         }
 
         if (endpointConfigs.size === 0) {
@@ -281,19 +380,43 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
         setIsSyncing(true);
         const usedProviders = new Set<string>();
+        let detectedLegacy: { isLegacy: boolean; scriptVersion: number | null } | null = null;
         try {
             const combinedRawData: any[] = [];
             for (const cfg of Array.from(endpointConfigs.values())) {
                 usedProviders.add(getPsbCloudProviderMeta(cfg.backendProvider).name);
-                const fetchedRows = await fetchPsbFromCloudAdapter(cfg);
-                combinedRawData.push(...fetchedRows);
+                const fetched = await fetchPsbFromCloudWithMeta(cfg);
+                if (cfg.backendProvider === 'gas' && fetched.isLegacyGas) {
+                    detectedLegacy = { isLegacy: true, scriptVersion: fetched.scriptVersion };
+                }
+                combinedRawData.push(...fetched.rows);
+            }
+            if (detectedLegacy) {
+                setLegacyGasAlert(prev => ({
+                    isLegacy: true,
+                    scriptVersion: detectedLegacy!.scriptVersion,
+                    copied: prev?.copied || false,
+                }));
+            } else {
+                setLegacyGasAlert(null);
             }
 
+            const requirePsbE2ee = Boolean(settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.psb);
             const psbDecryptRes = await decryptPsbCloudRowsWithReport(
                 combinedRawData,
-                settings.e2eeConfig?.enabled ? settings.e2eeConfig.keyId : undefined
+                settings.e2eeConfig?.enabled ? settings.e2eeConfig.keyId : undefined,
+                { requireEncrypted: requirePsbE2ee }
             );
             const rawData = psbDecryptRes.rows;
+            if (psbDecryptRes.rejectedPlaintextCount > 0) {
+                setQuarantinedPlaintextRows({
+                    rows: psbDecryptRes.rejectedPlaintextRows,
+                    source: usedProviders.size > 0 ? Array.from(usedProviders).join(', ') : 'Cloud PSB',
+                });
+                showToast(`${psbDecryptRes.rejectedPlaintextCount} data pendaftar plaintext dari cloud ditolak karena E2EE PSB aktif (tidak disimpan otomatis & tidak dihapus dari cloud).`, 'error');
+            } else {
+                setQuarantinedPlaintextRows(null);
+            }
             if (psbDecryptRes.failedCount > 0) {
                 showToast(`${psbDecryptRes.failedCount} baris pendaftar dengan kunci E2EE berbeda/rusak dilewati; data lain tetap diproses.`, 'info');
             }
@@ -571,6 +694,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
     const handleProcessWA = async () => {
         if (!canWrite || !waInput.trim()) return;
+        const requirePsbE2ee = Boolean(settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.psb);
         
         try {
             // Check for New Hybrid Format (Base64 Encoded Backup)
@@ -583,11 +707,16 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 let data = JSON.parse(jsonString);
                 const env = tryParseE2eeEnvelope(data);
                 if (env) {
-                    data = await decryptAnyEnvelope(env);
+                    data = await decryptAnyEnvelope(env, { expectedContext: 'psb' });
+                } else if (requirePsbE2ee) {
+                    setQuarantinedPlaintextRows({ rows: [data], source: 'WhatsApp' });
+                    setIsWaModalOpen(false);
+                    showToast('Pesan PSB plaintext ditolak karena E2EE PSB aktif. Gunakan tombol "Terima & enkripsi ulang" di banner peringatan bila sumber tepercaya.', 'error');
+                    return;
                 }
                 
                 processPendaftarData(data);
-                showToast(env ? 'Data Backup E2EE berhasil didekripsi & diproses!' : 'Data Backup Terenkripsi berhasil diproses!', 'success');
+                showToast(env ? 'Data Backup E2EE berhasil didekripsi & diproses!' : 'Data Backup berhasil diproses!', 'success');
                 setWaInput('');
                 setIsWaModalOpen(false);
                 return;
@@ -599,7 +728,12 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 let data = JSON.parse(jsonMatch[1].trim());
                 const env = tryParseE2eeEnvelope(data);
                 if (env) {
-                    data = await decryptAnyEnvelope(env);
+                    data = await decryptAnyEnvelope(env, { expectedContext: 'psb' });
+                } else if (requirePsbE2ee) {
+                    setQuarantinedPlaintextRows({ rows: [data], source: 'WhatsApp' });
+                    setIsWaModalOpen(false);
+                    showToast('Data WA PSB plaintext ditolak karena E2EE PSB aktif. Gunakan tombol "Terima & enkripsi ulang" bila sumber tepercaya.', 'error');
+                    return;
                 }
                 processPendaftarData(data);
                 showToast('Data JSON berhasil diimpor.', 'success');
@@ -615,6 +749,59 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             showToast(e?.message?.includes('E2EE_LOCKED') ? e.message : 'Gagal memproses data. Kode mungkin rusak atau tidak lengkap.', 'error');
         }
     }
+
+    const handleAcceptAndReencryptPlaintextPsb = async () => {
+        if (!canWrite || !quarantinedPlaintextRows || quarantinedPlaintextRows.rows.length === 0) return;
+        setIsReencryptingPlaintext(true);
+        try {
+            await ensureDeviceVaultHydrated();
+            if (settings.e2eeConfig?.enabled && !isDeviceUnlockedForConfig(settings.e2eeConfig)) {
+                throw new Error('E2EE_LOCKED: Buka kunci Master Password E2EE pada banner atas terlebih dahulu sebelum menerima & mengenkripsi ulang data.');
+            }
+            const workingPool: Pendaftar[] = [...healedPendaftarList];
+            const toSave: Pendaftar[] = [];
+            for (const item of quarantinedPlaintextRows.rows) {
+                const healed = healPendaftarRecord({
+                    ...item,
+                    tahunAjaran: resolvePendaftarTahunAjaran(item, activePsbTa),
+                    jenjangId: resolveJenjangIdFromInput((item as any).jenjangId || (item as any).jenjang, settings, settings.psbConfig?.targetJenjangId || 0),
+                }, settings);
+                const exists = workingPool.some((ex) => isSamePendaftarIdentity(ex, healed, activePsbTa));
+                if (!exists) {
+                    const prepared = sanitizePendaftar({
+                        ...healed,
+                        id: generateSyncSafeId(),
+                        deleted: false,
+                        lastModified: Date.now(),
+                    });
+                    workingPool.push(prepared);
+                    toSave.push(prepared);
+                }
+            }
+            if (toSave.length > 0) {
+                await db.pendaftar.bulkPut(toSave);
+                onUpdateList();
+            }
+            if (settings.cloudSyncConfig?.provider === 'firebase' && settings.e2eeConfig?.modules?.sync) {
+                try {
+                    const { auth } = await import('../../firebaseAuth');
+                    const actualTenantId = settings.cloudSyncConfig.firebasePairedTenantId || auth?.currentUser?.uid || 'default';
+                    const { syncPsbWithFirebaseHub } = await loadFirebaseRealtimeRuntime();
+                    await syncPsbWithFirebaseHub(actualTenantId);
+                } catch {
+                    // non-fatal; data sudah tersimpan lokal & otomatis terenkripsi saat sync berikutnya
+                }
+            }
+            const acceptedCount = quarantinedPlaintextRows.rows.length;
+            setQuarantinedPlaintextRows(null);
+            setWaInput('');
+            showToast(`${acceptedCount} data pendaftar plaintext diterima ke database lokal (tersimpan aman untuk sinkronisasi terenkripsi E2EE).`, 'success');
+        } catch (e: any) {
+            showAlert('Gagal Terima & Enkripsi Ulang', e?.message || 'Terjadi kesalahan.');
+        } finally {
+            setIsReencryptingPlaintext(false);
+        }
+    };
 
     const processPendaftarData = (data: any) => {
         const standardFields = [
@@ -889,7 +1076,8 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const handleAcceptConfirmed = async (
         pendaftarOrList: Pendaftar | Pendaftar[],
         billingOption?: PsbBillingOption,
-        placementOption?: PsbPlacementOption
+        placementOption?: PsbPlacementOption,
+        attachmentOption?: PsbAttachmentOption
     ) => {
         if (!canWrite) return;
         const rawList = Array.isArray(pendaftarOrList) ? pendaftarOrList : [pendaftarOrList];
@@ -1059,10 +1247,125 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     'success'
                 );
             }
+
+            // 3.4: Pindahkan rujukan berkas (pendaftarId -> santriId) & tarik lampiran bila diminta (kegagalan unduh TIDAK menggagalkan penerimaan)
+            if (canManageBerkas) {
+                for (const updatedP of updatedPendaftarList) {
+                    if (updatedP.id && updatedP.santriId) {
+                        try {
+                            await linkPendaftarBerkasToSantri(updatedP.id, updatedP.santriId, currentUser);
+                        } catch (linkErr) {
+                            console.warn('Gagal menautkan rujukan berkas santri:', linkErr);
+                        }
+                    }
+                }
+                if (attachmentOption?.saveAttachments && updatedPendaftarList.length > 0) {
+                    try {
+                        const pullSummary = await savePendaftarAttachmentsToDevice(updatedPendaftarList, {
+                            settings,
+                            currentUser,
+                            simpanAsliTanpaKompresi: attachmentOption.simpanAsliTanpaKompresi,
+                        });
+                        if (pullSummary.totalAttachments > 0) {
+                            if (pullSummary.failed > 0 || pullSummary.lockedWaitingUnlock > 0) {
+                                showToast(
+                                    `Lampiran offline: ${pullSummary.saved} tersimpan, ${pullSummary.failed} gagal, ${pullSummary.lockedWaitingUnlock} menunggu buka kunci E2EE.`,
+                                    'info'
+                                );
+                            } else if (pullSummary.saved > 0) {
+                                showToast(`${pullSummary.saved} lampiran pendaftar disimpan ke perangkat.`, 'success');
+                            }
+                        }
+                    } catch (pullErr: any) {
+                        console.warn('Gagal menyimpan lampiran saat penerimaan:', pullErr);
+                        showToast(
+                            `Penerimaan berhasil, tetapi simpan lampiran gagal: ${pullErr?.message || 'Dapat diulang nanti.'}`,
+                            'info'
+                        );
+                    }
+                }
+            }
         } catch (e: any) {
             console.error(e);
             showAlert('Gagal Menerima Santri', e.message || 'Terjadi kesalahan saat memproses penerimaan.');
         }
+    };
+
+    const handleBulkPullBerkas = async (onlyFailedOrCloud = false) => {
+        if (!canManageBerkas || selectedPendaftarObjects.length === 0) return;
+        setIsPullingBulkBerkas(true);
+        setBulkBerkasProgress(null);
+        setBulkBerkasSummary(null);
+        try {
+            const summary = await savePendaftarAttachmentsToDevice(selectedPendaftarObjects, {
+                settings,
+                currentUser,
+                simpanAsliTanpaKompresi: bulkBerkasRaw,
+                onlyFailedOrCloud,
+                onProgress: (prog) => setBulkBerkasProgress(prog),
+            });
+            setBulkBerkasSummary(summary);
+            if (summary.saved > 0) {
+                showToast(`${summary.saved} berkas berhasil disimpan ke perangkat.`, 'success');
+            } else if (summary.totalAttachments === 0) {
+                showToast('Tidak ada lampiran yang terdeteksi pada pendaftar terpilih.', 'info');
+            } else if (summary.lockedWaitingUnlock > 0) {
+                showToast('E2EE terkunci: buka Master Password terlebih dahulu.', 'info');
+            } else if (summary.unsupported > 0) {
+                showToast(`Lampiran ${BERKAS_UNSUPPORTED_BACKEND_LABEL}.`, 'info');
+            } else if (summary.failed > 0) {
+                showToast(`${summary.failed} berkas gagal diunduh.`, 'error');
+            } else {
+                showToast(`Semua ${summary.skipped} berkas sudah tersimpan di perangkat.`, 'info');
+            }
+        } catch (err: any) {
+            showAlert('Gagal Tarik Lampiran Massal', err?.message || 'Terjadi kesalahan.');
+        } finally {
+            setIsPullingBulkBerkas(false);
+        }
+    };
+
+    const handleBulkDeleteCloudCopies = () => {
+        if (!canManageBerkas || selectedPendaftarObjects.length === 0) return;
+        const selectedPendaftarIds = selectedPendaftarObjects.map((p) => p.id);
+        showConfirmation(
+            `Hapus Salinan Cloud (${selectedPendaftarIds.length} Pendaftar Terpilih)?`,
+            'Hanya lampiran yang SUDAH tersimpan & terverifikasi SHA-256 secara offline di perangkat yang salinan cloud-nya akan dihapus (Drive Trash / Firebase Storage). Berkas yang belum ditarik offline otomatis dilewati. Pastikan Anda sudah mencadangkan ZIP berkas sebelum melanjutkan.',
+            async () => {
+                setIsDeletingBulkCloud(true);
+                setBulkCloudDeleteSummary(null);
+                try {
+                    const summary = await deleteCloudCopiesForPendaftarList(selectedPendaftarIds, {
+                        settings,
+                        currentUser,
+                    });
+                    setBulkCloudDeleteSummary(summary);
+                    if (summary.deleted > 0 && summary.failed === 0) {
+                        showToast(
+                            `${summary.deleted} salinan cloud berhasil dihapus; ${summary.skippedNotSavedLocally} belum tersimpan offline dilewati.`,
+                            'success'
+                        );
+                    } else if (summary.failed > 0) {
+                        showAlert(
+                            'Hasil Hapus Salinan Cloud Massal',
+                            `Berhasil: ${summary.deleted}, Gagal: ${summary.failed}, Dilewati (belum offline): ${summary.skippedNotSavedLocally}. ${summary.errors[0]?.message || ''}`
+                        );
+                    } else if (summary.unsupported > 0) {
+                        showToast(`Lampiran ${BERKAS_UNSUPPORTED_BACKEND_LABEL}.`, 'info');
+                    } else {
+                        showToast(
+                            `Tidak ada salinan cloud yang dihapus (${summary.skippedNotSavedLocally} belum tersimpan offline, ${summary.skippedAlreadyDeleted} sudah dihapus sebelumnya).`,
+                            'info'
+                        );
+                    }
+                } catch (err: any) {
+                    showAlert('Gagal Hapus Salinan Cloud Massal', err?.message || 'Terjadi kesalahan.');
+                } finally {
+                    setIsDeletingBulkCloud(false);
+                }
+            },
+            { confirmText: 'Ya, Hapus Salinan Cloud', confirmColor: 'red' }
+        );
     };
 
     const handleQuickStatusChange = async (pendaftar: Pendaftar, newStatus: PendaftarStatus) => {
@@ -1144,61 +1447,73 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         showToast('Data pendaftar diperbarui', 'success');
     }
 
+    const handleOpenZipArchiveModal = () => {
+        if (!canManageBerkas) {
+            showAlert('Akses Ditolak', 'Izin tulis PSB/Santri atau peran Admin diperlukan untuk mengekspor arsip berkas.');
+            return;
+        }
+        const exportSource = selectedPendaftarObjects.length > 0
+            ? selectedPendaftarObjects
+            : (filteredData.length > 0 ? filteredData : yearScopedData);
+        if (exportSource.length === 0) {
+            showAlert('Kosong', 'Tidak ada data pendaftar untuk diarsipkan.');
+            return;
+        }
+        setZipProgress(null);
+        setIsZipArchiveModalOpen(true);
+    };
+
     const handleDownloadArchive = async () => {
-        const exportSource = filteredData.length > 0 ? filteredData : yearScopedData;
+        if (!canManageBerkas) return;
+        const exportSource = selectedPendaftarObjects.length > 0
+            ? selectedPendaftarObjects
+            : (filteredData.length > 0 ? filteredData : yearScopedData);
         if (exportSource.length === 0) {
             showAlert('Kosong', 'Tidak ada data pendaftar untuk diarsipkan.');
             return;
         }
 
         setIsArchiving(true);
-        const JSZip = await loadJsZip();
-        const zip = new JSZip();
-        let fileCount = 0;
+        setZipProgress({
+            processedPendaftar: 0,
+            totalPendaftar: exportSource.length,
+            currentName: 'Menyiapkan arsip...',
+            fileCount: 0,
+        });
 
         try {
-            showToast('Menyiapkan arsip dokumen...', 'info');
-            
-            for (const p of exportSource) {
-                const customData = p.customData ? JSON.parse(p.customData) : {};
-                const files = Object.keys(customData).filter(key => {
-                    const val = customData[key];
-                    return typeof val === 'string' && (val.startsWith('data:') || val.startsWith('http'));
-                });
+            const res = await buildPsbArchiveZip(exportSource, {
+                settings,
+                currentUser,
+                useFriendlyName: zipFriendlyName,
+                onProgress: (info) => setZipProgress(info),
+            });
 
-                if (files.length === 0) continue;
-
-                const folder = zip.folder(p.namaLengkap.replace(/[^a-zA-Z0-9]/g, '_'));
-                
-                for (const fKey of files) {
-                    const val = customData[fKey];
-                    try {
-                        const response = await fetch(val);
-                        const blob = await response.blob();
-                        const extension = val.includes('image/') ? 'jpg' : 'pdf'; // Guess if not clear
-                        const fileName = `${fKey.replace(/ /g, '_')}.${extension}`;
-                        folder?.file(fileName, blob);
-                        fileCount++;
-                    } catch (e) {
-                        console.error(`Failed to download ${fKey} for ${p.namaLengkap}`, e);
-                    }
-                }
-            }
-
-            if (fileCount === 0) {
-                showAlert('Tidak Ada Dokumen', 'Tidak ditemukan berkas yang bisa diunduh dari daftar pendaftar saat ini.');
+            if (res.fileCount === 0) {
+                const detail = res.skippedLocked > 0
+                    ? `${res.skippedLocked} berkas terkunci E2EE (buka Master Password terlebih dahulu).`
+                    : res.skippedUnsupported > 0
+                    ? `Backend saat ini ${BERKAS_UNSUPPORTED_BACKEND_LABEL}.`
+                    : 'Tidak ditemukan berkas yang bisa diunduh dari daftar pendaftar terpilih.';
+                showAlert('Tidak Ada Dokumen Terarsip', detail);
                 return;
             }
 
-            const content = await zip.generateAsync({ type: "blob" });
-            const url = window.URL.createObjectURL(content);
+            const url = window.URL.createObjectURL(res.zipBlob);
             const link = document.createElement('a');
             link.href = url;
             link.download = `${buildStandardExportFileName('arsip-psb', ['dokumen'])}.zip`;
             link.click();
-            window.URL.revokeObjectURL(url);
-            
-            showToast(`Berhasil mengarsipkan ${fileCount} dokumen.`, 'success');
+            setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+
+            const warnParts: string[] = [];
+            if (res.skippedLocked > 0) warnParts.push(`${res.skippedLocked} terkunci E2EE`);
+            if (res.skippedUnsupported > 0) warnParts.push(`${res.skippedUnsupported} tak didukung backend`);
+            if (res.failedCount > 0) warnParts.push(`${res.failedCount} gagal`);
+            const suffix = warnParts.length > 0 ? ` (${warnParts.join(', ')})` : '';
+
+            showToast(`Berhasil mengarsipkan ${res.fileCount} dokumen${suffix}.`, 'success');
+            setIsZipArchiveModalOpen(false);
         } catch (error: any) {
             showAlert('Gagal Arsip', `Terjadi kesalahan saat membuat arsip: ${error.message}`);
         } finally {
@@ -1346,14 +1661,88 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                 </button>
 
                                 {/* Row 2, Col 3: Tombol Unduh Arsip ZIP */}
-                                <button 
-                                    onClick={handleDownloadArchive} 
-                                    disabled={isArchiving}
-                                    className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-2 sm:px-3 py-1 sm:py-2 rounded-xl text-[11px] sm:text-xs font-medium flex items-center justify-center gap-1 sm:gap-1.5 shadow-2xs disabled:opacity-50 whitespace-nowrap h-8 sm:h-9 transition-colors min-w-0"
-                                    title="Unduh seluruh berkas dan dokumen upload pendaftar sebagai file ZIP"
+                                {canManageBerkas && (
+                                    <button 
+                                        onClick={handleOpenZipArchiveModal} 
+                                        disabled={isArchiving}
+                                        className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-2 sm:px-3 py-1 sm:py-2 rounded-xl text-[11px] sm:text-xs font-medium flex items-center justify-center gap-1 sm:gap-1.5 shadow-2xs disabled:opacity-50 whitespace-nowrap h-8 sm:h-9 transition-colors min-w-0"
+                                        title="Unduh seluruh berkas dan dokumen pendaftar sebagai file ZIP"
+                                    >
+                                        {isArchiving ? <i className="bi bi-arrow-repeat animate-spin text-xs"></i> : <i className="bi bi-file-earmark-zip-fill text-amber-600 text-xs shrink-0"></i>}
+                                        <span className="truncate">Arsip ZIP</span>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {legacyGasAlert?.isLegacy && (
+                        <div className="rounded-xl border-2 border-red-400 bg-red-50 p-3.5 sm:p-4 text-xs text-red-950 shadow-2xs space-y-2">
+                            <div className="flex items-start gap-2.5">
+                                <i className="bi bi-shield-fill-exclamation text-red-600 text-lg shrink-0 mt-0.5"></i>
+                                <div className="flex-1 space-y-1">
+                                    <div className="font-bold text-sm text-red-900">
+                                        Peringatan Keamanan: Skrip Backend GAS Perlu Diperbarui
+                                    </div>
+                                    <p className="leading-relaxed">
+                                        Skrip Google Apps Script yang terpasang masih versi lama ({legacyGasAlert.scriptVersion ? `v${legacyGasAlert.scriptVersion}` : 'tanpa penanda versi'}). Pada skrip lama, <strong>data pendaftar dapat dibaca oleh siapa pun yang mengetahui URL Web App melalui permintaan GET publik</strong> dan berkas Drive berpotensi terbuka lewat tautan publik.
+                                    </p>
+                                    <p className="text-[11px] text-red-900/90 leading-relaxed">
+                                        Segera salin skrip terbaru, tempel di Apps Script, deploy lewat <strong>Deploy &gt; Manage deployments &gt; Edit &gt; Version: New version</strong>, jalankan <code>makeExistingFilesPrivate()</code> 1x bila pernah memakai skrip lama, lalu <strong>terbitkan ulang formulir HTML</strong>.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 pl-7">
+                                <button
+                                    type="button"
+                                    onClick={handleCopyLatestGasScript}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer"
                                 >
-                                    {isArchiving ? <i className="bi bi-arrow-repeat animate-spin text-xs"></i> : <i className="bi bi-file-earmark-zip-fill text-amber-600 text-xs shrink-0"></i>}
-                                    <span className="truncate">Arsip ZIP</span>
+                                    <i className={`bi ${legacyGasAlert.copied ? 'bi-check2-all' : 'bi-clipboard-check'}`}></i>
+                                    <span>{legacyGasAlert.copied ? 'Skrip Terbaru Tersalin' : 'Salin Skrip Terbaru'}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsGasModalOpen(true)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-red-100 text-red-900 border border-red-300 font-semibold text-xs transition-colors cursor-pointer"
+                                >
+                                    <i className="bi bi-gear"></i>
+                                    <span>Buka Pengaturan Cloud</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {quarantinedPlaintextRows && quarantinedPlaintextRows.rows.length > 0 && (
+                        <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-3.5 sm:p-4 text-xs text-amber-950 shadow-2xs space-y-2">
+                            <div className="flex items-start gap-2.5">
+                                <i className="bi bi-shield-lock-fill text-amber-700 text-lg shrink-0 mt-0.5"></i>
+                                <div className="flex-1 space-y-1">
+                                    <div className="font-bold text-sm text-amber-950">
+                                        {quarantinedPlaintextRows.rows.length} Data PSB Plaintext dari {quarantinedPlaintextRows.source} Ditolak (E2EE Aktif)
+                                    </div>
+                                    <p className="leading-relaxed">
+                                        E2EE modul PSB aktif, sehingga baris pendaftar tanpa enkripsi <strong>tidak disimpan otomatis dan tidak dihapus dari backend cloud</strong>. Periksa apakah data tersebut memang kiriman sah sebelum mengimpor.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 pl-7">
+                                <button
+                                    type="button"
+                                    onClick={() => void handleAcceptAndReencryptPlaintextPsb()}
+                                    disabled={isReencryptingPlaintext}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 disabled:bg-amber-400 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer"
+                                >
+                                    <i className={`bi ${isReencryptingPlaintext ? 'bi-arrow-repeat animate-spin' : 'bi-lock-fill'}`}></i>
+                                    <span>{isReencryptingPlaintext ? 'Memproses...' : `Terima & enkripsi ulang (${quarantinedPlaintextRows.rows.length})`}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setQuarantinedPlaintextRows(null)}
+                                    disabled={isReencryptingPlaintext}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold text-xs transition-colors cursor-pointer"
+                                >
+                                    Tutup Peringatan
                                 </button>
                             </div>
                         </div>
@@ -1544,6 +1933,36 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                         Terima & Pilih Kelas
                                     </button>
                                 </div>
+                            )}
+
+                            {/* 3b. Bulk Simpan Lampiran Offline & Hapus Salinan Cloud */}
+                            {canManageBerkas && (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setBulkBerkasProgress(null);
+                                            setBulkBerkasSummary(null);
+                                            setBulkCloudDeleteSummary(null);
+                                            setIsBulkBerkasModalOpen(true);
+                                        }}
+                                        className="px-3 py-1.5 rounded-lg bg-sky-100 text-sky-900 hover:bg-sky-200 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                                        title="Simpan berkas lampiran pendaftar terpilih ke penyimpanan offline perangkat"
+                                    >
+                                        <i className="bi bi-cloud-arrow-down-fill text-sky-700"></i>
+                                        Simpan Lampiran ({selectedIds.length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={isDeletingBulkCloud || !berkasBackendSupport.supported}
+                                        onClick={handleBulkDeleteCloudCopies}
+                                        className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-900 hover:bg-amber-200 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors disabled:opacity-50"
+                                        title="Hapus salinan cloud hanya untuk lampiran pendaftar yang sudah tersimpan & terverifikasi offline"
+                                    >
+                                        <i className={`bi ${isDeletingBulkCloud ? 'bi-arrow-repeat animate-spin' : 'bi-cloud-slash-fill'} text-amber-800`}></i>
+                                        Hapus Cloud ({selectedIds.length})
+                                    </button>
+                                </>
                             )}
 
                             {/* 4. Bulk Hapus Pendaftar */}
@@ -2075,6 +2494,276 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     onSaveConfig={onSaveConfig}
                 />
             )}
+
+            {/* Modal Tarik Lampiran Offline Massal */}
+            {canManageBerkas && isBulkBerkasModalOpen && (
+                <div className="fixed inset-0 bg-black/60 z-[95] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200">
+                        <div className="p-4 bg-sky-800 text-white flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <i className="bi bi-hdd-stack-fill text-lg"></i>
+                                <div>
+                                    <h3 className="text-sm font-bold">
+                                        Simpan Lampiran ke Perangkat ({selectedPendaftarObjects.length} Pendaftar)
+                                    </h3>
+                                    <p className="text-[11px] text-sky-100">
+                                        Mengunduh lampiran pendaftar terpilih agar tersedia secara offline.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                disabled={isPullingBulkBerkas}
+                                onClick={() => setIsBulkBerkasModalOpen(false)}
+                                className="p-1 rounded-lg hover:bg-sky-700 text-sky-100 disabled:opacity-50"
+                            >
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-4 text-xs">
+                            {!berkasBackendSupport.supported && (
+                                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-2">
+                                    <i className="bi bi-exclamation-triangle-fill text-amber-600 mt-0.5 shrink-0"></i>
+                                    <div>
+                                        <div className="font-bold">Status: {BERKAS_UNSUPPORTED_BACKEND_LABEL}</div>
+                                        <p className="mt-0.5">{berkasBackendSupport.reason}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            <label className="flex items-center gap-2 text-slate-700 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={bulkBerkasRaw}
+                                    onChange={e => setBulkBerkasRaw(e.target.checked)}
+                                    disabled={isPullingBulkBerkas || !berkasBackendSupport.supported}
+                                    className="w-4 h-4 rounded text-sky-600 border-gray-300"
+                                />
+                                <span>Simpan gambar asli tanpa kompresi (default: resize maks 1600px JPEG kualitas 0,8)</span>
+                            </label>
+
+                            {isPullingBulkBerkas && bulkBerkasProgress && (
+                                <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 space-y-1.5">
+                                    <div className="flex justify-between font-bold text-sky-900">
+                                        <span>Memproses: {bulkBerkasProgress.currentLabel}</span>
+                                        <span>{bulkBerkasProgress.completed} / {bulkBerkasProgress.total}</span>
+                                    </div>
+                                    <div className="w-full h-2 bg-sky-200 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-2 bg-sky-600 transition-all"
+                                            style={{
+                                                width: `${bulkBerkasProgress.total > 0 ? Math.round((bulkBerkasProgress.completed / bulkBerkasProgress.total) * 100) : 0}%`,
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {bulkBerkasSummary && !isPullingBulkBerkas && (
+                                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                                    <div className="font-bold text-slate-800">Ringkasan Penarikan Lampiran</div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        <div className="p-2 bg-white rounded-lg border">Total terdeteksi: <strong>{bulkBerkasSummary.totalAttachments}</strong></div>
+                                        <div className="p-2 bg-emerald-50 text-emerald-900 rounded-lg border border-emerald-200">Berhasil: <strong>{bulkBerkasSummary.saved}</strong></div>
+                                        <div className="p-2 bg-slate-100 text-slate-700 rounded-lg border">Dilewati: <strong>{bulkBerkasSummary.skipped}</strong></div>
+                                        <div className="p-2 bg-red-50 text-red-900 rounded-lg border border-red-200">Gagal: <strong>{bulkBerkasSummary.failed}</strong></div>
+                                        {bulkBerkasSummary.lockedWaitingUnlock > 0 && (
+                                            <div className="p-2 bg-amber-50 text-amber-900 rounded-lg border border-amber-200">Terkunci E2EE: <strong>{bulkBerkasSummary.lockedWaitingUnlock}</strong></div>
+                                        )}
+                                        {bulkBerkasSummary.unsupported > 0 && (
+                                            <div className="p-2 bg-amber-50 text-amber-900 rounded-lg border border-amber-200">Tak didukung: <strong>{bulkBerkasSummary.unsupported}</strong></div>
+                                        )}
+                                    </div>
+                                    {bulkBerkasSummary.errors.length > 0 && (
+                                        <div className="max-h-28 overflow-y-auto bg-white border border-red-200 rounded-lg p-2 space-y-1 text-[11px] text-red-700">
+                                            {bulkBerkasSummary.errors.slice(0, 10).map((err, i) => (
+                                                <div key={`${err.pendaftarId}-${err.fieldId}-${i}`}>
+                                                    • #{err.pendaftarId} ({err.fieldLabel}): {err.message}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {bulkCloudDeleteSummary && !isDeletingBulkCloud && (
+                                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-1.5">
+                                    <div className="font-bold text-amber-950">Ringkasan Hapus Salinan Cloud</div>
+                                    <div className="text-[11px] text-amber-900 flex flex-wrap gap-3">
+                                        <span>Terhapus: <strong>{bulkCloudDeleteSummary.deleted}</strong></span>
+                                        <span>Belum offline (dilewati): <strong>{bulkCloudDeleteSummary.skippedNotSavedLocally}</strong></span>
+                                        <span>Sudah terhapus: <strong>{bulkCloudDeleteSummary.skippedAlreadyDeleted}</strong></span>
+                                        {bulkCloudDeleteSummary.failed > 0 && (
+                                            <span className="text-red-700">Gagal: <strong>{bulkCloudDeleteSummary.failed}</strong></span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-4 border-t bg-slate-50 flex flex-wrap justify-end gap-2">
+                            <button
+                                type="button"
+                                disabled={isPullingBulkBerkas || isDeletingBulkCloud}
+                                onClick={() => setIsBulkBerkasModalOpen(false)}
+                                className="px-4 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                            >
+                                Tutup
+                            </button>
+                            {berkasBackendSupport.supported && selectedPendaftarObjects.length > 0 && (
+                                <button
+                                    type="button"
+                                    disabled={isPullingBulkBerkas || isDeletingBulkCloud}
+                                    onClick={handleBulkDeleteCloudCopies}
+                                    className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
+                                >
+                                    <i className={`bi ${isDeletingBulkCloud ? 'bi-arrow-repeat animate-spin' : 'bi-cloud-slash-fill'}`}></i>
+                                    Hapus Salinan Cloud
+                                </button>
+                            )}
+                            {bulkBerkasSummary && (bulkBerkasSummary.failed > 0 || bulkBerkasSummary.lockedWaitingUnlock > 0) && berkasBackendSupport.supported && (
+                                <button
+                                    type="button"
+                                    disabled={isPullingBulkBerkas || isDeletingBulkCloud}
+                                    onClick={() => handleBulkPullBerkas(true)}
+                                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
+                                >
+                                    <i className="bi bi-arrow-clockwise"></i>
+                                    Ulangi Gagal / Cloud
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                disabled={isPullingBulkBerkas || isDeletingBulkCloud || !berkasBackendSupport.supported || selectedPendaftarObjects.length === 0}
+                                onClick={() => handleBulkPullBerkas(false)}
+                                className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
+                            >
+                                {isPullingBulkBerkas ? (
+                                    <>
+                                        <i className="bi bi-arrow-repeat animate-spin"></i>
+                                        Mengunduh...
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="bi bi-cloud-arrow-down-fill"></i>
+                                        Mulai Tarik Lampiran
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Opsi Ekspor Arsip ZIP Dokumen PSB */}
+            {canManageBerkas && isZipArchiveModalOpen && (() => {
+                const exportCount = selectedPendaftarObjects.length > 0
+                    ? selectedPendaftarObjects.length
+                    : (filteredData.length > 0 ? filteredData.length : yearScopedData.length);
+                return (
+                    <div className="fixed inset-0 bg-black/60 z-[95] flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
+                            <div className="p-4 bg-amber-700 text-white flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <i className="bi bi-file-earmark-zip-fill text-lg"></i>
+                                    <div>
+                                        <h3 className="text-sm font-bold">Ekspor Arsip Dokumen PSB (ZIP)</h3>
+                                        <p className="text-[11px] text-amber-100">
+                                            {selectedPendaftarObjects.length > 0
+                                                ? `${selectedPendaftarObjects.length} pendaftar terpilih`
+                                                : `${exportCount} pendaftar sesuai filter aktif`}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    disabled={isArchiving}
+                                    onClick={() => setIsZipArchiveModalOpen(false)}
+                                    className="p-1 rounded-lg hover:bg-amber-600 text-amber-100 disabled:opacity-50"
+                                >
+                                    <i className="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                            <div className="p-5 space-y-3.5 text-xs">
+                                <p className="text-slate-600 leading-relaxed">
+                                    Arsip memprioritaskan berkas offline yang sudah tersimpan di perangkat (didekripsi otomatis bila E2EE aktif &amp; terbuka), dan mengambil berkas cloud yang tersisa melalui adapter aman. Ekstensi file ditentukan dari tipe MIME asli.
+                                </p>
+
+                                {exportCount > 25 && (
+                                    <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 flex items-start gap-2">
+                                        <i className="bi bi-exclamation-triangle-fill text-amber-600 mt-0.5 shrink-0"></i>
+                                        <span>
+                                            <strong>Perhatian Ukuran Arsip:</strong> Anda mengekspor {exportCount} pendaftar sekaligus. Pembuatan ZIP besar dapat memakan memori peramban cukup tinggi—saring terlebih dahulu bila diperlukan.
+                                        </span>
+                                    </div>
+                                )}
+
+                                <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={zipFriendlyName}
+                                        onChange={e => setZipFriendlyName(e.target.checked)}
+                                        disabled={isArchiving}
+                                        className="mt-0.5 w-4 h-4 rounded text-amber-600 border-gray-300"
+                                    />
+                                    <div>
+                                        <span className="font-bold text-slate-800 block">Gunakan nama ramah-arsip</span>
+                                        <span className="text-[11px] text-slate-600 block mt-0.5">
+                                            Default: <code>NoRegistrasi_Inisial/jenis.ext</code>. Jika dicentang: <code>Nama Santri - Jenis.ext</code> (nama lengkap hanya dipakai di file ZIP lokal ini).
+                                        </span>
+                                    </div>
+                                </label>
+
+                                {isArchiving && zipProgress && (
+                                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-1.5">
+                                        <div className="flex justify-between font-bold text-amber-900">
+                                            <span className="truncate">{zipProgress.currentName}</span>
+                                            <span>{zipProgress.processedPendaftar}/{zipProgress.totalPendaftar} ({zipProgress.fileCount} file)</span>
+                                        </div>
+                                        <div className="w-full h-2 bg-amber-200 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-2 bg-amber-600 transition-all"
+                                                style={{
+                                                    width: `${zipProgress.totalPendaftar > 0 ? Math.round((zipProgress.processedPendaftar / zipProgress.totalPendaftar) * 100) : 0}%`,
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
+                                <button
+                                    type="button"
+                                    disabled={isArchiving}
+                                    onClick={() => setIsZipArchiveModalOpen(false)}
+                                    className="px-4 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isArchiving}
+                                    onClick={handleDownloadArchive}
+                                    className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
+                                >
+                                    {isArchiving ? (
+                                        <>
+                                            <i className="bi bi-arrow-repeat animate-spin"></i>
+                                            Membuat ZIP...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="bi bi-download"></i>
+                                            Unduh Arsip ZIP
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };

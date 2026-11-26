@@ -378,6 +378,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } else {
                 const result = await downloadAndMergeMaster(config);
                 if (result.status === 'merged') {
+                    try { sessionStorage.removeItem('esantri_sync_plaintext_master_rejected'); } catch {}
                     const effectiveWatermark = (result as any).effectiveWatermark || result.timestamp;
                     const updatedConfig = {
                         ...config,
@@ -404,6 +405,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                         );
                     }
                 } else if (result.status === 'no_master') {
+                    try { sessionStorage.removeItem('esantri_sync_plaintext_master_rejected'); } catch {}
                     if (!silent) ui.showToast('Belum ada Master Data dari Admin di Cloud.', 'info');
                 }
             }
@@ -415,6 +417,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 setSyncStatus('idle');
                 if (!silent) {
                     ui.showToast('Perangkat E2EE masih terkunci. Klik tombol "Buka Kunci E2EE" pada banner kuning di atas aplikasi lalu ulangi sync.', 'error');
+                }
+                return;
+            }
+            if (msg.includes('E2EE_PLAINTEXT_REJECTED')) {
+                try {
+                    sessionStorage.setItem('esantri_sync_plaintext_master_rejected', '1');
+                    window.dispatchEvent(new CustomEvent('esantri:master-plaintext-rejected'));
+                } catch {}
+                setSyncStatus('error');
+                if (!silent) {
+                    ui.showToast('Data Master Cloud masih berbentuk plaintext padahal E2EE modul Sync aktif (tidak ditimpa/dihapus). Buka Pusat Sinkronisasi Cloud untuk "Terima & enkripsi ulang" bila sumber tepercaya.', 'error');
                 }
                 return;
             }
@@ -484,7 +497,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [santriCtx.santriList, sets.settings?.namaPonpes]);
 
     const onDeleteSampleData = async () => { 
-        await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.chartOfAccounts, db.auditLogs, db.absensi, db.tahfizh, db.kesehatanRecords, db.bkSessions, db.bukuTamu, db.buku, db.sirkulasi, db.inventaris, db.calendarEvents, db.jadwalPelajaran, db.arsipJadwal, db.jadwalUjian, db.jurnalMengajar, db.pendaftar, db.raporRecords, db.users, db.payrollRecords, db.piketSchedules, db.produkKoperasi, db.transaksiKoperasi, db.riwayatStok, db.keuanganKoperasi, db.pendingOrders, db.pembayaranHutang, db.diskon, db.suppliers, db.warehouses, db.stockTransfers, db.arsipSurat, async () => { 
+        await (db as any).transaction('rw', db.santri, db.santriBerkas, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.chartOfAccounts, db.auditLogs, db.absensi, db.tahfizh, db.kesehatanRecords, db.bkSessions, db.bukuTamu, db.buku, db.sirkulasi, db.inventaris, db.calendarEvents, db.jadwalPelajaran, db.arsipJadwal, db.jadwalUjian, db.jurnalMengajar, db.pendaftar, db.raporRecords, db.users, db.payrollRecords, db.piketSchedules, db.produkKoperasi, db.transaksiKoperasi, db.riwayatStok, db.keuanganKoperasi, db.pendingOrders, db.pembayaranHutang, db.diskon, db.suppliers, db.warehouses, db.stockTransfers, db.arsipSurat, async () => { 
+            const deletedSantriIds = (await db.santri.toArray()).map((s) => s.id).filter((id): id is number => typeof id === 'number');
+            if (deletedSantriIds.length > 0) {
+                await db.santriBerkas.where('santriId').anyOf(deletedSantriIds).delete();
+            }
             await db.santri.clear(); await db.tagihan.clear(); await db.pembayaran.clear(); 
             await db.saldoSantri.clear(); await db.transaksiSaldo.clear(); await db.transaksiKas.clear(); 
             await db.chartOfAccounts.clear();
@@ -518,8 +535,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const onResetToSampleData = async () => {
-        await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.chartOfAccounts, db.auditLogs, db.absensi, db.tahfizh, db.kesehatanRecords, db.bkSessions, db.bukuTamu, db.buku, db.sirkulasi, db.inventaris, db.calendarEvents, db.jadwalPelajaran, db.arsipJadwal, db.jadwalUjian, db.jurnalMengajar, db.pendaftar, db.raporRecords, db.users, db.payrollRecords, db.piketSchedules, db.produkKoperasi, db.transaksiKoperasi, db.riwayatStok, db.keuanganKoperasi, db.pendingOrders, db.pembayaranHutang, db.diskon, db.suppliers, db.warehouses, db.stockTransfers, db.arsipSurat, async () => {
+        await (db as any).transaction('rw', db.settings, db.santri, db.santriBerkas, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.chartOfAccounts, db.auditLogs, db.absensi, db.tahfizh, db.kesehatanRecords, db.bkSessions, db.bukuTamu, db.buku, db.sirkulasi, db.inventaris, db.calendarEvents, db.jadwalPelajaran, db.arsipJadwal, db.jadwalUjian, db.jurnalMengajar, db.pendaftar, db.raporRecords, db.users, db.payrollRecords, db.piketSchedules, db.produkKoperasi, db.transaksiKoperasi, db.riwayatStok, db.keuanganKoperasi, db.pendingOrders, db.pembayaranHutang, db.diskon, db.suppliers, db.warehouses, db.stockTransfers, db.arsipSurat, async () => {
             // Bersihkan semua tabel
+            await db.santriBerkas.clear();
             await db.santri.clear(); await db.tagihan.clear(); await db.pembayaran.clear(); 
             await db.saldoSantri.clear(); await db.transaksiSaldo.clear(); await db.transaksiKas.clear(); 
             await db.chartOfAccounts.clear();

@@ -15,6 +15,16 @@ import {
     isEncryptedBackupEnvelope,
     type EncryptedBackupEnvelope,
 } from '../../../utils/encryptedBackup';
+import {
+    canAccessSantriBerkas,
+    deleteOrphanSantriBerkas,
+    exportBerkasBackupZip,
+    getBerkasStorageStats,
+    inspectBerkasBackupZip,
+    restoreBerkasBackupZip,
+    type BerkasStorageStats,
+} from '../../../services/santriBerkasService';
+import { buildStandardExportFileName } from '../../../utils/exportFileName';
 
 interface TabBackupProps {
     localSettings: PondokSettings;
@@ -78,35 +88,46 @@ const getArrayFromBackup = (payload: BackupPayload, key: string, aliases: string
 };
 
 const HealthDashboard: React.FC = () => {
+    const { currentUser, showConfirmation, showToast, showAlert } = useAppContext();
+    const canManageBerkas = canAccessSantriBerkas(currentUser);
     const [stats, setStats] = useState<{
         dbStatus: 'OK' | 'NOT';
         checkTime: string;
         used: number;
         quota: number;
+        isPersisted: boolean | null;
+        berkasStats: BerkasStorageStats;
         counts: Record<string, number>;
     } | null>(null);
+    const [isCleaningOrphans, setIsCleaningOrphans] = useState(false);
 
     const refreshHealth = async () => {
         try {
-            // Check DB Status
             const dbStatus = db.isOpen() ? 'OK' : 'NOT';
-            
-            // Check Storage Quota
+
             let used = 0;
             let quota = 10240 * 1024 * 1024; // Default fallback 10GB
-            if (navigator.storage && navigator.storage.estimate) {
-                const estimate = await navigator.storage.estimate();
-                used = estimate.usage || 0;
-                quota = estimate.quota || quota;
+            let isPersisted: boolean | null = null;
+            if (navigator.storage) {
+                if (navigator.storage.estimate) {
+                    const estimate = await navigator.storage.estimate();
+                    used = estimate.usage || 0;
+                    quota = estimate.quota || quota;
+                }
+                if (navigator.storage.persisted) {
+                    isPersisted = await navigator.storage.persisted().catch(() => null);
+                }
             }
 
-            // Get Record Counts
+            const berkasStats = await getBerkasStorageStats();
+
             const counts = {
                 'Santri': await db.santri.filter(s => !s.deleted).count(),
                 'Keuangan (Kas)': await db.transaksiKas.filter(k => !k.deleted).count(),
                 'Tagihan': await db.tagihan.filter(t => !t.deleted).count(),
                 'Pembayaran': await db.pembayaran.filter(p => !p.deleted).count(),
                 'Pendaftar (PSB)': await db.pendaftar.filter(p => !p.deleted).count(),
+                'Lampiran Offline': berkasStats.storedRows,
                 'Rapor': await db.raporRecords.count(),
                 'Absensi': await db.absensi.count(),
                 'Konseling (BK)': await db.bkSessions.count(),
@@ -124,6 +145,8 @@ const HealthDashboard: React.FC = () => {
                 checkTime: new Date().toLocaleString(),
                 used,
                 quota,
+                isPersisted,
+                berkasStats,
                 counts
             });
         } catch (err) {
@@ -135,11 +158,56 @@ const HealthDashboard: React.FC = () => {
         refreshHealth();
     }, []);
 
+    const handleRequestPersist = async () => {
+        try {
+            if (!navigator.storage?.persist) {
+                showToast('Peramban tidak mendukung navigator.storage.persist().', 'info');
+                return;
+            }
+            const granted = await navigator.storage.persist();
+            showToast(
+                granted
+                    ? 'Penyimpanan persisten diaktifkan oleh peramban.'
+                    : 'Peramban belum mengizinkan mode persisten otomatis.',
+                granted ? 'success' : 'info'
+            );
+            await refreshHealth();
+        } catch {
+            showToast('Gagal meminta izin penyimpanan persisten.', 'error');
+        }
+    };
+
+    const handleCleanOrphanBerkas = () => {
+        if (!canManageBerkas || !stats || stats.berkasStats.orphanCount === 0) return;
+        showConfirmation(
+            'Hapus Berkas Yatim Lokal?',
+            `Ditemukan ${stats.berkasStats.orphanCount} berkas lampiran yatim (${formatBytes(stats.berkasStats.orphanBytes)}) yang santri/pendaftarnya sudah tidak ada atau terhapus akibat pemulihan JSON / sinkronisasi. Hapus berkas yatim tersebut secara permanen dari perangkat ini?`,
+            async () => {
+                setIsCleaningOrphans(true);
+                try {
+                    const res = await deleteOrphanSantriBerkas(currentUser);
+                    showToast(`${res.deletedCount} berkas yatim dihapus (${formatBytes(res.freedBytes)} dibebaskan).`, 'success');
+                    await refreshHealth();
+                } catch (err: any) {
+                    showAlert('Gagal Menghapus Berkas Yatim', err?.message || 'Terjadi kesalahan.');
+                } finally {
+                    setIsCleaningOrphans(false);
+                }
+            },
+            { confirmText: 'Ya, Hapus Berkas Yatim', confirmColor: 'red' }
+        );
+    };
+
     if (!stats) return <div className="animate-pulse bg-gray-100 h-40 rounded-lg"></div>;
 
+    const usageRatio = stats.quota > 0 ? stats.used / stats.quota : 0;
+    const usagePercent = Math.min(Math.round(usageRatio * 100), 100);
+    const isNearFull = usageRatio >= 0.8;
+    const isCritical = usageRatio >= 0.9;
+
     return (
-        <div className="mb-6 rounded-xl border border-app-border bg-app-subtle p-4">
-            <div className="flex justify-between items-center mb-4">
+        <div className="mb-6 rounded-xl border border-app-border bg-app-subtle p-4 space-y-4">
+            <div className="flex justify-between items-center">
                 <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-700">
                     <i className="bi bi-heart-pulse text-red-500"></i> Dashboard Kesehatan Penyimpanan Lokal
                 </h3>
@@ -148,32 +216,85 @@ const HealthDashboard: React.FC = () => {
                 </button>
             </div>
 
+            {isNearFull && (
+                <div className={`p-3 rounded-lg border text-xs flex items-start gap-2 ${isCritical ? 'bg-red-50 border-red-300 text-red-900' : 'bg-amber-50 border-amber-300 text-amber-900'}`}>
+                    <i className={`bi bi-exclamation-triangle-fill mt-0.5 shrink-0 ${isCritical ? 'text-red-600' : 'text-amber-600'}`}></i>
+                    <div>
+                        <div className="font-bold">
+                            {isCritical ? 'Kuota Penyimpanan Peramban Hampir Penuh Kritis!' : 'Peringatan: Kuota Penyimpanan Hampir Penuh'}
+                        </div>
+                        <p className="mt-0.5">
+                            Terpakai {usagePercent}% ({formatBytes(stats.used)} dari {formatBytes(stats.quota)}). Pertimbangkan mencadangkan berkas (ZIP), membersihkan berkas yatim, atau menghapus berkas santri yang sudah lulus.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                     <div className="flex items-center gap-2 text-sm">
-                        <span className={stats.dbStatus === 'OK' ? 'text-green-600' : 'text-red-600'}>
+                        <span className={stats.dbStatus === 'OK' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
                             {stats.dbStatus === 'OK' ? '✔' : '✘'} Database: {stats.dbStatus} (IndexedDB Mounted)
                         </span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
                         <span>🕒 Waktu Cek: {stats.checkTime}</span>
                     </div>
-                    <div className="pt-2">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className={`px-2 py-0.5 rounded-full font-semibold border ${stats.isPersisted ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-700 border-slate-300'}`}>
+                            {stats.isPersisted === true ? '✔ Penyimpanan Persisten Aktif' : stats.isPersisted === false ? 'Penyimpanan Standar (Non-persisten)' : 'Status Persisten Tidak Diketahui'}
+                        </span>
+                        {stats.isPersisted === false && (
+                            <button
+                                type="button"
+                                onClick={handleRequestPersist}
+                                className="text-xs font-semibold text-blue-700 hover:underline"
+                            >
+                                Aktifkan Mode Persisten
+                            </button>
+                        )}
+                    </div>
+                    <div className="pt-1">
                         <div className="flex justify-between mb-1">
                             <span className="text-xs font-medium text-gray-700 flex items-center gap-1">
-                                💾 Storage Browser
+                                💾 Storage Browser ({usagePercent}%)
                             </span>
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-gray-600 font-mono">
                                 {formatBytes(stats.used)} / {formatBytes(stats.quota)}
                             </span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-1.5">
-                            <div 
-                                className="bg-blue-600 h-1.5 rounded-full" 
-                                style={{ width: `${Math.min((stats.used / stats.quota) * 100, 100)}%` }}
+                        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                            <div
+                                className={`h-2 rounded-full ${isCritical ? 'bg-red-600' : isNearFull ? 'bg-amber-500' : 'bg-blue-600'}`}
+                                style={{ width: `${usagePercent}%` }}
                             ></div>
                         </div>
+                        <div className="mt-1.5 text-[11px] text-slate-600">
+                            Ukuran lampiran santri/PSB lokal: <strong>{formatBytes(stats.berkasStats.totalBytes)}</strong> ({stats.berkasStats.storedRows} berkas tersimpan dari {stats.berkasStats.totalRows} entri).
+                        </div>
                     </div>
+
+                    {canManageBerkas && stats.berkasStats.orphanCount > 0 && (
+                        <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                                <div className="font-bold flex items-center gap-1">
+                                    <i className="bi bi-folder-x text-amber-700"></i>
+                                    Berkas Yatim Terdeteksi: {stats.berkasStats.orphanCount} berkas ({formatBytes(stats.berkasStats.orphanBytes)})
+                                </div>
+                                <div className="text-[11px] text-amber-800">
+                                    Rujukan santri/pendaftar tidak lagi aktif (misal setelah pulihkan JSON atau sinkronisasi hapus).
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                disabled={isCleaningOrphans}
+                                onClick={handleCleanOrphanBerkas}
+                                className="px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold shrink-0 disabled:opacity-50"
+                            >
+                                {isCleaningOrphans ? 'Menghapus...' : 'Hapus Berkas Yatim'}
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="bg-white p-3 rounded border border-gray-200">
@@ -193,7 +314,8 @@ const HealthDashboard: React.FC = () => {
 };
 
 export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSettings }) => {
-    const { downloadBackup, showConfirmation, showToast, showAlert, onDeleteSampleData, onResetToSampleData, isSampleDataDetected } = useAppContext();
+    const { currentUser, downloadBackup, showConfirmation, showToast, showAlert, onDeleteSampleData, onResetToSampleData, isSampleDataDetected } = useAppContext();
+    const canManageBerkas = canAccessSantriBerkas(currentUser);
     const [isResetting, setIsResetting] = useState(false);
     const [isDeletingSample, setIsDeletingSample] = useState(false);
     const restoreInputRef = useRef<HTMLInputElement>(null);
@@ -206,6 +328,20 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
     const [pendingEncryptedEnvelope, setPendingEncryptedEnvelope] = useState<EncryptedBackupEnvelope | null>(null);
     const [restorePassword, setRestorePassword] = useState('');
     const [isDecryptingRestore, setIsDecryptingRestore] = useState(false);
+    // Separate berkas ZIP backup & restore state (Butir 3.7)
+    const berkasRestoreInputRef = useRef<HTMLInputElement>(null);
+    const [encryptBerkasZip, setEncryptBerkasZip] = useState(false);
+    const [berkasZipPassword, setBerkasZipPassword] = useState('');
+    const [berkasZipPasswordConfirm, setBerkasZipPasswordConfirm] = useState('');
+    const [isExportingBerkasZip, setIsExportingBerkasZip] = useState(false);
+    const [isRestoringBerkasZip, setIsRestoringBerkasZip] = useState(false);
+    const [berkasZipProgress, setBerkasZipProgress] = useState<{ processed: number; total: number } | null>(null);
+    const [pendingEncryptedBerkasZip, setPendingEncryptedBerkasZip] = useState<{
+        file: File;
+        entryCount: number;
+        createdAt: string;
+    } | null>(null);
+    const [berkasZipRestorePassword, setBerkasZipRestorePassword] = useState('');
 
     const handleBackupConfigChange = (frequency: BackupFrequency) => {
         setLocalSettings(prev => ({
@@ -241,7 +377,7 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
     const handleResetToSampleData = () => {
         showConfirmation(
             'Kembalikan ke Data Awal / Sampel Bawaan?',
-            'PERINGATAN: Tindakan ini akan MENGHAPUS SEMUA DATA saat ini dan MEMULIHKAN KEMBALI data simulasi bawaan aplikasi (Pondok Pesantren Al-Ikhlas, santri contoh, kelas, dan akun demo). Fitur ini sangat cocok untuk demonstrasi atau pelatihan staf. Apakah Anda yakin?',
+            'PERINGATAN: Tindakan ini akan MENGHAPUS SEMUA DATA saat ini (termasuk seluruh berkas lampiran lokal santri/PSB yang tersimpan di perangkat) dan MEMULIHKAN KEMBALI data simulasi bawaan aplikasi (Pondok Pesantren Al-Ikhlas, santri contoh, kelas, dan akun demo). Sangat disarankan membuat cadangan data JSON dan Cadangan Berkas (ZIP) terlebih dahulu sebelum melanjutkan. Apakah Anda yakin?',
             async () => {
                 setIsResetting(true);
                 try {
@@ -431,6 +567,126 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
         reader.readAsText(file);
     };
 
+    const handleExportBerkasZip = async () => {
+        if (!canManageBerkas) return;
+        if (encryptBerkasZip) {
+            if (berkasZipPassword.length < 6) {
+                showToast('Password enkripsi cadangan berkas minimal 6 karakter.', 'error');
+                return;
+            }
+            if (berkasZipPassword !== berkasZipPasswordConfirm) {
+                showToast('Konfirmasi password cadangan berkas tidak cocok.', 'error');
+                return;
+            }
+        }
+        setIsExportingBerkasZip(true);
+        setBerkasZipProgress(null);
+        try {
+            const res = await exportBerkasBackupZip({
+                settings: localSettings,
+                currentUser,
+                password: encryptBerkasZip ? berkasZipPassword : undefined,
+                onProgress: (prog) => setBerkasZipProgress(prog),
+            });
+            if (!res.zipBlob || res.fileCount === 0) {
+                const detail = res.skippedLocked > 0
+                    ? `${res.skippedLocked} berkas terenkripsi E2EE terkunci. Buka Master Password E2EE terlebih dahulu sebelum membuat cadangan berkas.`
+                    : res.errors[0] || 'Belum ada berkas lampiran offline yang tersimpan.';
+                showAlert('Tidak Ada Berkas Dicadangkan', detail);
+                return;
+            }
+            const url = window.URL.createObjectURL(res.zipBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${buildStandardExportFileName('cadangan-berkas-santri', [res.encrypted ? 'enc' : 'zip'])}.zip`;
+            link.click();
+            setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+
+            if (encryptBerkasZip) {
+                setBerkasZipPassword('');
+                setBerkasZipPasswordConfirm('');
+            }
+            const warnParts: string[] = [];
+            if (res.skippedLocked > 0) warnParts.push(`${res.skippedLocked} terkunci E2EE dilewati`);
+            if (res.failedIntegrity > 0) warnParts.push(`${res.failedIntegrity} gagal integritas`);
+            const suffix = warnParts.length > 0 ? ` (${warnParts.join(', ')})` : '';
+            showToast(`Cadangan ${res.fileCount} berkas lampiran (.ZIP) berhasil diunduh${suffix}.`, 'success');
+        } catch (err: any) {
+            showAlert('Gagal Mencadangkan Berkas', err?.message || 'Terjadi kesalahan saat membuat cadangan berkas.');
+        } finally {
+            setIsExportingBerkasZip(false);
+            setBerkasZipProgress(null);
+        }
+    };
+
+    const runRestoreBerkasZip = async (file: File, password?: string) => {
+        setIsRestoringBerkasZip(true);
+        setBerkasZipProgress(null);
+        try {
+            const res = await restoreBerkasBackupZip(file, {
+                settings: localSettings,
+                currentUser,
+                password,
+                onProgress: (prog) => setBerkasZipProgress(prog),
+            });
+            setPendingEncryptedBerkasZip(null);
+            setBerkasZipRestorePassword('');
+            const detailErrors = res.errors.length > 0
+                ? `\n\nDetail ditolak (${res.rejected}):\n- ${res.errors.slice(0, 8).join('\n- ')}${res.errors.length > 8 ? '\n- ...dan lainnya' : ''}`
+                : '';
+            showAlert(
+                'Hasil Pemulihan Berkas (.ZIP)',
+                `Total entri manifest: ${res.totalEntries}\nBerhasil dipulihkan & diverifikasi SHA-256: ${res.restored}\nDitolak (hash/MIME/korup): ${res.rejected}${detailErrors}`
+            );
+            showToast(`${res.restored} berkas lampiran berhasil dipulihkan.`, res.restored > 0 ? 'success' : 'info');
+        } catch (err: any) {
+            showAlert('Gagal Memulihkan Berkas (.ZIP)', err?.message || 'Password salah atau arsip berkas rusak.');
+        } finally {
+            setIsRestoringBerkasZip(false);
+            setBerkasZipProgress(null);
+        }
+    };
+
+    const handleBerkasZipRestoreSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (berkasRestoreInputRef.current) {
+            berkasRestoreInputRef.current.value = '';
+        }
+        if (!file || !canManageBerkas) return;
+        try {
+            const meta = await inspectBerkasBackupZip(file);
+            if (meta.encrypted) {
+                setPendingEncryptedBerkasZip({
+                    file,
+                    entryCount: meta.entryCount,
+                    createdAt: meta.createdAt,
+                });
+                setBerkasZipRestorePassword('');
+                return;
+            }
+            showConfirmation(
+                'Pulihkan Cadangan Berkas (.ZIP)?',
+                `Ditemukan ${meta.entryCount} berkas dalam arsip cadangan (dibuat ${meta.createdAt ? new Date(meta.createdAt).toLocaleString('id-ID') : '-'}). Setiap file akan diverifikasi tipe MIME & checksum SHA-256 sebelum disimpan lokal${localSettings.e2eeConfig?.enabled ? ' (otomatis dienkripsi ulang dengan E2EE lokal)' : ''}. Lanjutkan?`,
+                async () => {
+                    await runRestoreBerkasZip(file);
+                },
+                { confirmText: 'Ya, Pulihkan Berkas', confirmColor: 'blue' }
+            );
+        } catch (err: any) {
+            showAlert('File Cadangan Berkas Tidak Valid', err?.message || 'Pastikan file berasal dari fitur Cadangan Berkas (.ZIP) eSantri.');
+        }
+    };
+
+    const handleEncryptedBerkasZipSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!pendingEncryptedBerkasZip) return;
+        if (!berkasZipRestorePassword) {
+            showToast('Masukkan password cadangan berkas.', 'error');
+            return;
+        }
+        await runRestoreBerkasZip(pendingEncryptedBerkasZip.file, berkasZipRestorePassword);
+    };
+
     return (
         <div className="space-y-6">
             <SectionCard
@@ -548,6 +804,118 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
                 </div>
             </SectionCard>
 
+            {canManageBerkas && (
+                <SectionCard
+                    title="Cadangan & Pemulihan Berkas Lampiran (.ZIP Terpisah)"
+                    description="Cadangan khusus lampiran offline (KK, akta, ijazah, pas foto) yang sengaja dipisahkan dari cadangan JSON dan sinkronisasi cloud."
+                    contentClassName="space-y-4 p-6"
+                >
+                    <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3 text-xs text-sky-900 flex items-start gap-2">
+                        <i className="bi bi-info-circle-fill text-sky-600 mt-0.5 shrink-0"></i>
+                        <span className="leading-relaxed">
+                            Berkas biner lampiran santri/PSB tidak pernah dimasukkan ke file <code>.JSON</code> maupun sinkronisasi cloud. Gunakan fitur ini untuk mencadangkan dan memindahkan berkas offline antar-perangkat secara aman.
+                            {localSettings.e2eeConfig?.enabled && ' Saat E2EE aktif, pemulihan mewajibkan Master Password dalam keadaan terbuka agar berkas langsung terenkripsi lokal.'}
+                        </span>
+                    </div>
+
+                    {berkasZipProgress && (
+                        <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-950 space-y-1.5">
+                            <div className="flex justify-between font-bold">
+                                <span>Memproses arsip berkas...</span>
+                                <span>{berkasZipProgress.processed} / {berkasZipProgress.total}</span>
+                            </div>
+                            <div className="w-full h-2 rounded-full bg-indigo-200 overflow-hidden">
+                                <div
+                                    className="h-2 bg-indigo-600 transition-all"
+                                    style={{ width: `${berkasZipProgress.total > 0 ? Math.round((berkasZipProgress.processed / berkasZipProgress.total) * 100) : 0}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                        <div className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between space-y-4">
+                            <div>
+                                <h3 className="text-base font-semibold text-slate-800">Cadangkan Berkas (.ZIP)</h3>
+                                <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+                                    Mengekspor seluruh berkas tersimpan beserta <code>manifest.json</code> dan checksum SHA-256. Berkas terenkripsi lokal didekripsi otomatis saat ekspor.
+                                </p>
+                                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2.5">
+                                    <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-800">
+                                        <input
+                                            type="checkbox"
+                                            checked={encryptBerkasZip}
+                                            onChange={(e) => {
+                                                setEncryptBerkasZip(e.target.checked);
+                                                if (!e.target.checked) {
+                                                    setBerkasZipPassword('');
+                                                    setBerkasZipPasswordConfirm('');
+                                                }
+                                            }}
+                                            className="rounded text-teal-600 focus:ring-teal-500"
+                                        />
+                                        <span>Enkripsi isi file cadangan dengan password (AES-GCM)</span>
+                                    </label>
+                                    {encryptBerkasZip && (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                            <input
+                                                type="password"
+                                                value={berkasZipPassword}
+                                                onChange={(e) => setBerkasZipPassword(e.target.value)}
+                                                placeholder="Password ZIP (min. 6 karakter)"
+                                                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs"
+                                            />
+                                            <input
+                                                type="password"
+                                                value={berkasZipPasswordConfirm}
+                                                onChange={(e) => setBerkasZipPasswordConfirm(e.target.value)}
+                                                placeholder="Ulangi password ZIP"
+                                                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleExportBerkasZip}
+                                disabled={isExportingBerkasZip || isRestoringBerkasZip}
+                                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 sm:w-auto"
+                            >
+                                <i className={encryptBerkasZip ? 'bi bi-file-earmark-lock-fill' : 'bi bi-file-earmark-zip-fill'}></i>
+                                <span>{isExportingBerkasZip ? 'Membuat ZIP Berkas...' : 'Cadangkan Berkas (.ZIP)'}</span>
+                            </button>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between space-y-4">
+                            <div>
+                                <h3 className="text-base font-semibold text-slate-800">Pulihkan Berkas dari (.ZIP)</h3>
+                                <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+                                    Memulihkan berkas ke tabel offline perangkat ini. Setiap berkas diverifikasi MIME allowlist, ukuran maks 5 MB, dan kecocokan checksum SHA-256 terhadap manifest.
+                                </p>
+                            </div>
+                            <div>
+                                <input
+                                    type="file"
+                                    accept=".zip,application/zip"
+                                    onChange={handleBerkasZipRestoreSelect}
+                                    ref={berkasRestoreInputRef}
+                                    id="berkas-zip-restore-input"
+                                    className="hidden"
+                                />
+                                <label
+                                    htmlFor="berkas-zip-restore-input"
+                                    className={`inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-sky-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-800 sm:w-auto ${isRestoringBerkasZip || isExportingBerkasZip ? 'opacity-60 pointer-events-none' : ''}`}
+                                >
+                                    <i className="bi bi-folder-symlink-fill"></i>
+                                    <span>{isRestoringBerkasZip ? 'Memulihkan Berkas...' : 'Pilih Cadangan Berkas (.ZIP)'}</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </SectionCard>
+            )}
+
             {/* Zona Pengelolaan Data Awal & Reset */}
             <SectionCard
                 title="Zona Reset & Pengelolaan Data Sampel"
@@ -649,6 +1017,45 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
                                 className="rounded-lg bg-teal-600 px-4 py-2 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
                             >
                                 {isDecryptingRestore ? 'Mendekripsi...' : 'Dekripsi & Lanjutkan'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
+            {pendingEncryptedBerkasZip && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4">
+                    <form onSubmit={handleEncryptedBerkasZipSubmit} className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl border-t-4 border-indigo-600 space-y-4">
+                        <div className="flex items-center gap-2 text-slate-800">
+                            <i className="bi bi-file-earmark-lock2-fill text-indigo-600 text-xl"></i>
+                            <h3 className="text-lg font-bold">Cadangan Berkas ZIP Terenkripsi</h3>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                            Arsip berisi {pendingEncryptedBerkasZip.entryCount} berkas dilindungi AES-256-GCM (dibuat {pendingEncryptedBerkasZip.createdAt ? new Date(pendingEncryptedBerkasZip.createdAt).toLocaleString('id-ID') : '-'}). Masukkan password untuk mendekripsi dan memulihkan berkas.
+                        </p>
+                        <input
+                            type="password"
+                            value={berkasZipRestorePassword}
+                            onChange={(e) => setBerkasZipRestorePassword(e.target.value)}
+                            placeholder="Masukkan password cadangan berkas..."
+                            autoFocus
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            required
+                        />
+                        <div className="flex justify-end gap-2 pt-1">
+                            <button
+                                type="button"
+                                disabled={isRestoringBerkasZip}
+                                onClick={() => { setPendingEncryptedBerkasZip(null); setBerkasZipRestorePassword(''); }}
+                                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isRestoringBerkasZip}
+                                className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                            >
+                                {isRestoringBerkasZip ? 'Memulihkan...' : 'Dekripsi & Pulihkan'}
                             </button>
                         </div>
                     </form>

@@ -1,11 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { Pendaftar, PondokSettings, PsbBerkasFisik, PsbNilaiUjian, PendaftarStatus } from '../../../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { Pendaftar, PondokSettings, PsbBerkasFisik, PsbNilaiUjian, PendaftarStatus, SantriBerkas } from '../../../types';
+import { db } from '../../../db';
 import { useAppContext } from '../../../AppContext';
 import { loadFirebasePsbUploadRuntime } from '../../../utils/lazyFirebaseRuntimes';
 import { isFirebaseClientConfigReady } from '../../../firebaseStorage';
 import { getPsbRegistrationNumber, calculatePsbAverageScore, healPendaftarRecordWithDetails, normalizePhoneLocal, resolveCustomFieldLabel, getAllConfiguredCustomFields, PSB_PENDIDIKAN_OPTIONS, PSB_PENGHASILAN_OPTIONS, PSB_PEKERJAAN_OPTIONS, withCurrentOption, getPsbAcademicYearOptions } from '../utils/psbUtils';
 import { openExternalLinkSafe } from '../../../services/waService';
 import { SAFE_IMG, SAFE_DOC, isSafeHttpUrl, openPreview } from '../../../utils/safePreview';
+import {
+    BERKAS_UNSUPPORTED_BACKEND_LABEL,
+    canAccessSantriBerkas,
+    deleteCloudCopiesForBerkasRows,
+    detectPendaftarAttachments,
+    getSantriBerkasByPendaftar,
+    isAttachmentBackendOfflineSupported,
+    isBerkasEligibleForCloudDeletion,
+    SaveAttachmentsProgress,
+    SaveAttachmentsSummary,
+    savePendaftarAttachmentsToDevice,
+} from '../../../services/santriBerkasService';
 import { MarkdownEditor } from '../../common/MarkdownEditor';
 import { MarkdownViewer } from '../../common/MarkdownViewer';
 
@@ -19,7 +33,9 @@ interface PendaftarModalProps {
 }
 
 export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose, onSave, onUpdate, pendaftarData, settings }) => {
-    const { showAlert } = useAppContext();
+    const { showAlert, showToast, showConfirmation, currentUser } = useAppContext();
+    const canManageBerkas = canAccessSantriBerkas(currentUser);
+    const backendSupport = useMemo(() => isAttachmentBackendOfflineSupported(settings), [settings]);
     const [activeTab, setActiveTab] = useState<'dataDiri' | 'alamat' | 'ortu' | 'sekolah' | 'seleksi' | 'tambahan'>('dataDiri');
     
     // State to hold parsed custom data
@@ -124,6 +140,28 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
     });
 
     const [isUploading, setIsUploading] = useState<string | null>(null);
+    const [isPullingBerkas, setIsPullingBerkas] = useState(false);
+    const [isDeletingCloudBerkas, setIsDeletingCloudBerkas] = useState(false);
+    const [pullRawBerkas, setPullRawBerkas] = useState(false);
+    const [pullProgress, setPullProgress] = useState<SaveAttachmentsProgress | null>(null);
+    const [pullSummary, setPullSummary] = useState<SaveAttachmentsSummary | null>(null);
+
+    const localBerkasList = useLiveQuery(async (): Promise<SantriBerkas[]> => {
+        if (!isOpen || !canManageBerkas || !pendaftarData?.id) return [];
+        return getSantriBerkasByPendaftar(pendaftarData.id, currentUser);
+    }, [isOpen, canManageBerkas, pendaftarData?.id, currentUser]) || [];
+
+    const detectedAttachments = useMemo(() => {
+        if (!canManageBerkas || !pendaftarData?.id) return [];
+        return detectPendaftarAttachments(
+            {
+                ...pendaftarData,
+                customData: JSON.stringify(parsedCustomData),
+                fotoUrl: formData.fotoUrl || pendaftarData.fotoUrl,
+            },
+            settings
+        );
+    }, [canManageBerkas, pendaftarData, parsedCustomData, formData.fotoUrl, settings]);
 
     useEffect(() => {
         if (isOpen) {
@@ -296,6 +334,9 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                 setParsedCustomData({});
             }
             setActiveTab('dataDiri');
+            setPullProgress(null);
+            setPullSummary(null);
+            setPullRawBerkas(false);
         }
     }, [isOpen, pendaftarData, settings.jenjang]);
 
@@ -370,6 +411,84 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         } finally {
             setIsUploading(null);
         }
+    };
+
+    const handleSaveAttachmentsToDevice = async (onlyFailedOrCloud = false) => {
+        if (!canManageBerkas || !pendaftarData?.id) return;
+        setIsPullingBerkas(true);
+        setPullProgress(null);
+        setPullSummary(null);
+        try {
+            const targetPendaftar: Pendaftar = {
+                ...pendaftarData,
+                ...formData,
+                id: pendaftarData.id,
+                customData: JSON.stringify(parsedCustomData),
+            };
+            const summary = await savePendaftarAttachmentsToDevice([targetPendaftar], {
+                settings,
+                currentUser,
+                simpanAsliTanpaKompresi: pullRawBerkas,
+                onlyFailedOrCloud,
+                onProgress: (prog) => setPullProgress(prog),
+            });
+            setPullSummary(summary);
+            if (summary.totalAttachments === 0) {
+                showToast('Tidak ada URL atau data lampiran yang terdeteksi pada pendaftar ini.', 'info');
+            } else if (summary.saved > 0) {
+                showToast(`${summary.saved} lampiran berhasil disimpan ke perangkat.`, 'success');
+            } else if (summary.lockedWaitingUnlock > 0) {
+                showToast('E2EE terkunci: buka Master Password dulu agar lampiran terenkripsi lokal dapat disimpan.', 'info');
+            } else if (summary.unsupported > 0) {
+                showToast(`Lampiran ${BERKAS_UNSUPPORTED_BACKEND_LABEL}.`, 'info');
+            } else if (summary.failed > 0) {
+                showToast(`${summary.failed} lampiran gagal diunduh.`, 'error');
+            } else {
+                showToast(`Semua ${summary.skipped} lampiran sudah tersimpan di perangkat.`, 'info');
+            }
+        } catch (err: any) {
+            showAlert('Gagal Menyimpan Lampiran', err?.message || 'Terjadi kesalahan saat menarik lampiran.');
+        } finally {
+            setIsPullingBerkas(false);
+        }
+    };
+
+    const cloudEligibleBerkas = useMemo(
+        () => localBerkasList.filter((b) => isBerkasEligibleForCloudDeletion(b).eligible),
+        [localBerkasList]
+    );
+
+    const handleDeleteCloudCopies = () => {
+        if (!canManageBerkas || cloudEligibleBerkas.length === 0) return;
+        showConfirmation(
+            'Hapus Salinan Cloud Lampiran?',
+            `Sebanyak ${cloudEligibleBerkas.length} lampiran pendaftar ini sudah tersimpan & terverifikasi offline. Hapus salinan di cloud (Google Drive Trash / Firebase Storage)? Salinan lokal di perangkat tetap aman, tetapi pastikan Anda sudah mencadangkan ZIP berkas terlebih dahulu.`,
+            async () => {
+                setIsDeletingCloudBerkas(true);
+                try {
+                    const summary = await deleteCloudCopiesForBerkasRows(cloudEligibleBerkas, {
+                        settings,
+                        currentUser,
+                    });
+                    if (summary.failed > 0) {
+                        showAlert(
+                            'Sebagian Salinan Cloud Gagal Dihapus',
+                            `Berhasil: ${summary.deleted}, Gagal: ${summary.failed}. ${summary.errors[0]?.message || ''}`
+                        );
+                    } else {
+                        showToast(
+                            `${summary.deleted} salinan cloud berhasil dihapus; salinan offline tetap aman.`,
+                            'success'
+                        );
+                    }
+                } catch (err: any) {
+                    showAlert('Gagal Hapus Salinan Cloud', err?.message || 'Terjadi kesalahan.');
+                } finally {
+                    setIsDeletingCloudBerkas(false);
+                }
+            },
+            { confirmText: 'Ya, Hapus Salinan Cloud', confirmColor: 'red' }
+        );
     };
 
     const handleSave = () => {
@@ -1181,6 +1300,152 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                             );
                                         })}
                                     </div>
+                                </div>
+                            )}
+
+                            {canManageBerkas && pendaftarData?.id && (
+                                <div className="mt-6 p-4 bg-sky-50/70 border border-sky-200 rounded-xl space-y-3">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-sky-200 pb-2.5">
+                                        <div>
+                                            <h5 className="font-bold text-sky-950 text-sm flex items-center gap-2">
+                                                <i className="bi bi-hdd-stack-fill text-sky-700"></i>
+                                                Status Lampiran Offline di Perangkat
+                                            </h5>
+                                            <p className="text-[11px] text-sky-800">
+                                                Ringkasan status baca-saja lampiran di perangkat ini. Setelah pendaftar diterima, pratinjau penuh & pengelolaan tersedia di tab Berkas pada profil Santri.
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            <button
+                                                type="button"
+                                                disabled={isPullingBerkas || isDeletingCloudBerkas || !backendSupport.supported || detectedAttachments.length === 0}
+                                                onClick={() => handleSaveAttachmentsToDevice(false)}
+                                                className="px-3 py-1.5 rounded-lg bg-sky-700 hover:bg-sky-800 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {isPullingBerkas ? (
+                                                    <i className="bi bi-arrow-repeat animate-spin"></i>
+                                                ) : (
+                                                    <i className="bi bi-cloud-arrow-down-fill"></i>
+                                                )}
+                                                Simpan lampiran ke perangkat
+                                            </button>
+                                            {localBerkasList.some(b => b.statusUnduh === 'gagal' || b.statusUnduh === 'cloud') && backendSupport.supported && (
+                                                <button
+                                                    type="button"
+                                                    disabled={isPullingBerkas || isDeletingCloudBerkas}
+                                                    onClick={() => handleSaveAttachmentsToDevice(true)}
+                                                    className="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-1 disabled:opacity-50"
+                                                >
+                                                    <i className="bi bi-arrow-clockwise"></i>
+                                                    Ulangi Gagal/Cloud
+                                                </button>
+                                            )}
+                                            {cloudEligibleBerkas.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    disabled={isPullingBerkas || isDeletingCloudBerkas}
+                                                    onClick={handleDeleteCloudCopies}
+                                                    className="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold flex items-center gap-1 disabled:opacity-50"
+                                                >
+                                                    {isDeletingCloudBerkas ? (
+                                                        <i className="bi bi-arrow-repeat animate-spin"></i>
+                                                    ) : (
+                                                        <i className="bi bi-cloud-slash-fill"></i>
+                                                    )}
+                                                    Hapus Salinan Cloud ({cloudEligibleBerkas.length})
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {!backendSupport.supported && (
+                                        <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
+                                            <i className="bi bi-exclamation-triangle-fill text-amber-600 shrink-0"></i>
+                                            <span>
+                                                Status provider: <strong>{BERKAS_UNSUPPORTED_BACKEND_LABEL}</strong>. {backendSupport.reason}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    <label className="flex items-center gap-2 text-xs text-sky-900 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={pullRawBerkas}
+                                            onChange={e => setPullRawBerkas(e.target.checked)}
+                                            disabled={isPullingBerkas || !backendSupport.supported}
+                                            className="w-3.5 h-3.5 rounded text-sky-600 border-gray-300"
+                                        />
+                                        <span>Simpan gambar asli tanpa kompresi (default: resize maks 1600px JPEG kualitas 0,8)</span>
+                                    </label>
+
+                                    {isPullingBerkas && pullProgress && (
+                                        <div className="p-2.5 bg-white border border-sky-200 rounded-lg text-xs space-y-1">
+                                            <div className="flex justify-between font-semibold text-sky-900">
+                                                <span>Mengunduh: {pullProgress.currentLabel}</span>
+                                                <span>{pullProgress.completed} / {pullProgress.total}</span>
+                                            </div>
+                                            <div className="w-full bg-sky-100 rounded-full h-1.5 overflow-hidden">
+                                                <div
+                                                    className="bg-sky-600 h-1.5 transition-all"
+                                                    style={{ width: `${pullProgress.total > 0 ? Math.round((pullProgress.completed / pullProgress.total) * 100) : 0}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {pullSummary && !isPullingBerkas && (
+                                        <div className="p-2.5 bg-white border border-sky-200 rounded-lg text-xs text-slate-700 flex flex-wrap gap-3">
+                                            <span>Total: <strong>{pullSummary.totalAttachments}</strong></span>
+                                            <span className="text-emerald-700">Tersimpan: <strong>{pullSummary.saved}</strong></span>
+                                            <span className="text-slate-600">Dilewati: <strong>{pullSummary.skipped}</strong></span>
+                                            {pullSummary.failed > 0 && <span className="text-red-700">Gagal: <strong>{pullSummary.failed}</strong></span>}
+                                            {pullSummary.lockedWaitingUnlock > 0 && <span className="text-amber-700">Menunggu E2EE: <strong>{pullSummary.lockedWaitingUnlock}</strong></span>}
+                                            {pullSummary.unsupported > 0 && <span className="text-amber-700">Tidak didukung: <strong>{pullSummary.unsupported}</strong></span>}
+                                        </div>
+                                    )}
+
+                                    {detectedAttachments.length === 0 && localBerkasList.length === 0 ? (
+                                        <p className="text-xs text-slate-500 italic">Belum ada berkas lampiran yang terdeteksi pada pendaftar ini.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {(detectedAttachments.length > 0 ? detectedAttachments : localBerkasList.map(lb => ({
+                                                fieldId: lb.fieldId,
+                                                fieldLabel: lb.fieldLabel || lb.fieldId,
+                                                jenis: lb.jenis,
+                                                sumber: lb.sumber,
+                                            }))).map(att => {
+                                                const stored = localBerkasList.find(b => b.fieldId === att.fieldId);
+                                                const status = stored?.statusUnduh || (!backendSupport.supported ? 'tidak_didukung' : 'cloud');
+                                                const statusBadge =
+                                                    status === 'tersimpan'
+                                                        ? { cls: 'bg-emerald-100 text-emerald-800 border-emerald-200', label: 'Tersimpan offline' }
+                                                        : status === 'gagal'
+                                                        ? { cls: 'bg-red-100 text-red-800 border-red-200', label: 'Gagal' }
+                                                        : status === 'tidak_didukung'
+                                                        ? { cls: 'bg-amber-100 text-amber-800 border-amber-200', label: BERKAS_UNSUPPORTED_BACKEND_LABEL }
+                                                        : { cls: 'bg-slate-100 text-slate-700 border-slate-200', label: stored?.pesanError || 'Di cloud' };
+                                                return (
+                                                    <div key={att.fieldId} className="p-2.5 bg-white border border-sky-100 rounded-lg text-xs flex items-center justify-between gap-2">
+                                                        <div className="min-w-0">
+                                                            <div className="font-semibold text-slate-800 truncate">{att.fieldLabel}</div>
+                                                            <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-1.5">
+                                                                <span>{stored?.ukuran ? `${(stored.ukuran / 1024).toFixed(1)} KB` : att.sumber.toUpperCase()}</span>
+                                                                {stored?.terenkripsi && (
+                                                                    <span className="text-indigo-700 font-semibold">• Terenkripsi lokal</span>
+                                                                )}
+                                                                {stored?.cloudDeletedAt && (
+                                                                    <span className="text-amber-800 font-semibold">• Cloud dihapus</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${statusBadge.cls}`}>
+                                                            {statusBadge.label}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 

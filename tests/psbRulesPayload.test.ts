@@ -301,3 +301,25 @@ describe('PSB Public Payload vs firestore.rules (isValidPublicPendaftar)', () =>
         expect((sanitized as any).unknownInjectedKey).toBeUndefined();
     });
 });
+
+describe('Firebase Storage Rules & firebase.json (Butir 2.9)', () => {
+    it('menyediakan storage.rules dengan isolasi tenant, batas 5MB, allowlist MIME, dan referensi firebase.json', () => {
+        const storageRules = fs.readFileSync(path.resolve(process.cwd(), 'storage.rules'), 'utf8');
+        const firebaseJson = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'firebase.json'), 'utf8'));
+
+        expect(firebaseJson.firestore?.rules).toBe('firestore.rules');
+        expect(firebaseJson.storage?.rules).toBe('storage.rules');
+
+        expect(storageRules).toContain("rules_version = '2';");
+        expect(storageRules).toContain('match /{allPaths=**}');
+        expect(storageRules).toContain('allow read, write: if false;');
+        expect(storageRules).toContain('match /tenants/{tenantId}/psb/{fileName}');
+        expect(storageRules).toContain('5 * 1024 * 1024');
+        expect(storageRules).toContain("'application/pdf'");
+        expect(storageRules).toContain("'image/jpeg'");
+        expect(storageRules).toContain("'image/png'");
+        expect(storageRules).toContain("'image/webp'");
+        expect(storageRules).toContain('allow update: if false;');
+        expect(storageRules).toContain('isTenantMember(tenantId)');
+    });
+});

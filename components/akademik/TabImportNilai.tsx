@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
-import { fetchRaporFromCloud, parseRaporDataV2, syncRaporStructuredData } from '../../services/academicService';
+import { acceptAndReencryptPlaintextRapor, fetchRaporFromCloud, ParseRaporFilterOptions, parseRaporDataV2, syncRaporStructuredData } from '../../services/academicService';
 import { RaporCloudProvider, getRaporCloudProviderMeta } from '../../services/raporCloudService';
 import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
 
@@ -27,6 +27,11 @@ export const TabImportNilai: React.FC = () => {
     const [targetTahun, setTargetTahun] = useState<string>(defaultYear);
     const [targetSemester, setTargetSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [quarantinedPlaintext, setQuarantinedPlaintext] = useState<{
+        items: any[];
+        filterOpts?: ParseRaporFilterOptions;
+    } | null>(null);
+    const [isReencrypting, setIsReencrypting] = useState(false);
 
     useEffect(() => {
         if (settings.raporCloudConfig?.backendProvider) {
@@ -55,6 +60,7 @@ export const TabImportNilai: React.FC = () => {
 
             let totalSuccess = 0;
             let totalErrors: string[] = [];
+            const rejectedItems: any[] = [];
 
             if (importSource === 'wa') {
                 const matches = Array.from(waInput.matchAll(/RAPOR_V2_START([\s\S]*?)RAPOR_V2_END/g));
@@ -63,9 +69,12 @@ export const TabImportNilai: React.FC = () => {
                 }
                 for (const m of matches) {
                     if (!m[1]) continue;
-                    const { successCount, errors } = await parseRaporDataV2(m[1], settings, filterOpts);
+                    const { successCount, errors, stats } = await parseRaporDataV2(m[1], settings, filterOpts);
                     totalSuccess += successCount;
                     totalErrors = [...totalErrors, ...errors];
+                    if (stats?.rejectedPlaintextItems?.length) {
+                        rejectedItems.push(...stats.rejectedPlaintextItems);
+                    }
                 }
             } else {
                 const cleanUrl = cloudScriptUrl.trim();
@@ -80,6 +89,9 @@ export const TabImportNilai: React.FC = () => {
                 const syncRes = await syncRaporStructuredData(cloudData, settings, filterOpts);
                 totalSuccess = syncRes.successCount;
                 totalErrors = syncRes.errors;
+                if (syncRes.stats.rejectedPlaintextItems?.length) {
+                    rejectedItems.push(...syncRes.stats.rejectedPlaintextItems);
+                }
 
                 try {
                     await onUpdateSettings({
@@ -101,10 +113,17 @@ export const TabImportNilai: React.FC = () => {
                 }
             }
 
+            if (rejectedItems.length > 0) {
+                setQuarantinedPlaintext({ items: rejectedItems, filterOpts });
+                showToast(`${rejectedItems.length} kiriman nilai plaintext ditolak karena E2EE Rapor aktif (tidak disimpan otomatis).`, 'error');
+            } else {
+                setQuarantinedPlaintext(null);
+            }
+
             if (totalSuccess > 0) {
                 showToast(`Berhasil menyimpan & menggabungkan ${totalSuccess} data nilai santri.`, 'success');
                 setWaInput('');
-            } else if (totalErrors.length === 0) {
+            } else if (totalErrors.length === 0 && rejectedItems.length === 0) {
                 showToast('Tidak ada perubahan nilai baru pada periode yang dipilih.', 'info');
             }
             if (totalErrors.length > 0) {
@@ -114,6 +133,28 @@ export const TabImportNilai: React.FC = () => {
             showAlert('Gagal Memproses Data', (e as Error).message);
         } finally {
             setIsProcessing(false);
+        }
+    };
+
+    const handleAcceptAndReencrypt = async () => {
+        if (!quarantinedPlaintext || quarantinedPlaintext.items.length === 0) return;
+        setIsReencrypting(true);
+        try {
+            const res = await acceptAndReencryptPlaintextRapor(
+                quarantinedPlaintext.items,
+                settings,
+                quarantinedPlaintext.filterOpts
+            );
+            setQuarantinedPlaintext(null);
+            setWaInput('');
+            showToast(
+                `${res.importedCount} nilai plaintext diterima & disimpan${res.reencryptedCloudCount > 0 ? ` (${res.reencryptedCloudCount} dienkripsi ulang ke Cloud)` : ''}.`,
+                'success'
+            );
+        } catch (e) {
+            showAlert('Gagal Terima & Enkripsi Ulang', (e as Error).message);
+        } finally {
+            setIsReencrypting(false);
         }
     };
 
@@ -258,6 +299,26 @@ export const TabImportNilai: React.FC = () => {
                         'Proses & Simpan Nilai'
                     )}
                 </button>
+
+                {quarantinedPlaintext && quarantinedPlaintext.items.length > 0 && (
+                    <div className="p-3.5 rounded-xl bg-red-50 border border-red-300 text-xs text-red-950 space-y-2">
+                        <div className="font-bold text-red-900">
+                            <i className="bi bi-shield-fill-exclamation mr-1.5"></i>
+                            {quarantinedPlaintext.items.length} Paket Nilai Plaintext Ditolak (E2EE Aktif)
+                        </div>
+                        <p className="text-[11px] text-red-800 leading-relaxed">
+                            E2EE modul Rapor aktif sehingga nilai tanpa enkripsi tidak disimpan otomatis &amp; tidak dihapus dari cloud.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => void handleAcceptAndReencrypt()}
+                            disabled={isReencrypting}
+                            className="px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 disabled:bg-red-300 text-white font-bold text-xs"
+                        >
+                            {isReencrypting ? 'Memproses...' : `Terima & enkripsi ulang (${quarantinedPlaintext.items.length})`}
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="flex flex-col items-center justify-center text-center p-8 text-gray-500 border-2 border-dashed rounded-xl bg-gray-50">

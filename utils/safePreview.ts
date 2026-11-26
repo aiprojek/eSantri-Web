@@ -31,6 +31,33 @@ export function dataUrlToBlobUrl(dataUrl: string): string {
     return URL.createObjectURL(new Blob([bytes], { type: mime }));
 }
 
+export const SAFE_BLOB_PREVIEW_MIMES = new Set<string>([
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+]);
+
+export function isAllowedPreviewBlob(blob: Blob | null | undefined, fallbackMime?: string): boolean {
+    if (!blob || blob.size <= 0) return false;
+    const rawMime = (blob.type || fallbackMime || '').split(';')[0].trim().toLowerCase();
+    const mime = rawMime === 'image/jpg' ? 'image/jpeg' : rawMime;
+    return SAFE_BLOB_PREVIEW_MIMES.has(mime);
+}
+
+export function createSafeBlobPreviewUrl(blob: Blob, fallbackMime?: string): { url: string; mime: string } {
+    const rawMime = (blob.type || fallbackMime || '').split(';')[0].trim().toLowerCase();
+    const mime = rawMime === 'image/jpg' ? 'image/jpeg' : rawMime;
+    if (!SAFE_BLOB_PREVIEW_MIMES.has(mime)) {
+        throw new Error(`Tipe berkas tidak diizinkan untuk pratinjau (${mime || 'tidak diketahui'}).`);
+    }
+    const typedBlob = blob.type === mime ? blob : new Blob([blob], { type: mime });
+    return {
+        url: URL.createObjectURL(typedBlob),
+        mime,
+    };
+}
+
 export function openPreview(value: unknown, pattern: RegExp): boolean {
     if (typeof value !== 'string' || !pattern.test(value)) {
         return false;
@@ -44,3 +71,4 @@ export function openPreview(value: unknown, pattern: RegExp): boolean {
         return false;
     }
 }
+

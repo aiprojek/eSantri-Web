@@ -4,6 +4,9 @@ import { useAppContext } from '../../../AppContext';
 import { extractDriveFolderId } from '../utils/psbUtils';
 import {
     buildPsbGasScriptV31,
+    clearPsbGasProbeCache,
+    generatePsbAdminKey,
+    generatePsbPublicKey,
     getPsbCloudProviderMeta,
     isPsbCloudEndpointValid,
     PSB_CLOUDFLARE_D1_WORKER_SCRIPT,
@@ -31,12 +34,17 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
     const currentUrl = settings.psbConfig?.googleScriptUrl || '';
     const currentProvider: PsbCloudProvider = settings.psbConfig?.backendProvider || 'gas';
     const currentApiKey = settings.psbConfig?.cloudApiKey || '';
+    const initialPublicKey = settings.psbConfig?.cloudPublicKey || (currentProvider === 'gas' ? generatePsbPublicKey() : '');
+    const initialAdminKey = settings.psbConfig?.cloudAdminKey || (currentProvider === 'gas' ? generatePsbAdminKey(initialPublicKey) : '');
     const currentFolderId = settings.psbConfig?.driveFolderId || '';
     const currentBucket = settings.psbConfig?.supabaseBucket || 'psb-berkas';
 
     const [backendProvider, setBackendProvider] = useState<PsbCloudProvider>(currentProvider);
     const [scriptUrl, setScriptUrl] = useState(currentUrl);
     const [cloudApiKey, setCloudApiKey] = useState(currentApiKey);
+    const [cloudPublicKey, setCloudPublicKey] = useState(initialPublicKey);
+    const [cloudAdminKey, setCloudAdminKey] = useState(initialAdminKey);
+    const [showAdminKey, setShowAdminKey] = useState(false);
     const [driveFolderId, setDriveFolderId] = useState(currentFolderId);
     const [supabaseBucket, setSupabaseBucket] = useState(currentBucket);
     const cleanDriveFolderId = extractDriveFolderId(driveFolderId);
@@ -59,9 +67,9 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
                 return PSB_SUPABASE_SQL_SETUP;
             case 'gas':
             default:
-                return buildPsbGasScriptV31(cleanDriveFolderId);
+                return buildPsbGasScriptV31(cleanDriveFolderId, cloudPublicKey.trim(), cloudAdminKey.trim());
         }
-    }, [backendProvider, cleanDriveFolderId]);
+    }, [backendProvider, cleanDriveFolderId, cloudPublicKey, cloudAdminKey]);
 
     if (!isOpen) return null;
 
@@ -72,7 +80,9 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
             const res = await testPsbCloudConnection({
                 endpointUrl: scriptUrl,
                 backendProvider,
-                apiKey: cloudApiKey
+                apiKey: cloudApiKey,
+                publicKey: cloudPublicKey,
+                adminKey: cloudAdminKey,
             });
             setTestResult({ success: true, message: res.message });
         } catch (err: any) {
@@ -88,12 +98,20 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
     const handleCopyScript = () => {
         navigator.clipboard.writeText(setupScriptCode.trim());
         setCopiedScript(true);
-        showToast(`${providerMeta.scriptBadge} disalin ke clipboard!`, 'success');
+        showToast(
+            backendProvider === 'gas'
+                ? 'Script GAS disalin! Setelah menempel, wajib Deploy > Kelola deployment > Edit > Version: New version.'
+                : `${providerMeta.scriptBadge} disalin ke clipboard!`,
+            'success'
+        );
         setTimeout(() => setCopiedScript(false), 2500);
     };
 
     const handleSave = async () => {
         const trimmed = scriptUrl.trim();
+        const cleanPub = cloudPublicKey.trim();
+        const cleanAdm = cloudAdminKey.trim();
+
         if (trimmed && !isPsbCloudEndpointValid(trimmed, backendProvider)) {
             showToast(
                 backendProvider === 'gas'
@@ -106,6 +124,20 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
         if (backendProvider === 'supabase' && trimmed && !cloudApiKey.trim()) {
             showToast('Supabase Anon / Public Key wajib diisi.', 'error');
             return;
+        }
+        if (backendProvider === 'gas') {
+            if (!cleanPub) {
+                showToast('Kunci Kirim Publik (PUBLIC_KEY) wajib diisi untuk GAS.', 'error');
+                return;
+            }
+            if (cleanAdm.length < 32) {
+                showToast('Kunci Admin (ADMIN_KEY) minimal 32 karakter acak. Klik "Acak Ulang" untuk membuat otomatis.', 'error');
+                return;
+            }
+            if (cleanAdm === cleanPub) {
+                showToast('ADMIN_KEY tidak boleh sama dengan PUBLIC_KEY.', 'error');
+                return;
+            }
         }
 
         setIsSaving(true);
@@ -120,6 +152,8 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
                     backendProvider,
                     googleScriptUrl: trimmed,
                     cloudApiKey: cloudApiKey.trim(),
+                    cloudPublicKey: cleanPub,
+                    cloudAdminKey: cleanAdm,
                     driveFolderId: cleanDriveFolderId,
                     supabaseBucket: supabaseBucket.trim() || 'psb-berkas',
                     submissionMethod: newMethod as any
@@ -127,6 +161,7 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
             };
 
             await onUpdateSettings(updatedSettings);
+            clearPsbGasProbeCache(trimmed || undefined);
             showToast(`Konfigurasi Cloud PSB (${providerMeta.name}) berhasil disimpan!`, 'success');
             onClose();
         } catch (e: any) {
@@ -203,6 +238,11 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
                                         type="button"
                                         onClick={() => {
                                             setBackendProvider(pid);
+                                            if (pid === 'gas') {
+                                                const pub = cloudPublicKey.trim() || generatePsbPublicKey();
+                                                if (!cloudPublicKey.trim()) setCloudPublicKey(pub);
+                                                if (!cloudAdminKey.trim()) setCloudAdminKey(generatePsbAdminKey(pub));
+                                            }
                                             setTestResult(null);
                                         }}
                                         className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
@@ -255,7 +295,7 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
                         </div>
                     </div>
 
-                    {/* Conditional API Key / Anon Key */}
+                    {/* Conditional API Key / Anon Key (Non-GAS providers) */}
                     {providerMeta.supportsApiKey && (
                         <div>
                             <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
@@ -272,6 +312,92 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
                                 className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden bg-white"
                             />
                             <p className="text-[11px] text-gray-500 mt-1">{providerMeta.apiKeyHelp}</p>
+                        </div>
+                    )}
+
+                    {/* GAS Dual-Key Security Inputs */}
+                    {backendProvider === 'gas' && (
+                        <div className="p-3.5 rounded-xl border border-teal-200 bg-teal-50/40 space-y-3">
+                            <div className="flex items-center gap-1.5 font-bold text-teal-950 text-xs">
+                                <i className="bi bi-shield-lock-fill text-teal-700"></i>
+                                <span>Dua Kunci Keamanan GAS (Kunci Kirim Publik &amp; Kunci Admin)</span>
+                            </div>
+
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                                        1. Kunci Kirim Publik (PUBLIC_KEY)
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const nextPub = generatePsbPublicKey();
+                                            setCloudPublicKey(nextPub);
+                                            if (cloudAdminKey.trim() === nextPub) {
+                                                setCloudAdminKey(generatePsbAdminKey(nextPub));
+                                            }
+                                            setTestResult(null);
+                                        }}
+                                        className="text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-white border border-teal-300 px-2 py-0.5 rounded-md cursor-pointer"
+                                    >
+                                        <i className="bi bi-shuffle mr-1"></i>Acak Ulang
+                                    </button>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={cloudPublicKey}
+                                    onChange={(e) => {
+                                        setCloudPublicKey(e.target.value);
+                                        setTestResult(null);
+                                    }}
+                                    placeholder="pub_..."
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden bg-white"
+                                />
+                                <p className="text-[11px] text-gray-600 mt-1 leading-snug">
+                                    Tertanam di file HTML formulir PSB (<strong>bukan rahasia</strong> — berfungsi sebagai anti-penyalahgunaan &amp; sarana rotasi). Hanya boleh untuk mengirim pendaftaran baru. Jika diubah, salin ulang script &amp; <strong>terbitkan ulang formulir HTML</strong>.
+                                </p>
+                            </div>
+
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                                        2. Kunci Admin (ADMIN_KEY — Min. 32 Karakter)
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setCloudAdminKey(generatePsbAdminKey(cloudPublicKey));
+                                            setTestResult(null);
+                                        }}
+                                        className="text-[11px] font-bold text-rose-700 hover:text-rose-900 bg-white border border-rose-300 px-2 py-0.5 rounded-md cursor-pointer"
+                                    >
+                                        <i className="bi bi-key-fill mr-1"></i>Acak Ulang
+                                    </button>
+                                </div>
+                                <div className="relative">
+                                    <input
+                                        type={showAdminKey ? 'text' : 'password'}
+                                        value={cloudAdminKey}
+                                        onChange={(e) => {
+                                            setCloudAdminKey(e.target.value);
+                                            setTestResult(null);
+                                        }}
+                                        placeholder="adm_... (minimal 32 karakter)"
+                                        className="w-full px-3 py-2 pr-9 border border-gray-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden bg-white"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAdminKey((prev) => !prev)}
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                                        title={showAdminKey ? 'Sembunyikan ADMIN_KEY' : 'Lihat ADMIN_KEY'}
+                                    >
+                                        <i className={`bi ${showAdminKey ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                                    </button>
+                                </div>
+                                <p className="text-[11px] text-rose-800 mt-1 leading-snug">
+                                    <strong>RAHASIA:</strong> Hanya disimpan lokal di perangkat Admin &amp; Script Properties GAS. Tidak pernah masuk ke HTML formulir publik. Wajib untuk menarik data &amp; mengunduh lampiran (akses ditolak jika kosong).
+                                </p>
+                            </div>
                         </div>
                     )}
 
@@ -374,28 +500,40 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
                         </button>
 
                         {showScriptBox && (
-                            <div className="mt-2 rounded-xl border border-slate-700/80 overflow-hidden bg-slate-900 shadow-sm">
-                                <div className="bg-slate-800 px-3 py-2 border-b border-slate-700 flex items-center justify-between gap-2">
-                                    <span className="text-[11px] font-bold text-slate-100 truncate">
-                                        {providerMeta.name} ({providerMeta.scriptBadge})
-                                    </span>
-                                    <button
-                                        type="button"
-                                        onClick={handleCopyScript}
-                                        className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                                            copiedScript ? 'bg-emerald-600 text-white' : 'bg-teal-600 hover:bg-teal-500 text-white'
-                                        }`}
-                                    >
-                                        <i className={`bi ${copiedScript ? 'bi-check2-all' : 'bi-clipboard'}`}></i>
-                                        <span>{copiedScript ? 'Tersalin!' : 'Salin Kode'}</span>
-                                    </button>
+                            <div className="mt-2 space-y-2">
+                                {backendProvider === 'gas' && (
+                                    <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-950 leading-relaxed space-y-1">
+                                        <div>
+                                            <strong>Pembaruan Script GAS:</strong> Setelah menempel kode terbaru di Apps Script, wajib klik <strong>Deploy &gt; Manage deployments &gt; Edit &gt; Version: New version</strong> (bukan New deployment agar URL <code>/exec</code> tetap sama), jalankan fungsi manual <code>makeExistingFilesPrivate()</code> di editor untuk memprivatkan berkas lama, lalu <strong>terbitkan ulang formulir HTML</strong> agar membawa <code>PUBLIC_KEY</code> terbaru.
+                                        </div>
+                                        <div>
+                                            <strong>Catatan Lampiran:</strong> Berkas lampiran PSB (KK, akta, ijazah, pas foto) diunggah mentah (tidak dienkripsi E2EE) agar tetap dapat dibuka di Google Drive/backend panitia.
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="rounded-xl border border-slate-700/80 overflow-hidden bg-slate-900 shadow-sm">
+                                    <div className="bg-slate-800 px-3 py-2 border-b border-slate-700 flex items-center justify-between gap-2">
+                                        <span className="text-[11px] font-bold text-slate-100 truncate">
+                                            {providerMeta.name} ({providerMeta.scriptBadge})
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={handleCopyScript}
+                                            className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                                                copiedScript ? 'bg-emerald-600 text-white' : 'bg-teal-600 hover:bg-teal-500 text-white'
+                                            }`}
+                                        >
+                                            <i className={`bi ${copiedScript ? 'bi-check2-all' : 'bi-clipboard'}`}></i>
+                                            <span>{copiedScript ? 'Tersalin!' : 'Salin Kode'}</span>
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        readOnly
+                                        value={setupScriptCode}
+                                        rows={7}
+                                        className="w-full bg-slate-950 text-emerald-300 font-mono text-[11px] p-3 border-0 focus:ring-0 focus:outline-hidden resize-y leading-relaxed"
+                                    />
                                 </div>
-                                <textarea
-                                    readOnly
-                                    value={setupScriptCode}
-                                    rows={7}
-                                    className="w-full bg-slate-950 text-emerald-300 font-mono text-[11px] p-3 border-0 focus:ring-0 focus:outline-hidden resize-y leading-relaxed"
-                                />
                             </div>
                         )}
                     </div>

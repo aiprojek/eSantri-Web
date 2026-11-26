@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAppContext } from '../../AppContext';
 import {
     E2EE_CHANGED_EVENT,
+    E2EE_MIN_PASSWORD_LENGTH,
+    ensureDeviceVaultHydrated,
     needsDeviceUnlock,
     parseEmergencyKeyFileBundle,
     recoverWithRecoveryKey,
@@ -21,6 +23,7 @@ export const E2eeUnlockBanner: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
+        ensureDeviceVaultHydrated().catch(() => {});
         const handler = () => setTick((t) => t + 1);
         window.addEventListener(E2EE_CHANGED_EVENT, handler);
         return () => window.removeEventListener(E2EE_CHANGED_EVENT, handler);
@@ -38,10 +41,18 @@ export const E2eeUnlockBanner: React.FC = () => {
         e.preventDefault();
         setBusy(true);
         try {
-            await unlockWithPassword(config, password);
+            const { migratedConfig } = await unlockWithPassword(config, password);
+            if (migratedConfig) {
+                await onUpdateSettings({ ...settings, e2eeConfig: migratedConfig });
+            }
             setPassword('');
             setIsModalOpen(false);
-            showToast('Perangkat terbuka! Data E2EE cloud kini dapat disinkronkan.', 'success');
+            showToast(
+                migratedConfig
+                    ? 'Perangkat terbuka & KDF diperkuat ke PBKDF2 600.000 iterasi.'
+                    : 'Perangkat terbuka! Data E2EE cloud kini dapat disinkronkan.',
+                'success'
+            );
         } catch (err: any) {
             showToast(err?.message || 'Master Password E2EE salah.', 'error');
         } finally {
@@ -51,8 +62,8 @@ export const E2eeUnlockBanner: React.FC = () => {
 
     const handleRecover = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (newPassword.length < 8) {
-            showToast('Password baru minimal 8 karakter.', 'error');
+        if (newPassword.length < E2EE_MIN_PASSWORD_LENGTH) {
+            showToast(`Password baru minimal ${E2EE_MIN_PASSWORD_LENGTH} karakter.`, 'error');
             return;
         }
         setBusy(true);
@@ -188,7 +199,7 @@ export const E2eeUnlockBanner: React.FC = () => {
                                         disabled={busy}
                                         className="rounded-xl bg-teal-600 hover:bg-teal-700 px-5 py-2.5 text-xs font-bold text-white"
                                     >
-                                        {busy ? 'Memverifikasi...' : 'Buka Kunci'}
+                                        {busy ? 'Memproses (PBKDF2 600rb)...' : 'Buka Kunci'}
                                     </button>
                                 </div>
                             </form>
@@ -233,9 +244,9 @@ export const E2eeUnlockBanner: React.FC = () => {
                                         type="password"
                                         value={newPassword}
                                         onChange={(e) => setNewPassword(e.target.value)}
-                                        placeholder="Minimal 8 karakter kuat"
+                                        placeholder="Minimal 12 karakter kuat"
                                         required
-                                        minLength={8}
+                                        minLength={E2EE_MIN_PASSWORD_LENGTH}
                                         className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm"
                                     />
                                 </div>

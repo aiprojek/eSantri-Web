@@ -147,9 +147,9 @@ export const psbPanduan: PanduanSectionData = {
                                 <span className="px-2 py-0.5 rounded-full bg-teal-700 text-white text-[10px] font-bold">Rekomendasi</span>
                             </div>
                             <ul className="list-disc pl-4 space-y-1 text-[11px] text-gray-700">
-                                <li><strong>Auto-Create Folder Tahunan:</strong> Jika kolom <em>ID/Link Folder Drive</em> dikosongkan, GAS otomatis membuat folder <code>berkas-psb-&lt;tahun-ajaran&gt;</code> (contoh: <code>berkas-psb-2026-2027</code>) di Drive utama Anda. Jika diisi Link/ID Folder Induk, subfolder tahunan otomatis dibuat di dalamnya.</li>
-                                <li><strong>Penamaan Berkas &amp; Tab Otomatis:</strong> Lampiran otomatis diberi nama rapi (misal <code>kk-nama-santri-20260908-143022.pdf</code>) dan hak akses baca diatur agar bisa dibuka langsung dari tabel Rekap.</li>
-                                <li><strong>Pemisahan Antar-Tahun (Opsional):</strong> Pada tahun ajaran baru, Anda bebas membuat Google Spreadsheet &amp; URL Deployment GAS baru untuk memisahkan file Sheet tahun sebelumnya agar arsip tetap bersih.</li>
+                                <li><strong>Auto-Create Folder &amp; Izin Privat:</strong> Folder tujuan disimpan di Script Properties GAS (<code>DRIVE_FOLDER_ID</code>). Bila dikosongkan, GAS membuat folder <code>berkas-psb-&lt;tahun-ajaran&gt;</code> di Drive Anda. Berkas lampiran mewarisi izin privat folder tujuan (tidak lagi diset publik).</li>
+                                <li><strong>Penamaan Berkas Tanpa Kebocoran Nama:</strong> Lampiran otomatis diberi nama berpola <code>&lt;nomorRegistrasi&gt;_&lt;INISIAL&gt;_&lt;jenis&gt;-&lt;rand4&gt;.&lt;ext&gt;</code> (misal <code>PSB-2026-REG-4K8M9Q_AFR_kk-7N2P.pdf</code>) dan divalidasi ukuran (&le; 5 MB) serta tipe asli berkas (magic-bytes PDF/JPG/PNG/WebP).</li>
+                                <li><strong>Dua Kunci Keamanan:</strong> <code>PUBLIC_KEY</code> ditanam di formulir HTML untuk mengirim pendaftaran &amp; rotasi formulir (<em>bukan rahasia</em>), sedangkan <code>ADMIN_KEY</code> (min. 32 karakter) bersifat <strong>rahasia</strong>, hanya disimpan lokal, dan wajib untuk menarik data serta berkas dari Sheet/Drive.</li>
                             </ul>
                         </div>
 
@@ -197,16 +197,24 @@ export const psbPanduan: PanduanSectionData = {
                         </div>
                     </div>
 
+                    {/* Peringatan Lampiran Mentah */}
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-950 flex items-start gap-2.5">
+                        <i className="bi bi-exclamation-triangle-fill text-amber-600 text-base shrink-0 mt-0.5"></i>
+                        <div className="leading-relaxed text-[11px]">
+                            <strong>Kebijakan Lampiran PSB:</strong> Berkas lampiran unggahan pendaftar (KK, akta, ijazah, pas foto) diunggah <strong>mentah (tidak dienkripsi E2EE)</strong> agar tetap terbaca langsung oleh panitia di backend/Drive. Biodata sensitif tetap terenkripsi bila E2EE diaktifkan, dan berkas di Google Drive kini disimpan privat mengikuti izin folder tujuan.
+                        </div>
+                    </div>
+
                     {/* Langkah Kritis GAS */}
                     <div className="bg-gray-50 border border-gray-200 rounded-xl p-3.5 space-y-2 text-xs">
                         <h6 className="font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
-                            <i className="bi bi-list-check text-teal-700"></i> Ringkasan Pemasangan &amp; Uji Koneksi GAS (Paling Umum Digunakan):
+                            <i className="bi bi-list-check text-teal-700"></i> Ringkasan Pemasangan &amp; Pembaruan Keamanan GAS:
                         </h6>
                         <ol className="list-decimal pl-4 space-y-1.5 text-gray-700 text-[11px] leading-relaxed">
-                            <li>Buka Google Spreadsheet baru/khusus panitia PSB, pilih menu <strong>Ekstensi &gt; Apps Script</strong>, hapus kode lama, lalu tempel <strong>Kode Script GAS v3.1</strong> dari tombol skrip di aplikasi.</li>
-                            <li>Klik <strong>Deploy &gt; Deployment Baru &gt; Aplikasi Web</strong>, atur <em>Jalankan sebagai</em> = <strong>Saya</strong> dan <em>Siapa yang memiliki akses</em> = <strong className="bg-teal-100 text-teal-900 px-1 rounded">Siapa Saja (Anyone)</strong>, lalu beri izin akses Drive &amp; Spreadsheet saat otorisasi muncul.</li>
-                            <li>Salin URL Web App yang berakhiran <code>/exec</code>, tempel ke kolom endpoint, lalu klik tombol <strong>Tes Link</strong> (atau <strong>Uji Koneksi</strong>) untuk memastikan aplikasi dapat membaca data dari server sebelum file HTML disebar.</li>
-                            <li><strong>Penting:</strong> Jika suatu saat Anda mengubah kode di editor <code>Code.gs</code>, setelah menyimpan wajib memperbarui deployment via <strong>Deploy &gt; Kelola Deployment &gt; Edit &gt; Versi Baru (New Version)</strong>.</li>
+                            <li>Buka menu <strong>Koneksi Cloud</strong>, pastikan <code>PUBLIC_KEY</code> dan <code>ADMIN_KEY</code> (&ge; 32 karakter) sudah terisi, lalu salin <strong>Script GAS terbaru</strong> yang telah ditanami kedua kunci tersebut.</li>
+                            <li>Buka Google Spreadsheet panitia PSB, pilih <strong>Ekstensi &gt; Apps Script</strong>, hapus kode lama, tempel script baru, lalu simpan.</li>
+                            <li>Jika deployment baru: klik <strong>Deploy &gt; Deployment Baru &gt; Aplikasi Web</strong> (<em>Execute as: Me</em>, <em>Who has access: Anyone</em>). Jika memperbarui script lama: klik <strong>Deploy &gt; Manage deployments &gt; Edit &gt; Version: New version</strong> agar URL <code>/exec</code> tetap sama.</li>
+                            <li><strong>Setelah upgrade dari script lama:</strong> jalankan fungsi manual <code>makeExistingFilesPrivate()</code> di editor Apps Script agar berkas Drive lama tidak lagi berstatus publik, lalu <strong>terbitkan ulang formulir HTML</strong> dan uji via tombol <strong>Tes Link</strong>.</li>
                         </ol>
                     </div>
                 </div>

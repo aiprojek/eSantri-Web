@@ -520,7 +520,15 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             setPairingStep('success');
 
         } catch (e) {
-            showToast('Gagal Pairing: ' + (e as Error).message, 'error');
+            const errMsg = (e as Error).message || '';
+            if (errMsg.includes('E2EE_PLAINTEXT_REJECTED')) {
+                try {
+                    sessionStorage.setItem('esantri_sync_plaintext_master_rejected', '1');
+                } catch {}
+                showToast('Gagal Pairing: Data Cloud masih plaintext sedangkan E2EE modul Sync aktif (tidak ditimpa/dihapus). Buka Pusat Sinkronisasi Cloud untuk "Terima & enkripsi ulang".', 'error');
+            } else {
+                showToast('Gagal Pairing: ' + errMsg, 'error');
+            }
             setIsProcessingPairing(false);
             setPairingStep('');
         }
@@ -588,11 +596,16 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             'Sistem akan mengunduh seluruh data terbaru dari Firebase Hub dan menggabungkannya ke penyimpanan lokal perangkat ini. Lanjutkan?',
             async () => {
                 try {
-                    const { downloadAllFromFirebase, syncPsbWithFirebaseHub } = await loadFirebaseRealtimeRuntime();
+                    const { downloadAllFromFirebase, syncPsbWithFirebaseHub, getFirebasePlaintextQuarantine } = await loadFirebaseRealtimeRuntime();
                     const targetTenantId = localSettings.cloudSyncConfig.firebasePairedTenantId || fbUser!.uid;
                     await downloadAllFromFirebase(targetTenantId);
-                    await syncPsbWithFirebaseHub(targetTenantId);
-                    showToast('Semua data berhasil disinkronkan dari Firebase!', 'success');
+                    const psbRes = await syncPsbWithFirebaseHub(targetTenantId);
+                    const quarantinedCount = getFirebasePlaintextQuarantine().length + (psbRes.plaintextRejectedCount || 0);
+                    if (quarantinedCount > 0) {
+                        showToast(`Sinkronisasi selesai, namun ${quarantinedCount} dokumen plaintext ditolak (tidak dihapus). Buka Pusat Sinkronisasi Cloud / PSB untuk "Terima & enkripsi ulang".`, 'error');
+                    } else {
+                        showToast('Semua data berhasil disinkronkan dari Firebase!', 'success');
+                    }
                 } catch (err) {
                     showToast('Gagal mengunduh data: ' + (err as Error).message, 'error');
                 }

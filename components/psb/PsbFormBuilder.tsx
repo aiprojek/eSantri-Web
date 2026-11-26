@@ -7,6 +7,9 @@ import { PSB_STANDARD_FIELD_GROUPS, PSB_DEFAULT_FIELD_HINTS, extractDriveFolderI
 import {
     buildPsbGasScriptV31,
     buildPsbStandaloneCloudHelperJs,
+    clearPsbGasProbeCache,
+    generatePsbAdminKey,
+    generatePsbPublicKey,
     getPsbCloudProviderMeta,
     isPsbCloudEndpointValid,
     PSB_CLOUDFLARE_D1_WORKER_SCRIPT,
@@ -14,7 +17,12 @@ import {
     PSB_SUPABASE_SQL_SETUP,
     testPsbCloudConnection
 } from '../../services/psbCloudService';
-import { buildStandaloneHybridEncryptJsHelper } from '../../services/e2eeService';
+import {
+    buildStandaloneHybridEncryptJsHelper,
+    computePublicKeyFingerprint,
+    formatPublicKeyFingerprint,
+    normalizePublicKeyFingerprint,
+} from '../../services/e2eeService';
 
 interface PsbFormBuilderProps {
     config: PsbConfig;
@@ -46,6 +54,7 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
             namaPimpinanPsb: config.namaPimpinanPsb ?? prev.namaPimpinanPsb,
             jabatanPimpinanPsb: config.jabatanPimpinanPsb ?? prev.jabatanPimpinanPsb,
             kotaSuratPsb: config.kotaSuratPsb ?? prev.kotaSuratPsb,
+            pinnedE2eeFingerprint: config.pinnedE2eeFingerprint ?? prev.pinnedE2eeFingerprint,
         }));
     }, [config]);
 
@@ -60,6 +69,11 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     const [backendProvider, setBackendProvider] = useState<PsbCloudProvider>(config.backendProvider || 'gas');
     const [googleScriptUrl, setGoogleScriptUrl] = useState(config.googleScriptUrl || '');
     const [cloudApiKey, setCloudApiKey] = useState(config.cloudApiKey || '');
+    const initialPubKey = config.cloudPublicKey || ((config.backendProvider || 'gas') === 'gas' ? generatePsbPublicKey() : '');
+    const initialAdmKey = config.cloudAdminKey || ((config.backendProvider || 'gas') === 'gas' ? generatePsbAdminKey(initialPubKey) : '');
+    const [cloudPublicKey, setCloudPublicKey] = useState(initialPubKey);
+    const [cloudAdminKey, setCloudAdminKey] = useState(initialAdmKey);
+    const [showCloudAdminKey, setShowCloudAdminKey] = useState(false);
     const [driveFolderId, setDriveFolderId] = useState(config.driveFolderId || '');
     const [supabaseBucket, setSupabaseBucket] = useState(config.supabaseBucket || 'psb-berkas');
     const cleanDriveFolderId = extractDriveFolderId(driveFolderId);
@@ -71,6 +85,56 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     const [printPaperSize, setPrintPaperSize] = useState<'A4' | 'F4'>('A4');
     const [printScaleMode, setPrintScaleMode] = useState<'auto' | 'fit_1_page' | '95' | '90' | '85' | '80' | '75'>('fit_1_page');
     const [mobileTab, setMobileTab] = useState<'config' | 'preview'>('config');
+
+    const e2eePsbActive = Boolean(
+        settings.e2eeConfig?.enabled &&
+        settings.e2eeConfig?.modules?.psb &&
+        settings.e2eeConfig?.publicKeySpki &&
+        settings.e2eeConfig?.keyId
+    );
+    const [activeKeyFingerprint, setActiveKeyFingerprint] = useState<string>(
+        normalizePublicKeyFingerprint(settings.e2eeConfig?.publicKeyFingerprint)
+    );
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!e2eePsbActive || !settings.e2eeConfig?.publicKeySpki) {
+            setActiveKeyFingerprint('');
+            return;
+        }
+        computePublicKeyFingerprint(settings.e2eeConfig.publicKeySpki)
+            .then((fp) => {
+                if (cancelled) return;
+                setActiveKeyFingerprint(fp);
+                setLocalConfig((prev) =>
+                    prev.pinnedE2eeFingerprint ? prev : { ...prev, pinnedE2eeFingerprint: fp }
+                );
+            })
+            .catch(() => {
+                if (!cancelled) setActiveKeyFingerprint('');
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [e2eePsbActive, settings.e2eeConfig?.publicKeySpki]);
+
+    const pinnedFingerprintNorm = normalizePublicKeyFingerprint(localConfig.pinnedE2eeFingerprint);
+    const effectivePinnedFingerprint = pinnedFingerprintNorm || activeKeyFingerprint;
+    const isPinnedFingerprintMismatched = Boolean(
+        e2eePsbActive && activeKeyFingerprint && pinnedFingerprintNorm && pinnedFingerprintNorm !== activeKeyFingerprint
+    );
+
+    const handleRefreshFingerprintPin = () => {
+        if (!activeKeyFingerprint) {
+            showToast('Kunci publik E2EE PSB belum tersedia atau Web Crypto tidak aktif.', 'error');
+            return;
+        }
+        setLocalConfig((prev) => ({
+            ...prev,
+            pinnedE2eeFingerprint: activeKeyFingerprint,
+        }));
+        showToast('Pin fingerprint E2EE diperbarui. Simpan konfigurasi dan unduh ulang formulir HTML.', 'success');
+    };
 
     const styles: {id: PsbDesignStyle, label: string}[] = [
         { id: 'classic', label: 'Klasik Tradisional' },
@@ -137,9 +201,9 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
                 return PSB_SUPABASE_SQL_SETUP;
             case 'gas':
             default:
-                return buildPsbGasScriptV31(cleanDriveFolderId);
+                return buildPsbGasScriptV31(cleanDriveFolderId, cloudPublicKey.trim(), cloudAdminKey.trim());
         }
-    }, [backendProvider, cleanDriveFolderId]);
+    }, [backendProvider, cleanDriveFolderId, cloudPublicKey, cloudAdminKey]);
 
     const validateCloudFields = (): boolean => {
         if (submissionMethod === 'whatsapp') return true;
@@ -156,6 +220,22 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
             showToast('Supabase Anon / Public Key wajib diisi untuk mode Supabase.', 'error');
             return false;
         }
+        if (backendProvider === 'gas') {
+            const cleanPub = cloudPublicKey.trim();
+            const cleanAdm = cloudAdminKey.trim();
+            if (!cleanPub) {
+                showToast('Kunci Kirim Publik (PUBLIC_KEY) wajib diisi sebelum menyimpan atau menerbitkan formulir GAS.', 'error');
+                return false;
+            }
+            if (cleanAdm.length < 32) {
+                showToast('Kunci Admin (ADMIN_KEY) minimal 32 karakter acak.', 'error');
+                return false;
+            }
+            if (cleanAdm === cleanPub) {
+                showToast('ADMIN_KEY tidak boleh sama dengan PUBLIC_KEY.', 'error');
+                return false;
+            }
+        }
         return true;
     };
 
@@ -168,9 +248,15 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
             backendProvider,
             googleScriptUrl: googleScriptUrl.trim(),
             cloudApiKey: cloudApiKey.trim(),
+            cloudPublicKey: cloudPublicKey.trim(),
+            cloudAdminKey: cloudAdminKey.trim(),
             driveFolderId: cleanDriveFolderId,
-            supabaseBucket: supabaseBucket.trim() || 'psb-berkas'
+            supabaseBucket: supabaseBucket.trim() || 'psb-berkas',
+            pinnedE2eeFingerprint: e2eePsbActive
+                ? effectivePinnedFingerprint
+                : localConfig.pinnedE2eeFingerprint,
         };
+        clearPsbGasProbeCache(googleScriptUrl.trim() || undefined);
         onSave(configToSave);
     };
 
@@ -196,8 +282,13 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
             backendProvider,
             googleScriptUrl: googleScriptUrl.trim(),
             cloudApiKey: cloudApiKey.trim(),
+            cloudPublicKey: cloudPublicKey.trim(),
+            cloudAdminKey: cloudAdminKey.trim(),
             driveFolderId: cleanDriveFolderId,
             supabaseBucket: supabaseBucket.trim() || 'psb-berkas',
+            pinnedE2eeFingerprint: e2eePsbActive
+                ? effectivePinnedFingerprint
+                : localConfig.pinnedE2eeFingerprint,
             fieldHints: localConfig.fieldHints ? { ...localConfig.fieldHints } : {}
         };
 
@@ -209,8 +300,13 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
             updatedTemplates = (localConfig.templates || []).map(t => t.id === activeTemplateId ? newTemplate : t);
         }
 
-        const newConfig = { ...localConfig, templates: updatedTemplates };
+        const newConfig = {
+            ...localConfig,
+            pinnedE2eeFingerprint: e2eePsbActive ? effectivePinnedFingerprint : localConfig.pinnedE2eeFingerprint,
+            templates: updatedTemplates,
+        };
         setLocalConfig(newConfig);
+        clearPsbGasProbeCache(googleScriptUrl.trim() || undefined);
         onSave(newConfig); 
         showToast(isNew ? 'Template baru disimpan.' : 'Perubahan template disimpan.', 'success');
     };
@@ -229,12 +325,18 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
                     requiredDocuments: [...tpl.requiredDocuments],
                     customFields: [...(tpl.customFields || [])],
                     fieldHints: tpl.fieldHints ? { ...tpl.fieldHints } : prev.fieldHints,
+                    pinnedE2eeFingerprint: tpl.pinnedE2eeFingerprint || prev.pinnedE2eeFingerprint,
                     templates: prev.templates
                 }));
+                const nextProv = tpl.backendProvider || localConfig.backendProvider || 'gas';
+                const nextPub = tpl.cloudPublicKey ?? localConfig.cloudPublicKey ?? (nextProv === 'gas' ? generatePsbPublicKey() : '');
+                const nextAdm = tpl.cloudAdminKey ?? localConfig.cloudAdminKey ?? (nextProv === 'gas' ? generatePsbAdminKey(nextPub) : '');
                 setSubmissionMethod(normalizeSubmissionMethod(tpl.submissionMethod));
-                setBackendProvider(tpl.backendProvider || localConfig.backendProvider || 'gas');
+                setBackendProvider(nextProv);
                 setGoogleScriptUrl(tpl.googleScriptUrl || '');
                 setCloudApiKey(tpl.cloudApiKey ?? localConfig.cloudApiKey ?? '');
+                setCloudPublicKey(nextPub);
+                setCloudAdminKey(nextAdm);
                 setDriveFolderId(tpl.driveFolderId || localConfig.driveFolderId || '');
                 setSupabaseBucket(tpl.supabaseBucket || localConfig.supabaseBucket || 'psb-berkas');
                 setCloudTestResult(null);
@@ -273,7 +375,9 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
             const res = await testPsbCloudConnection({
                 endpointUrl: googleScriptUrl,
                 backendProvider,
-                apiKey: cloudApiKey
+                apiKey: cloudApiKey,
+                publicKey: cloudPublicKey,
+                adminKey: cloudAdminKey,
             });
             setCloudTestResult({ ok: true, message: res.message });
         } catch (err: any) {
@@ -286,7 +390,12 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     const handleCopyCloudScript = () => {
         navigator.clipboard.writeText(cloudSetupScriptCode.trim());
         setCopiedScript(true);
-        showToast(`Kode ${providerMeta.name} berhasil disalin ke clipboard!`, 'success');
+        showToast(
+            backendProvider === 'gas'
+                ? 'Script GAS disalin! Deploy via Kelola deployment > Edit > Version: New version, lalu terbitkan ulang formulir.'
+                : `Kode ${providerMeta.name} berhasil disalin ke clipboard!`,
+            'success'
+        );
         setTimeout(() => setCopiedScript(false), 2500);
     };
 
@@ -645,9 +754,13 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
         const obfuscatedEp = obfuscateParam(googleScriptUrl);
         const obfuscatedDf = obfuscateParam(cleanDriveFolderId);
 
-        const e2eePsbActive = Boolean(settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.psb);
         const waE2eeHelperJs = e2eePsbActive && settings.e2eeConfig?.publicKeySpki && settings.e2eeConfig?.keyId
-            ? buildStandaloneHybridEncryptJsHelper(settings.e2eeConfig.publicKeySpki, settings.e2eeConfig.keyId)
+            ? buildStandaloneHybridEncryptJsHelper(
+                  settings.e2eeConfig.publicKeySpki,
+                  settings.e2eeConfig.keyId,
+                  'psb',
+                  effectivePinnedFingerprint
+              )
             : '';
 
         if (submissionMethod === 'whatsapp') {
@@ -810,12 +923,12 @@ async function proceedWaSubmit(){
                  </div>
              </div>`;
 
-             const e2eePsbActive = Boolean(settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.psb);
              const cloudHelperJs = buildPsbStandaloneCloudHelperJs({
                  provider: backendProvider,
                  endpointObfuscatedExpr: obfuscatedEp,
                  driveFolderObfuscatedExpr: obfuscatedDf,
-                 apiKey: cloudApiKey,
+                 apiKey: backendProvider === 'gas' ? undefined : cloudApiKey,
+                 publicKey: backendProvider === 'gas' ? cloudPublicKey : undefined,
                  supabaseBucket,
                  tahunAjaranAktif: localConfig.tahunAjaranAktif || settings.psbConfig?.tahunAjaranAktif || '',
                  jenjangId: localConfig.targetJenjangId,
@@ -823,6 +936,7 @@ async function proceedWaSubmit(){
                  fieldLabelMapJson,
                  e2eePublicKey: e2eePsbActive ? settings.e2eeConfig?.publicKeySpki : undefined,
                  e2eeKeyId: e2eePsbActive ? settings.e2eeConfig?.keyId : undefined,
+                 e2eeFingerprint: e2eePsbActive ? effectivePinnedFingerprint : undefined,
              });
 
              submitScript = `<script>
@@ -929,12 +1043,12 @@ function closeGsSuccessModal(){
                  </div>
              </div>`;
 
-             const e2eePsbActive = Boolean(settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.psb);
              const cloudHelperJs = buildPsbStandaloneCloudHelperJs({
                  provider: backendProvider,
                  endpointObfuscatedExpr: obfuscatedEp,
                  driveFolderObfuscatedExpr: obfuscatedDf,
-                 apiKey: cloudApiKey,
+                 apiKey: backendProvider === 'gas' ? undefined : cloudApiKey,
+                 publicKey: backendProvider === 'gas' ? cloudPublicKey : undefined,
                  supabaseBucket,
                  tahunAjaranAktif: localConfig.tahunAjaranAktif || settings.psbConfig?.tahunAjaranAktif || '',
                  jenjangId: localConfig.targetJenjangId,
@@ -942,6 +1056,7 @@ function closeGsSuccessModal(){
                  fieldLabelMapJson,
                  e2eePublicKey: e2eePsbActive ? settings.e2eeConfig?.publicKeySpki : undefined,
                  e2eeKeyId: e2eePsbActive ? settings.e2eeConfig?.keyId : undefined,
+                 e2eeFingerprint: e2eePsbActive ? effectivePinnedFingerprint : undefined,
              });
 
              submitScript = `<script>
@@ -1096,6 +1211,11 @@ function finishHybridSubmit(){
         const pageSizeCss = effectivePaper === 'F4' ? '21.5cm 33cm' : 'A4 portrait';
         const naturalWidthPx = printOptions?.naturalWidthPx || (effectivePaper === 'F4' ? 722 : 703);
         const useHostStyles = Boolean(printOptions?.hostStylesHtml);
+        const hasFileUploadField = (localConfig.customFields || []).some((f) => f.type === 'file');
+        const unencryptedAttachmentNoticeHtml =
+            hasFileUploadField && submissionMethod !== 'whatsapp'
+                ? `<div class="no-print mt-4 mb-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 flex items-start gap-2"><i class="bi bi-info-circle-fill text-amber-600 shrink-0 mt-0.5"></i><div><strong>Catatan Privasi Berkas Lampiran:</strong> ${e2eePsbActive ? 'Biodata teks pada formulir ini dilindungi enkripsi E2EE sebelum dikirim, namun b' : 'B'}erkas lampiran (KK, akta, ijazah, foto) diunggah langsung dalam format asli (tanpa enkripsi E2EE) ke penyimpanan internal panitia agar dapat diverifikasi dan dipratinjau.</div></div>`
+                : '';
 
         return `<!DOCTYPE html>
 <html lang="id">
@@ -1225,7 +1345,7 @@ function finishHybridSubmit(){
     </style>
 </head>
 <body class="${bodyClass}">
-<div class="psb-vector-fit-page"><div class="psb-vector-fit-viewport"><div id="psb-standalone-sheet" class="${wrapperClass}">${headerHtml}<div id="psb-e2ee-crypto-warning" style="display:none;" class="no-print mb-5 bg-amber-50 border border-amber-300 text-amber-900 rounded-lg p-3.5 text-xs flex items-start gap-2.5"><i class="bi bi-shield-exclamation text-amber-600 text-lg shrink-0"></i><div><p class="font-bold">Fitur Enkripsi E2EE Tidak Didukung di Konteks Ini</p><p class="mt-0.5 leading-relaxed">Browser memblokir enkripsi Web Crypto karena halaman tidak dibuka melalui koneksi aman (<strong>HTTPS</strong>) atau file lokal penuh. Pendaftaran Cloud/Hybrid akan gagal kecuali dibuka lewat tautan HTTPS resmi.</p></div></div><form id="psbForm" onsubmit="event.preventDefault();"><div class="mb-6 break-inside-avoid"><label class="block font-bold mb-1 text-gray-700 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenjang Pendidikan</label><div class="font-bold text-lg p-2 bg-gray-50 border-b border-gray-300 print:border-none print:bg-transparent print:p-0 print:text-black ${style === 'classic' ? 'bg-transparent border-b-2 border-gray-300' : ''}">${jenjangName}</div><input type="hidden" name="jenjangId" value="${localConfig.targetJenjangId||''}" /></div>${activeFieldsHtml}${localConfig.requiredDocuments.length>0?`<div class="mt-8 mb-6 p-4 border rounded-lg break-inside-avoid print:border-black print:bg-white ${style === 'classic' ? 'border-[#1B4D3E]/30 bg-[#f0fdf4]/30' : ''}"><h4 class="font-bold mb-3 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Checklist Persyaratan Berkas (Bawa Fisik)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${docsHtml}</div></div>`:''}${customFieldsHtml}<div class="mt-8 no-print space-y-3"><button type="button" id="submit-btn" onclick="submitForm()" class="w-full flex justify-center items-center gap-2 ${buttonColor} text-white font-bold py-3 rounded-lg transition shadow-md"><i class="${buttonIcon} text-xl"></i> ${buttonText}</button><p class="text-xs text-center text-gray-500 mt-2">${buttonSubtext}</p></div><div class="mt-8 pt-4 border-t border-gray-300 text-center text-xs text-gray-600"><div>Tahun Ajaran ${localConfig.tahunAjaranAktif || new Date().getFullYear()}</div><div class="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div></div></form>${closeDiv}</div></div></div><script>
+<div class="psb-vector-fit-page"><div class="psb-vector-fit-viewport"><div id="psb-standalone-sheet" class="${wrapperClass}">${headerHtml}<div id="psb-e2ee-crypto-warning" style="display:none;" class="no-print mb-5 bg-amber-50 border border-amber-300 text-amber-900 rounded-lg p-3.5 text-xs flex items-start gap-2.5"><i class="bi bi-shield-exclamation text-amber-600 text-lg shrink-0"></i><div><p class="font-bold">Fitur Enkripsi E2EE Tidak Didukung di Konteks Ini</p><p class="mt-0.5 leading-relaxed">Browser memblokir enkripsi Web Crypto karena halaman tidak dibuka melalui koneksi aman (<strong>HTTPS</strong>) atau file lokal penuh. Pendaftaran Cloud/Hybrid akan gagal kecuali dibuka lewat tautan HTTPS resmi.</p></div></div><form id="psbForm" onsubmit="event.preventDefault();"><div class="mb-6 break-inside-avoid"><label class="block font-bold mb-1 text-gray-700 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenjang Pendidikan</label><div class="font-bold text-lg p-2 bg-gray-50 border-b border-gray-300 print:border-none print:bg-transparent print:p-0 print:text-black ${style === 'classic' ? 'bg-transparent border-b-2 border-gray-300' : ''}">${jenjangName}</div><input type="hidden" name="jenjangId" value="${localConfig.targetJenjangId||''}" /></div>${activeFieldsHtml}${localConfig.requiredDocuments.length>0?`<div class="mt-8 mb-6 p-4 border rounded-lg break-inside-avoid print:border-black print:bg-white ${style === 'classic' ? 'border-[#1B4D3E]/30 bg-[#f0fdf4]/30' : ''}"><h4 class="font-bold mb-3 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Checklist Persyaratan Berkas (Bawa Fisik)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${docsHtml}</div></div>`:''}${customFieldsHtml}${unencryptedAttachmentNoticeHtml}<div class="mt-8 no-print space-y-3"><button type="button" id="submit-btn" onclick="submitForm()" class="w-full flex justify-center items-center gap-2 ${buttonColor} text-white font-bold py-3 rounded-lg transition shadow-md"><i class="${buttonIcon} text-xl"></i> ${buttonText}</button><p class="text-xs text-center text-gray-500 mt-2">${buttonSubtext}</p></div><div class="mt-8 pt-4 border-t border-gray-300 text-center text-xs text-gray-600"><div>Tahun Ajaran ${localConfig.tahunAjaranAktif || new Date().getFullYear()}</div><div class="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div></div></form>${closeDiv}</div></div></div><script>
 function insertMd(elemId, before, after) {
     after = after || '';
     var el = document.getElementById(elemId);
@@ -1405,6 +1525,17 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
     };
 
     const handleDownloadForm = () => {
+        if (submissionMethod !== 'whatsapp' && backendProvider === 'gas') {
+            const cleanPub = cloudPublicKey.trim();
+            if (!cleanPub) {
+                showToast('Isi Kunci Kirim Publik (PUBLIC_KEY) terlebih dahulu sebelum mengunduh HTML formulir.', 'error');
+                return;
+            }
+            if (cleanPub === cloudAdminKey.trim()) {
+                showToast('PUBLIC_KEY tidak boleh sama dengan ADMIN_KEY.', 'error');
+                return;
+            }
+        }
         const html = generateHtml();
         const blob = new Blob([html], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
@@ -1436,7 +1567,7 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                 }
             };
         }
-    }, [localConfig, settings, templateName, submissionMethod, backendProvider, googleScriptUrl, cloudApiKey, driveFolderId, supabaseBucket]);
+    }, [localConfig, settings, templateName, submissionMethod, backendProvider, googleScriptUrl, cloudApiKey, cloudPublicKey, driveFolderId, supabaseBucket, effectivePinnedFingerprint]);
 
 
     return (
@@ -1615,6 +1746,42 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                             <p className="mt-1 text-[10px] text-gray-500">Gunakan <strong>Hybrid</strong> agar formulir HTML menyimpan data &amp; berkas ke Cloud sekaligus mengirim konfirmasi WA Admin.</p>
                         </div>
 
+                        {e2eePsbActive && (
+                            <div className={`p-3 rounded-xl border text-xs space-y-2 ${isPinnedFingerprintMismatched ? 'bg-amber-50 border-amber-300' : 'bg-emerald-50/70 border-emerald-200'}`}>
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="font-bold text-slate-800 flex items-center gap-1.5 text-[11px]">
+                                        <i className={`bi ${isPinnedFingerprintMismatched ? 'bi-exclamation-triangle-fill text-amber-600' : 'bi-shield-lock-fill text-emerald-700'}`}></i>
+                                        <span>Pin Fingerprint Public Key E2EE</span>
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={handleRefreshFingerprintPin}
+                                        className="shrink-0 text-[10px] font-bold px-2 py-1 rounded bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 cursor-pointer"
+                                    >
+                                        Perbarui Pin Fingerprint
+                                    </button>
+                                </div>
+                                <div className="text-[10px] text-slate-600 space-y-1">
+                                    <div>
+                                        Key ID: <code className="bg-white px-1 rounded border border-slate-200 font-mono">{settings.e2eeConfig?.keyId}</code>
+                                    </div>
+                                    <div className="break-all">
+                                        Pin formulir:{' '}
+                                        <code className="bg-white px-1 rounded border border-slate-200 font-mono">
+                                            {formatPublicKeyFingerprint(effectivePinnedFingerprint) || '(belum dihitung)'}
+                                        </code>
+                                    </div>
+                                    {isPinnedFingerprintMismatched && (
+                                        <div className="text-amber-900 font-medium bg-amber-100/80 border border-amber-300 rounded p-2 leading-snug">
+                                            Pin formulir berbeda dengan kunci E2EE aktif (
+                                            <code className="font-mono break-all">{formatPublicKeyFingerprint(activeKeyFingerprint)}</code>
+                                            ). Klik <strong>Perbarui Pin Fingerprint</strong>, simpan konfigurasi, lalu unduh ulang HTML agar pendaftar tidak ditolak.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {submissionMethod !== 'whatsapp' && (
                             <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-3">
                                 <div>
@@ -1631,6 +1798,11 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                                                     type="button"
                                                     onClick={() => {
                                                         setBackendProvider(pid);
+                                                        if (pid === 'gas') {
+                                                            const pub = cloudPublicKey.trim() || generatePsbPublicKey();
+                                                            if (!cloudPublicKey.trim()) setCloudPublicKey(pub);
+                                                            if (!cloudAdminKey.trim()) setCloudAdminKey(generatePsbAdminKey(pub));
+                                                        }
                                                         setCloudTestResult(null);
                                                     }}
                                                     className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
@@ -1709,6 +1881,89 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                                     </div>
                                 )}
 
+                                {backendProvider === 'gas' && (
+                                    <div className="p-2.5 rounded-lg border border-teal-200 bg-teal-50/60 space-y-2.5">
+                                        <div className="font-bold text-teal-950 text-[11px] flex items-center gap-1">
+                                            <i className="bi bi-shield-lock-fill text-teal-700"></i>
+                                            <span>Kunci Keamanan GAS (Publik &amp; Admin)</span>
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <label className="font-bold text-gray-700 text-[10px] uppercase">
+                                                    Kunci Kirim Publik (PUBLIC_KEY)
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const nextPub = generatePsbPublicKey();
+                                                        setCloudPublicKey(nextPub);
+                                                        if (cloudAdminKey.trim() === nextPub) {
+                                                            setCloudAdminKey(generatePsbAdminKey(nextPub));
+                                                        }
+                                                        setCloudTestResult(null);
+                                                    }}
+                                                    className="text-[10px] font-bold text-teal-700 hover:text-teal-900 bg-white border border-teal-300 px-1.5 py-0.5 rounded cursor-pointer"
+                                                >
+                                                    Acak Ulang
+                                                </button>
+                                            </div>
+                                            <input
+                                                type="text"
+                                                value={cloudPublicKey}
+                                                onChange={e => {
+                                                    setCloudPublicKey(e.target.value);
+                                                    setCloudTestResult(null);
+                                                }}
+                                                placeholder="pub_..."
+                                                className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden"
+                                            />
+                                            <p className="text-[10px] text-gray-600 mt-1 leading-snug">
+                                                Tertanam di HTML formulir (<strong>bukan rahasia</strong> — anti-penyalahgunaan &amp; rotasi). Jika diubah, wajib salin script baru &amp; terbitkan ulang formulir.
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <label className="font-bold text-gray-700 text-[10px] uppercase">
+                                                    Kunci Admin (ADMIN_KEY &ge;32 kar)
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setCloudAdminKey(generatePsbAdminKey(cloudPublicKey));
+                                                        setCloudTestResult(null);
+                                                    }}
+                                                    className="text-[10px] font-bold text-rose-700 hover:text-rose-900 bg-white border border-rose-300 px-1.5 py-0.5 rounded cursor-pointer"
+                                                >
+                                                    Acak Ulang
+                                                </button>
+                                            </div>
+                                            <div className="relative">
+                                                <input
+                                                    type={showCloudAdminKey ? 'text' : 'password'}
+                                                    value={cloudAdminKey}
+                                                    onChange={e => {
+                                                        setCloudAdminKey(e.target.value);
+                                                        setCloudTestResult(null);
+                                                    }}
+                                                    placeholder="adm_... (minimal 32 karakter)"
+                                                    className="w-full border border-gray-300 rounded-lg p-2 pr-8 font-mono text-xs bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowCloudAdminKey(prev => !prev)}
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                                                    title={showCloudAdminKey ? 'Sembunyikan' : 'Tampilkan'}
+                                                >
+                                                    <i className={`bi ${showCloudAdminKey ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                                                </button>
+                                            </div>
+                                            <p className="text-[10px] text-rose-800 mt-1 leading-snug">
+                                                <strong>RAHASIA lokal Admin saja:</strong> Tidak pernah masuk ke file HTML formulir. Wajib untuk tarik data &amp; baca lampiran.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {providerMeta.usesDriveFolder && (
                                     <div>
                                         <label className="font-bold block text-gray-700 mb-1">
@@ -1783,7 +2038,7 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                                                         <li><strong>Folder Otomatis Per Tahun:</strong> Setiap pendaftar mengunggah dokumen, GAS otomatis membuat &amp; mengelompokkan ke folder <code>berkas-psb-&lt;tahun-ajaran&gt;</code> (baik di Drive utama maupun di dalam Folder Induk jika link foldernya diisi di atas).</li>
                                                         <li>Anda juga bebas membuat Spreadsheet &amp; URL GAS baru di tahun ajaran berikutnya bila ingin memisahkan file Sheet-nya.</li>
                                                         <li>Klik <strong>Deploy &gt; Deployment Baru &gt; Aplikasi Web</strong> &gt; Akses: <strong>Siapa Saja (Anyone)</strong>, lalu salin URL <code>/exec</code>.</li>
-                                                        <li>Bila mengubah isi <code>Code.gs</code>, wajib deploy via <strong>Kelola Deployment &gt; Edit &gt; Versi Baru</strong>.</li>
+                                                        <li>Bila memperbarui isi <code>Code.gs</code>, wajib deploy via <strong>Deploy &gt; Manage deployments (Kelola Deployment) &gt; Edit &gt; Version: New version</strong>, lalu terbitkan ulang formulir HTML.</li>
                                                     </ol>
                                                 </div>
                                             ) : backendProvider === 'cloudflare_d1' ? (
@@ -1996,6 +2251,10 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                     <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">4. Pertanyaan Tambahan & Upload</h3>
                     <CustomFieldEditor fields={localConfig.customFields ?? []} onChange={(fields) => setLocalConfig({...localConfig, customFields: fields})} />
                     <p className="text-[10px] text-gray-500 mt-2 italic">* Gunakan tipe 'Unggah Dokumen' untuk meminta file upload (Mode Cloud).</p>
+                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900 leading-snug">
+                        <i className="bi bi-exclamation-triangle-fill text-amber-600 mr-1"></i>
+                        <strong>Catatan Privasi Lampiran:</strong> Berkas lampiran PSB (KK, akta, ijazah, foto) <strong>tidak dienkripsi E2EE</strong> (diunggah mentah) meskipun modul E2EE PSB aktif, agar tetap dapat dibuka/dipratinjau oleh panitia di backend (Google Drive / R2 / Supabase / Storage).
+                    </div>
                 </div>
 
                 <div className="pt-4 border-t sticky bottom-0 bg-white">

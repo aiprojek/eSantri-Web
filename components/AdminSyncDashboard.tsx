@@ -57,6 +57,16 @@ export const AdminSyncDashboard: React.FC = () => {
     const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
     const [currentFileToMerge, setCurrentFileToMerge] = useState<SyncFileRecord | null>(null);
 
+    // E2EE Plaintext Quarantine State
+    const [quarantinedInboxFiles, setQuarantinedInboxFiles] = useState<SyncFileRecord[]>([]);
+    const [isReencryptingInbox, setIsReencryptingInbox] = useState(false);
+    const [isPlaintextMasterRejected, setIsPlaintextMasterRejected] = useState<boolean>(() => {
+        try { return sessionStorage.getItem('esantri_sync_plaintext_master_rejected') === '1'; } catch { return false; }
+    });
+    const [isReencryptingMaster, setIsReencryptingMaster] = useState(false);
+    const [fbQuarantineList, setFbQuarantineList] = useState<{ key: string; tableName: string; docId: string; label: string }[]>([]);
+    const [isReencryptingFb, setIsReencryptingFb] = useState(false);
+
     // Live query for SyncHistory & Local Stats
     const syncHistoryList = useLiveQuery(
         () => db.syncHistory.orderBy('mergedAt').reverse().toArray(),
@@ -118,11 +128,36 @@ export const AdminSyncDashboard: React.FC = () => {
     };
 
     useEffect(() => {
+        let cleanup = () => {};
         if (config?.provider === 'firebase') {
             void initializeAuthState();
+            let active = true;
+            const refreshFbQuarantine = async () => {
+                try {
+                    const { getFirebasePlaintextQuarantine } = await loadFirebaseRealtimeRuntime();
+                    if (active) {
+                        setFbQuarantineList(getFirebasePlaintextQuarantine().map(({ key, tableName, docId, label }) => ({ key, tableName, docId, label })));
+                    }
+                } catch {
+                    // ignore
+                }
+            };
+            void refreshFbQuarantine();
+            const onQ = () => { void refreshFbQuarantine(); };
+            window.addEventListener('esantri:fb-plaintext-quarantine-changed', onQ);
+            cleanup = () => {
+                active = false;
+                window.removeEventListener('esantri:fb-plaintext-quarantine-changed', onQ);
+            };
         } else if (config && config.provider !== 'none') {
             void fetchFilesAndStats();
+            const onMasterRejected = () => setIsPlaintextMasterRejected(true);
+            window.addEventListener('esantri:master-plaintext-rejected', onMasterRejected);
+            cleanup = () => {
+                window.removeEventListener('esantri:master-plaintext-rejected', onMasterRejected);
+            };
         }
+        return cleanup;
     }, [config?.provider]);
 
     const handleInspectFile = async (file: SyncFileRecord) => {
@@ -168,15 +203,93 @@ export const AdminSyncDashboard: React.FC = () => {
             showToast(`Berhasil menggabungkan ${result.recordCount} data dari ${parseSenderFromFilename(file.name)}.`, 'success');
 
             setFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: 'merged' } : f));
+            setQuarantinedInboxFiles(prev => prev.filter(f => f.id !== file.id));
             setConflicts([]);
             setIsConflictModalOpen(false);
             setHasUnpublishedMerge(true);
             return true;
         } catch (e) {
-            showAlert('Gagal Menggabungkan Data', (e as Error).message);
+            const msg = (e as Error).message || '';
+            if (msg.includes('E2EE_PLAINTEXT_REJECTED')) {
+                setQuarantinedInboxFiles(prev => prev.some(f => f.id === file.id) ? prev : [...prev, file]);
+                showToast(`File "${file.name}" ditolak karena masih plaintext (tidak dihapus dari cloud). Gunakan tombol "Terima & enkripsi ulang" bila sumber tepercaya.`, 'error');
+                return false;
+            }
+            showAlert('Gagal Menggabungkan Data', msg);
             return false;
         } finally {
             setProcessingId(null);
+        }
+    };
+
+    const handleAcceptAndReencryptInbox = async (targetFiles: SyncFileRecord[]) => {
+        if (targetFiles.length === 0) return;
+        setIsReencryptingInbox(true);
+        try {
+            const { processInboxFile, publishMasterData } = await loadSyncService();
+            const mergerIdentity = currentUser?.fullName || currentUser?.username || 'Admin Pengepul';
+            let mergedCount = 0;
+            for (const file of targetFiles) {
+                const res = await processInboxFile(config, file, undefined, { allowPlaintext: true });
+                if (res.conflicts && res.conflicts.length > 0) {
+                    setConflicts(res.conflicts);
+                    setCurrentFileToMerge(file);
+                    setIsConflictModalOpen(true);
+                    showToast(`Selesaikan konflik data pada file "${file.name}" lalu gabungkan kembali.`, 'info');
+                    break;
+                }
+                await db.syncHistory.put({
+                    id: file.id,
+                    fileId: file.id,
+                    fileName: file.name,
+                    mergedAt: new Date().toISOString(),
+                    mergedBy: mergerIdentity,
+                    recordCount: res.recordCount || 0
+                });
+                setFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: 'merged' } : f));
+                setQuarantinedInboxFiles(prev => prev.filter(f => f.id !== file.id));
+                mergedCount++;
+            }
+            if (mergedCount > 0) {
+                await publishMasterData(config);
+                setHasUnpublishedMerge(false);
+                showToast(`${mergedCount} file plaintext berhasil diterima, digabung, dan dipublikasikan ulang dalam bentuk terenkripsi E2EE.`, 'success');
+            }
+        } catch (e) {
+            showAlert('Gagal Terima & Enkripsi Ulang', (e as Error).message);
+        } finally {
+            setIsReencryptingInbox(false);
+        }
+    };
+
+    const handleAcceptAndReencryptMaster = async () => {
+        setIsReencryptingMaster(true);
+        try {
+            const { acceptAndReencryptMasterFromCloud } = await loadSyncService();
+            await acceptAndReencryptMasterFromCloud(config);
+            try { sessionStorage.removeItem('esantri_sync_plaintext_master_rejected'); } catch {}
+            setIsPlaintextMasterRejected(false);
+            showToast('Master Data Cloud berhasil diterima, digabungkan, dan dienkripsi ulang dengan E2EE.', 'success');
+        } catch (e) {
+            showAlert('Gagal Terima & Enkripsi Ulang Master', (e as Error).message);
+        } finally {
+            setIsReencryptingMaster(false);
+        }
+    };
+
+    const handleAcceptAndReencryptFirebase = async () => {
+        const activeTenantId = config?.firebasePairedTenantId || fbUser?.uid;
+        if (!activeTenantId || fbQuarantineList.length === 0) return;
+        setIsReencryptingFb(true);
+        try {
+            const { reencryptQuarantinedFirebaseDocs, getFirebasePlaintextQuarantine } = await loadFirebaseRealtimeRuntime();
+            const res = await reencryptQuarantinedFirebaseDocs(activeTenantId);
+            setFbQuarantineList(getFirebasePlaintextQuarantine().map(({ key, tableName, docId, label }) => ({ key, tableName, docId, label })));
+            showToast(`${res.processedCount} dokumen plaintext berhasil diterima & dienkripsi ulang di Firebase.`, 'success');
+        } catch (e) {
+            showAlert('Gagal Enkripsi Ulang Dokumen Firebase', (e as Error).message);
+        } finally {
+            setIsReencryptingFb(false);
         }
     };
 
@@ -466,6 +579,33 @@ export const AdminSyncDashboard: React.FC = () => {
                     </div>
                 </div>
 
+                {fbQuarantineList.length > 0 && (
+                    <div className="rounded-2xl border-2 border-red-300 bg-red-50 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+                        <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 text-lg">
+                                <i className="bi bi-shield-fill-exclamation"></i>
+                            </div>
+                            <div className="space-y-1">
+                                <h4 className="font-bold text-red-950 text-sm">
+                                    {fbQuarantineList.length} Dokumen Plaintext di Firebase Ditolak (E2EE Aktif)
+                                </h4>
+                                <p className="text-xs text-red-800 leading-relaxed">
+                                    E2EE modul Sync aktif sehingga dokumen tanpa enkripsi dikarantina dan <strong>tidak disimpan otomatis atau dihapus</strong> dari cloud. Sampel: {fbQuarantineList.slice(0, 3).map(q => q.label).join(', ')}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => void handleAcceptAndReencryptFirebase()}
+                            disabled={isReencryptingFb}
+                            className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-red-300 text-white text-xs font-bold whitespace-nowrap shadow-xs transition-colors flex items-center gap-1.5"
+                        >
+                            <i className={`bi ${isReencryptingFb ? 'bi-arrow-repeat animate-spin' : 'bi-lock-fill'}`}></i>
+                            <span>{isReencryptingFb ? 'Mengenkripsi...' : `Terima & enkripsi ulang (${fbQuarantineList.length})`}</span>
+                        </button>
+                    </div>
+                )}
+
                 {/* Action Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col justify-between shadow-2xs">
@@ -623,6 +763,66 @@ export const AdminSyncDashboard: React.FC = () => {
                 }
                 tabs={<HeaderTabs tabs={HUB_TABS} value={activeTab} onChange={setActiveTab} />}
             />
+
+            {/* Quarantined Plaintext Master Banner */}
+            {isPlaintextMasterRejected && (
+                <div className="rounded-2xl border-2 border-red-300 bg-red-50 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+                    <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 text-lg">
+                            <i className="bi bi-shield-fill-exclamation"></i>
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-red-950 text-sm">
+                                Master Data Cloud Masih Plaintext &amp; Ditolak (E2EE Sync Aktif)
+                            </h4>
+                            <p className="text-xs text-red-800 mt-0.5 leading-relaxed">
+                                Master Data di Cloud tidak terenkripsi E2EE sehingga tidak digabungkan dan tidak dihapus. Jika file tersebut sah, klik tombol di kanan untuk menerimanya dan mempublikasikan ulang versi terenkripsi E2EE.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => void handleAcceptAndReencryptMaster()}
+                            disabled={isReencryptingMaster}
+                            className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-red-300 text-white text-xs font-bold whitespace-nowrap shadow-xs transition-colors flex items-center gap-1.5"
+                        >
+                            <i className={`bi ${isReencryptingMaster ? 'bi-arrow-repeat animate-spin' : 'bi-lock-fill'}`}></i>
+                            <span>{isReencryptingMaster ? 'Memproses...' : 'Terima & enkripsi ulang'}</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Quarantined Plaintext Inbox Banner */}
+            {quarantinedInboxFiles.length > 0 && (
+                <div className="rounded-2xl border-2 border-red-300 bg-red-50 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+                    <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 text-lg">
+                            <i className="bi bi-shield-fill-exclamation"></i>
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-red-950 text-sm">
+                                {quarantinedInboxFiles.length} File Inbox Plaintext Ditolak (E2EE Sync Aktif)
+                            </h4>
+                            <p className="text-xs text-red-800 mt-0.5 leading-relaxed">
+                                File <strong>{quarantinedInboxFiles.map(f => f.name).join(', ')}</strong> tidak terenkripsi E2EE sehingga ditolak (tidak digabung &amp; tidak dihapus dari Cloud).
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => void handleAcceptAndReencryptInbox(quarantinedInboxFiles)}
+                            disabled={isReencryptingInbox}
+                            className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-red-300 text-white text-xs font-bold whitespace-nowrap shadow-xs transition-colors flex items-center gap-1.5"
+                        >
+                            <i className={`bi ${isReencryptingInbox ? 'bi-arrow-repeat animate-spin' : 'bi-lock-fill'}`}></i>
+                            <span>{isReencryptingInbox ? 'Memproses...' : 'Terima & enkripsi ulang'}</span>
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Unpublished Merge Reminder Banner */}
             {hasUnpublishedMerge && (

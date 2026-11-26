@@ -7,7 +7,10 @@ import {
     changeMasterPassword,
     DEFAULT_E2EE_MODULES,
     E2EE_CHANGED_EVENT,
+    E2EE_MIN_PASSWORD_LENGTH,
     type E2eeDeviceVaultMode,
+    ensureDeviceVaultHydrated,
+    forgetDeviceVault,
     getDeviceVaultMode,
     getVaultEntryByKeyId,
     isDeviceUnlockedForConfig,
@@ -16,7 +19,7 @@ import {
     parseEmergencyKeyFileBundle,
     recoverWithRecoveryKey,
     regenerateRecoveryKey,
-    setDeviceVaultMode,
+    setDeviceVaultModeAsync,
     setupE2eeConfig,
     unlockWithPassword,
 } from '../../services/e2eeService';
@@ -24,14 +27,16 @@ import { syncPortalData } from '../../services/portalGasService';
 
 const getPasswordStrength = (pw: string): { label: string; score: number; color: string } => {
     if (!pw) return { label: '', score: 0, color: 'bg-slate-200' };
+    if (pw.length < E2EE_MIN_PASSWORD_LENGTH) {
+        return { label: `Terlalu pendek (min. ${E2EE_MIN_PASSWORD_LENGTH} karakter)`, score: 1, color: 'bg-rose-500' };
+    }
     let score = 0;
-    if (pw.length >= 8) score++;
-    if (pw.length >= 12) score++;
+    if (pw.length >= E2EE_MIN_PASSWORD_LENGTH) score++;
+    if (pw.length >= 16) score++;
     if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
     if (/\d/.test(pw)) score++;
     if (/[^A-Za-z0-9]/.test(pw)) score++;
-    if (score <= 2 || pw.length < 8) return { label: 'Lemah (min. 8 karakter)', score: 1, color: 'bg-rose-500' };
-    if (score === 3) return { label: 'Sedang (disarankan 12+ karakter)', score: 2, color: 'bg-amber-500' };
+    if (score <= 2) return { label: 'Sedang (tambahkan huruf besar/angka/simbol)', score: 2, color: 'bg-amber-500' };
     return { label: 'Kuat', score: 3, color: 'bg-emerald-500' };
 };
 
@@ -61,7 +66,7 @@ const MODULE_META: Array<{
     {
         key: 'psb',
         title: 'PSB Online (Khusus Biodata Teks)',
-        subtitle: 'Enkripsi data teks & biodata pendaftar. Lampiran file (Foto/KK/Ijazah) tetap diunggah normal agar dapat dipratinjau.',
+        subtitle: 'Enkripsi biodata & isian teks pendaftar. PENTING: Lampiran PSB (KK, akta, ijazah, foto) diunggah mentah (tidak dienkripsi E2EE) agar tetap terbaca di backend.',
         icon: 'bi-person-vcard',
     },
     {
@@ -76,7 +81,7 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
     localSettings,
     handleInputChange,
 }) => {
-    const { onUpdateSettings, showToast, showConfirmation } = useAppContext();
+    const { onUpdateSettings, showToast, showConfirmation, downloadBackup } = useAppContext();
     const config = localSettings.e2eeConfig;
     const cryptoSupported = isWebCryptoAvailable();
 
@@ -117,7 +122,18 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
     const [portalNeedsResync, setPortalNeedsResync] = useState(false);
     const [syncingPortalNow, setSyncingPortalNow] = useState(false);
 
+    // 4-step disable E2EE modal state (Butir 2.8)
+    const [showDisableModal, setShowDisableModal] = useState(false);
+    const [disableStep, setDisableStep] = useState<1 | 2 | 3 | 4>(1);
+    const [disableBackupPw, setDisableBackupPw] = useState('');
+    const [disableBackupPwConfirm, setDisableBackupPwConfirm] = useState('');
+    const [disableBackupDownloaded, setDisableBackupDownloaded] = useState(false);
+    const [disableBackupBusy, setDisableBackupBusy] = useState(false);
+    const [disableCloudMode, setDisableCloudMode] = useState<'keep_encrypted' | 'reupload_plaintext'>('keep_encrypted');
+    const [disableConfirmText, setDisableConfirmText] = useState('');
+
     useEffect(() => {
+        ensureDeviceVaultHydrated().catch(() => {});
         const handler = () => {
             setVaultTick((v) => v + 1);
             setVaultModeState(getDeviceVaultMode());
@@ -126,15 +142,27 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
         return () => window.removeEventListener(E2EE_CHANGED_EVENT, handler);
     }, []);
 
-    const handleChangeVaultMode = (nextMode: E2eeDeviceVaultMode) => {
-        setDeviceVaultMode(nextMode);
-        setVaultModeState(nextMode);
+    const handleChangeVaultMode = async (nextMode: E2eeDeviceVaultMode) => {
+        const res = await setDeviceVaultModeAsync(nextMode);
+        setVaultModeState(res.effectiveMode);
+        if (res.fallbackToSession) {
+            showToast(
+                'IndexedDB tidak tersedia di browser ini. Vault dialihkan ke mode Sesi (hapus saat tutup) demi keamanan.',
+                'info'
+            );
+            return;
+        }
         showToast(
-            nextMode === 'session'
-                ? 'Mode Komputer Bersama aktif: kunci E2EE otomatis dihapus saat tab/browser ditutup.'
-                : 'Mode Remember Device aktif: kunci E2EE tetap tersimpan di perangkat ini.',
+            res.effectiveMode === 'session'
+                ? 'Mode Sesi aktif (default): kunci E2EE otomatis dihapus saat tab/browser ditutup.'
+                : 'Mode Ingat Perangkat aktif: kunci dibungkus AES-GCM dengan CryptoKey non-extractable di IndexedDB.',
             'info'
         );
+    };
+
+    const handleForgetDevice = async () => {
+        await forgetDeviceVault();
+        showToast('Perangkat dilupakan: CryptoKey IndexedDB, cache sesi, dan kunci vault telah dihapus.', 'info');
     };
 
     const isUnlocked = React.useMemo(() => {
@@ -182,8 +210,8 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
 
     const handleSetupE2ee = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (setupPassword.length < 8) {
-            showToast('Master Password minimal 8 karakter.', 'error');
+        if (setupPassword.length < E2EE_MIN_PASSWORD_LENGTH) {
+            showToast(`Master Password minimal ${E2EE_MIN_PASSWORD_LENGTH} karakter.`, 'error');
             return;
         }
         if (setupPassword !== setupConfirm) {
@@ -219,9 +247,14 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
         if (!config) return;
         setBusy(true);
         try {
-            await unlockWithPassword(config, unlockPassword);
+            const { migratedConfig } = await unlockWithPassword(config, unlockPassword);
             setUnlockPassword('');
-            showToast('Kunci E2EE berhasil dibuka pada perangkat ini.', 'success');
+            if (migratedConfig) {
+                await persistE2eeConfig(migratedConfig);
+                showToast('Kunci E2EE dibuka & KDF diperkuat ke PBKDF2 600.000 iterasi.', 'success');
+            } else {
+                showToast('Kunci E2EE berhasil dibuka pada perangkat ini.', 'success');
+            }
         } catch (err: any) {
             showToast(err?.message || 'Master Password salah.', 'error');
         } finally {
@@ -236,8 +269,8 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
             showToast('Unggah File Kunci Darurat (.txt) yang berisi Key Bundle terlebih dahulu.', 'error');
             return;
         }
-        if (recoveryNewPw.length < 8) {
-            showToast('Password baru minimal 8 karakter.', 'error');
+        if (recoveryNewPw.length < E2EE_MIN_PASSWORD_LENGTH) {
+            showToast(`Password baru minimal ${E2EE_MIN_PASSWORD_LENGTH} karakter.`, 'error');
             return;
         }
         if (recoveryNewPw !== recoveryNewPwConfirm) {
@@ -321,8 +354,8 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
     const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!config) return;
-        if (newPw.length < 8) {
-            showToast('Password baru minimal 8 karakter.', 'error');
+        if (newPw.length < E2EE_MIN_PASSWORD_LENGTH) {
+            showToast(`Password baru minimal ${E2EE_MIN_PASSWORD_LENGTH} karakter.`, 'error');
             return;
         }
         if (newPw !== newPwConfirm) {
@@ -371,24 +404,112 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
 
     const handleDisableE2ee = () => {
         if (!config) return;
-        showConfirmation(
-            'Nonaktifkan Enkripsi E2EE?',
-            'Sinkronisasi & pengiriman data baru ke cloud tidak akan dienkripsi lagi. Data lama yang sudah terenkripsi di cloud tidak akan bisa dibaca jika perangkat ini dikunci atau kuncinya dihapus. Anda tetap bisa menyimpannya atau mengaktifkan kembali nanti.',
-            async () => {
-                const nowIso = new Date().toISOString();
-                await persistE2eeConfig({
-                    ...config,
-                    enabled: false,
-                    disabledAt: nowIso,
-                    updatedAt: nowIso,
-                });
+        setDisableStep(1);
+        setDisableBackupPw('');
+        setDisableBackupPwConfirm('');
+        setDisableBackupDownloaded(false);
+        setDisableCloudMode('keep_encrypted');
+        setDisableConfirmText('');
+        setShowDisableModal(true);
+    };
+
+    const handleDownloadDisableEncryptedBackup = async () => {
+        if (disableBackupPw.length < 6) {
+            showToast('Password cadangan terenkripsi minimal 6 karakter.', 'error');
+            return;
+        }
+        if (disableBackupPw !== disableBackupPwConfirm) {
+            showToast('Konfirmasi password cadangan tidak cocok.', 'error');
+            return;
+        }
+        setDisableBackupBusy(true);
+        try {
+            await downloadBackup({ password: disableBackupPw });
+            setDisableBackupDownloaded(true);
+            setDisableBackupPw('');
+            setDisableBackupPwConfirm('');
+            showToast('Cadangan terenkripsi (AES-GCM) berhasil diunduh. Anda dapat lanjut ke langkah berikutnya.', 'success');
+        } catch (err: any) {
+            showToast(err?.message || 'Gagal mengunduh cadangan terenkripsi.', 'error');
+        } finally {
+            setDisableBackupBusy(false);
+        }
+    };
+
+    const handleConfirmDisableE2eeFinal = async () => {
+        if (!config) return;
+        if (!disableBackupDownloaded) {
+            showToast('Unduh cadangan terenkripsi terlebih dahulu di Langkah 2.', 'error');
+            setDisableStep(2);
+            return;
+        }
+        if (disableConfirmText.trim() !== 'NONAKTIFKAN') {
+            showToast('Ketik NONAKTIFKAN secara persis untuk mengonfirmasi.', 'error');
+            return;
+        }
+        setBusy(true);
+        try {
+            const nowIso = new Date().toISOString();
+            const disabledConfig: E2eeConfig = {
+                ...config,
+                enabled: false,
+                disabledAt: nowIso,
+                updatedAt: nowIso,
+            };
+            await persistE2eeConfig(disabledConfig);
+
+            if (disableCloudMode === 'reupload_plaintext') {
+                const warnings: string[] = [];
+                const latestRows = await db.settings.toArray();
+                const freshSettings = latestRows[0]
+                    ? { ...localSettings, ...latestRows[0], e2eeConfig: disabledConfig }
+                    : { ...localSettings, e2eeConfig: disabledConfig };
+                const syncCfg = freshSettings.cloudSyncConfig;
+
+                if (syncCfg?.provider === 'firebase' && syncCfg.firebasePairedTenantId) {
+                    try {
+                        const { pushAllToFirebase } = await import('../../services/firebaseSyncService');
+                        await pushAllToFirebase(syncCfg.firebasePairedTenantId);
+                    } catch (err: any) {
+                        warnings.push(`Firebase Sync: ${err?.message || 'gagal mengunggah ulang'}`);
+                    }
+                } else if (syncCfg?.provider === 'dropbox' || syncCfg?.provider === 'webdav') {
+                    try {
+                        const { publishMasterData } = await import('../../services/syncService');
+                        await publishMasterData(syncCfg);
+                    } catch (err: any) {
+                        warnings.push(`Cloud Sync (${syncCfg.provider}): ${err?.message || 'gagal mengunggah ulang'}`);
+                    }
+                }
+
+                if (freshSettings.portalConfig?.enabled) {
+                    try {
+                        await syncPortalData(freshSettings);
+                        setPortalNeedsResync(false);
+                    } catch (err: any) {
+                        setPortalNeedsResync(true);
+                        warnings.push(`Portal Wali: ${err?.message || 'gagal menyinkronkan'}`);
+                    }
+                }
+
+                setShowDisableModal(false);
+                if (warnings.length > 0) {
+                    showToast(`E2EE dinonaktifkan, namun ada kendala unggah ulang cloud: ${warnings.join(' | ')}`, 'info');
+                } else {
+                    showToast('E2EE dinonaktifkan & data cloud berhasil diperbarui menjadi plaintext.', 'info');
+                }
+            } else {
                 if (localSettings.portalConfig?.enabled) {
                     setPortalNeedsResync(true);
                 }
-                showToast('Enkripsi End-to-End (E2EE) dinonaktifkan.', 'info');
-            },
-            { confirmText: 'Ya, Nonaktifkan E2EE', confirmColor: 'red' }
-        );
+                setShowDisableModal(false);
+                showToast('E2EE dinonaktifkan. Data cloud lama tetap terenkripsi & kunci lama tersimpan aman.', 'info');
+            }
+        } catch (err: any) {
+            showToast(err?.message || 'Gagal menonaktifkan E2EE.', 'error');
+        } finally {
+            setBusy(false);
+        }
     };
 
     const handleReactivateExisting = async () => {
@@ -426,7 +547,7 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
             'Hapus Total Kunci E2EE?',
             'PERINGATAN KERAS: Menghapus konfigurasi kunci akan membuat seluruh data cloud, cadangan terenkripsi, serta salinan Form HTML Guru (Rapor) dan Formulir PSB yang terlanjur beredar TIDAK DAPAT DIDEKRIPSI lagi secara permanen—kecuali Anda masih menyimpan file "kunci-darurat-e2ee-*.txt". Pastikan tidak ada kiriman terenkripsi tertunda sebelum melanjutkan!',
             async () => {
-                if (config?.keyId) lockDeviceVault(config.keyId);
+                await forgetDeviceVault(config?.keyId);
                 await persistE2eeConfig(undefined);
                 setDisplayedRecoveryKey(null);
                 showToast('Konfigurasi E2EE dihapus dari pengaturan lokal.', 'info');
@@ -683,9 +804,9 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                                     type="password"
                                                     value={recoveryNewPw}
                                                     onChange={(e) => setRecoveryNewPw(e.target.value)}
-                                                    placeholder="Minimal 8 karakter kuat"
+                                                    placeholder="Minimal 12 karakter kuat"
                                                     required
-                                                    minLength={8}
+                                                    minLength={E2EE_MIN_PASSWORD_LENGTH}
                                                     className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm"
                                                 />
                                             </div>
@@ -699,7 +820,7 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                                     onChange={(e) => setRecoveryNewPwConfirm(e.target.value)}
                                                     placeholder="Ulangi password baru"
                                                     required
-                                                    minLength={8}
+                                                    minLength={E2EE_MIN_PASSWORD_LENGTH}
                                                     className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm"
                                                 />
                                             </div>
@@ -726,9 +847,9 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                             type="password"
                                             value={setupPassword}
                                             onChange={(e) => setSetupPassword(e.target.value)}
-                                            placeholder="Minimal 8 karakter kuat..."
+                                            placeholder="Minimal 12 karakter kuat..."
                                             required
-                                            minLength={8}
+                                            minLength={E2EE_MIN_PASSWORD_LENGTH}
                                             className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
                                         />
                                         {setupPassword && (() => {
@@ -756,7 +877,7 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                             onChange={(e) => setSetupConfirm(e.target.value)}
                                             placeholder="Ulangi Master Password..."
                                             required
-                                            minLength={8}
+                                            minLength={E2EE_MIN_PASSWORD_LENGTH}
                                             className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
                                         />
                                     </div>
@@ -825,7 +946,7 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                     className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 px-5 py-2.5 text-xs font-bold text-white shadow-xs transition-colors"
                                 >
                                     <i className="bi bi-shield-lock-fill"></i>
-                                    {busy ? 'Menyiapkan Kunci Kriptografi...' : 'Aktifkan E2EE Sekarang'}
+                                    {busy ? 'Memproses kunci (PBKDF2 600rb)...' : 'Aktifkan E2EE Sekarang'}
                                 </button>
                             </div>
                         </form>
@@ -870,7 +991,7 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                             disabled={busy || !cryptoSupported}
                                             className="rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 px-5 py-2.5 text-xs font-bold text-white"
                                         >
-                                            {busy ? 'Membuka...' : 'Buka Kunci'}
+                                            {busy ? 'Memproses...' : 'Buka Kunci'}
                                         </button>
                                     </div>
                                 </div>
@@ -941,9 +1062,9 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                             type="password"
                                             value={recoveryNewPw}
                                             onChange={(e) => setRecoveryNewPw(e.target.value)}
-                                            placeholder="Minimal 8 karakter kuat"
+                                            placeholder="Minimal 12 karakter kuat"
                                             required
-                                            minLength={8}
+                                            minLength={E2EE_MIN_PASSWORD_LENGTH}
                                             className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm"
                                         />
                                     </div>
@@ -957,7 +1078,7 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                             onChange={(e) => setRecoveryNewPwConfirm(e.target.value)}
                                             placeholder="Ulangi password baru"
                                             required
-                                            minLength={8}
+                                            minLength={E2EE_MIN_PASSWORD_LENGTH}
                                             className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm"
                                         />
                                     </div>
@@ -1003,6 +1124,7 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                         </div>
                                         <div className="text-[11px] text-emerald-800 mt-0.5">
                                             Key ID: <span className="font-mono font-semibold">{config.keyId}</span>
+                                            {' '}· KDF: PBKDF2 {(config.kdfIterations || 150000).toLocaleString('id-ID')} iterasi
                                             {vaultEntry?.unlockedAt && (
                                                 <> · Dibuka sejak {new Date(vaultEntry.unlockedAt).toLocaleString('id-ID')}</>
                                             )}
@@ -1018,23 +1140,37 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                 <span className="text-[11px] text-emerald-900 font-medium">
                                     Mode Penyimpanan Kunci di Browser Ini:
                                 </span>
-                                <div className="inline-flex rounded-lg border border-emerald-300 bg-white p-0.5 text-[11px] font-semibold">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <div className="inline-flex rounded-lg border border-emerald-300 bg-white p-0.5 text-[11px] font-semibold">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleChangeVaultMode('session')}
+                                            className={`px-2.5 py-1 rounded-md transition-colors ${vaultMode === 'session' ? 'bg-amber-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                                        >
+                                            Sesi Ini Saja (Default Aman)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleChangeVaultMode('remember')}
+                                            className={`px-2.5 py-1 rounded-md transition-colors ${vaultMode === 'remember' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                                        >
+                                            Ingat Perangkat (IDB Non-Extractable)
+                                        </button>
+                                    </div>
                                     <button
                                         type="button"
-                                        onClick={() => handleChangeVaultMode('remember')}
-                                        className={`px-2.5 py-1 rounded-md transition-colors ${vaultMode === 'remember' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                                        onClick={handleForgetDevice}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-white hover:bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-700"
+                                        title="Hapus kunci pembungkus di IndexedDB serta cache kunci perangkat ini"
                                     >
-                                        Ingat Perangkat (Praktis)
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleChangeVaultMode('session')}
-                                        className={`px-2.5 py-1 rounded-md transition-colors ${vaultMode === 'session' ? 'bg-amber-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                                    >
-                                        Komputer Bersama (Hapus Saat Tutup)
+                                        <i className="bi bi-trash3"></i>
+                                        Lupakan Perangkat Ini
                                     </button>
                                 </div>
                             </div>
+                            <p className="text-[11px] text-emerald-900/90 leading-relaxed pt-1">
+                                <strong>Catatan Keamanan Browser &amp; XSS:</strong> Pengaturan baru memakai mode <em>Sesi Ini Saja</em> sebagai default agar kunci tidak bertahan antar sesi. Pada mode <em>Ingat Perangkat</em>, MDK dibungkus dengan <code>CryptoKey</code> non-extractable di IndexedDB. Tetap waspada: skrip XSS atau ekstensi browser berbahaya pada origin yang sama tetap dapat mengakses sesi yang sedang terbuka—selalu klik <em>Kunci Perangkat</em> atau <em>Lupakan Perangkat Ini</em> di komputer bersama.
+                            </p>
                         </div>
 
                         {/* 4 MODULE TOGGLES */}
@@ -1080,6 +1216,15 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                     );
                                 })}
                             </div>
+
+                            {config.modules?.psb && (
+                                <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3.5 text-xs text-amber-950 flex items-start gap-2.5">
+                                    <i className="bi bi-exclamation-triangle-fill text-amber-600 text-base shrink-0 mt-0.5"></i>
+                                    <div className="leading-relaxed">
+                                        <strong>Peringatan Lampiran PSB (Tidak Terenkripsi E2EE):</strong> Hanya data teks &amp; biodata pendaftar yang dienkripsi E2EE. Berkas lampiran PSB (KK, akta kelahiran, ijazah/SKL, pas foto) sengaja <strong>diunggah mentah tanpa enkripsi E2EE</strong> agar tetap dapat dibuka dan dipratinjau panitia di Google Drive / R2 / Supabase / Firebase Storage. Pastikan izin folder Drive dibatasi hanya untuk akun admin pondok.
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* ACTION BAR: CHANGE PASSWORD, REGENERATE RECOVERY, DISABLE */}
@@ -1141,9 +1286,9 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                         type="password"
                                         value={newPw}
                                         onChange={(e) => setNewPw(e.target.value)}
-                                        placeholder="Password Baru (min. 8)"
+                                        placeholder="Password Baru (min. 12)"
                                         required
-                                        minLength={8}
+                                        minLength={E2EE_MIN_PASSWORD_LENGTH}
                                         className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs"
                                     />
                                     <input
@@ -1152,7 +1297,7 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                                         onChange={(e) => setNewPwConfirm(e.target.value)}
                                         placeholder="Konfirmasi Password Baru"
                                         required
-                                        minLength={8}
+                                        minLength={E2EE_MIN_PASSWORD_LENGTH}
                                         className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs"
                                     />
                                 </div>
@@ -1177,6 +1322,260 @@ export const E2eeSettingsPanel: React.FC<E2eeSettingsPanelProps> = ({
                     </div>
                 )}
             </div>
+
+            {showDisableModal && config && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+                    <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-8">
+                        <div className="bg-rose-700 px-5 py-4 text-white flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                                <i className="bi bi-shield-slash-fill text-lg"></i>
+                                <div>
+                                    <h4 className="text-sm font-bold leading-tight">Nonaktifkan Enkripsi E2EE</h4>
+                                    <p className="text-[11px] text-rose-100">Langkah {disableStep} dari 4</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => !busy && !disableBackupBusy && setShowDisableModal(false)}
+                                className="rounded-lg p-1 text-rose-100 hover:bg-white/15 hover:text-white"
+                                title="Tutup"
+                            >
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-4 text-xs text-slate-700">
+                            <div className="grid grid-cols-4 gap-1.5">
+                                {[1, 2, 3, 4].map((step) => (
+                                    <div
+                                        key={step}
+                                        className={`h-1.5 rounded-full ${
+                                            step <= disableStep ? 'bg-rose-600' : 'bg-slate-200'
+                                        }`}
+                                    />
+                                ))}
+                            </div>
+
+                            {disableStep === 1 && (
+                                <div className="space-y-3">
+                                    <div className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-rose-950 space-y-1.5">
+                                        <p className="font-bold text-sm text-rose-900">
+                                            Langkah 1: Peringatan Konsekuensi Penonaktifan E2EE
+                                        </p>
+                                        <ul className="list-disc pl-4 space-y-1 leading-relaxed">
+                                            <li>Data baru yang disinkronkan ke Cloud Sync, Rapor, PSB, dan Portal Wali tidak lagi dilindungi enkripsi Zero-Knowledge.</li>
+                                            <li>Data terenkripsi lama yang masih tersimpan di cloud tidak dapat dibaca tanpa kunci E2EE lama (Key ID: <code className="font-mono font-bold">{config.keyId}</code>).</li>
+                                            <li>Formulir HTML (PSB/Rapor) yang terlanjur dibagikan sebelumnya tetap mengenkripsi kiriman memakai kunci publik lama kecuali diterbitkan ulang.</li>
+                                        </ul>
+                                    </div>
+                                    <div className="flex justify-end gap-2 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowDisableModal(false)}
+                                            className="rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-4 py-2 font-semibold text-slate-700"
+                                        >
+                                            Batal
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setDisableStep(2)}
+                                            className="rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 font-bold text-white"
+                                        >
+                                            Saya Mengerti, Lanjut &rarr;
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {disableStep === 2 && (
+                                <div className="space-y-3">
+                                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-amber-950 space-y-1">
+                                        <p className="font-bold text-sm text-amber-900">
+                                            Langkah 2 (Wajib): Unduh Cadangan Terenkripsi
+                                        </p>
+                                        <p className="leading-relaxed">
+                                            Sebelum menonaktifkan E2EE, Anda wajib mengunduh file cadangan lokal yang dilindungi enkripsi AES-GCM (<code>encryptedBackup</code>) untuk mencegah kehilangan data permanen.
+                                        </p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block font-semibold text-slate-700 mb-1">Password Cadangan (min. 6 kar)</label>
+                                            <input
+                                                type="password"
+                                                value={disableBackupPw}
+                                                onChange={(e) => setDisableBackupPw(e.target.value)}
+                                                placeholder="Minimal 6 karakter"
+                                                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block font-semibold text-slate-700 mb-1">Konfirmasi Password Cadangan</label>
+                                            <input
+                                                type="password"
+                                                value={disableBackupPwConfirm}
+                                                onChange={(e) => setDisableBackupPwConfirm(e.target.value)}
+                                                placeholder="Ulangi password cadangan"
+                                                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleDownloadDisableEncryptedBackup}
+                                        disabled={disableBackupBusy}
+                                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 px-4 py-2.5 font-bold text-white"
+                                    >
+                                        <i className="bi bi-file-earmark-lock2-fill"></i>
+                                        {disableBackupBusy ? 'Membuat Cadangan Terenkripsi...' : 'Unduh Cadangan Terenkripsi (.json)'}
+                                    </button>
+
+                                    {disableBackupDownloaded && (
+                                        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-emerald-800 font-semibold flex items-center gap-2">
+                                            <i className="bi bi-check-circle-fill text-emerald-600"></i>
+                                            Cadangan terenkripsi telah diunduh. Anda dapat melanjutkan ke Langkah 3.
+                                        </div>
+                                    )}
+
+                                    <div className="flex justify-between gap-2 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setDisableStep(1)}
+                                            className="rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-4 py-2 font-semibold text-slate-700"
+                                        >
+                                            &larr; Kembali
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={!disableBackupDownloaded}
+                                            onClick={() => setDisableStep(3)}
+                                            className="rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 px-4 py-2 font-bold text-white"
+                                        >
+                                            Lanjut ke Langkah 3 &rarr;
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {disableStep === 3 && (
+                                <div className="space-y-3">
+                                    <p className="font-bold text-sm text-slate-900">
+                                        Langkah 3: Pilih Penanganan Data Cloud
+                                    </p>
+                                    <label
+                                        className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer ${
+                                            disableCloudMode === 'keep_encrypted'
+                                                ? 'border-teal-600 bg-teal-50/60'
+                                                : 'border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="disableCloudMode"
+                                            checked={disableCloudMode === 'keep_encrypted'}
+                                            onChange={() => setDisableCloudMode('keep_encrypted')}
+                                            className="mt-0.5 text-teal-600"
+                                        />
+                                        <div>
+                                            <div className="font-bold text-slate-900">Biarkan data cloud lama tetap terenkripsi (hanya nonaktifkan di lokal)</div>
+                                            <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                                                Hanya mematikan enkripsi untuk pengiriman baru. Data lama di server tetap terenkripsi dan kunci lama tetap tersimpan dalam status nonaktif.
+                                            </p>
+                                        </div>
+                                    </label>
+                                    <label
+                                        className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer ${
+                                            disableCloudMode === 'reupload_plaintext'
+                                                ? 'border-rose-600 bg-rose-50/60'
+                                                : 'border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="disableCloudMode"
+                                            checked={disableCloudMode === 'reupload_plaintext'}
+                                            onChange={() => setDisableCloudMode('reupload_plaintext')}
+                                            className="mt-0.5 text-rose-600"
+                                        />
+                                        <div>
+                                            <div className="font-bold text-slate-900">Dekripsi &amp; unggah ulang semua data cloud sebagai plaintext</div>
+                                            <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                                                Mengunggah ulang seluruh data lokal (tanpa enkripsi E2EE) ke Cloud Sync / Portal Wali yang terhubung sehingga layanan cloud kembali berisi data plaintext.
+                                            </p>
+                                        </div>
+                                    </label>
+
+                                    <div className="flex justify-between gap-2 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setDisableStep(2)}
+                                            className="rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-4 py-2 font-semibold text-slate-700"
+                                        >
+                                            &larr; Kembali
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setDisableStep(4)}
+                                            className="rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 font-bold text-white"
+                                        >
+                                            Lanjut ke Langkah 4 &rarr;
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {disableStep === 4 && (
+                                <div className="space-y-3">
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-1.5">
+                                        <p className="font-bold text-sm text-slate-900">Langkah 4: Konfirmasi Final</p>
+                                        <p className="text-[11px] text-slate-600 leading-relaxed">
+                                            Mode yang dipilih:{' '}
+                                            <strong>
+                                                {disableCloudMode === 'reupload_plaintext'
+                                                    ? 'Dekripsi & unggah ulang data cloud sebagai plaintext'
+                                                    : 'Nonaktifkan lokal saja (biarkan data cloud lama terenkripsi)'}
+                                            </strong>
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block font-semibold text-slate-700 mb-1">
+                                            Ketik <code className="font-mono font-bold text-rose-700">NONAKTIFKAN</code> untuk mengonfirmasi:
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={disableConfirmText}
+                                            onChange={(e) => setDisableConfirmText(e.target.value)}
+                                            placeholder="NONAKTIFKAN"
+                                            className="w-full rounded-xl border border-rose-300 px-3 py-2 font-mono text-sm uppercase focus:border-rose-500 focus:outline-none"
+                                        />
+                                    </div>
+
+                                    <div className="flex justify-between gap-2 pt-2">
+                                        <button
+                                            type="button"
+                                            disabled={busy}
+                                            onClick={() => setDisableStep(3)}
+                                            className="rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-4 py-2 font-semibold text-slate-700"
+                                        >
+                                            &larr; Kembali
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={busy || disableConfirmText.trim() !== 'NONAKTIFKAN'}
+                                            onClick={handleConfirmDisableE2eeFinal}
+                                            className="rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 px-4 py-2 font-bold text-white"
+                                        >
+                                            {busy ? 'Memproses...' : 'Nonaktifkan E2EE Sekarang'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

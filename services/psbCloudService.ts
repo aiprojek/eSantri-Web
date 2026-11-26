@@ -232,36 +232,70 @@ export interface PsbCloudDecryptReport {
     rows: any[];
     failedCount: number;
     failedReasons: string[];
+    rejectedPlaintextRows: any[];
+    rejectedPlaintextCount: number;
 }
 
 export const decryptPsbCloudRowsWithReport = async (
     rows: any[],
-    activeKeyId?: string | null
+    activeKeyId?: string | null,
+    options?: { requireEncrypted?: boolean; allowPlaintext?: boolean }
 ): Promise<PsbCloudDecryptReport> => {
     const result: any[] = [];
     const failedReasons: string[] = [];
+    const rejectedPlaintextRows: any[] = [];
     let encryptedCount = 0;
     let lockedActiveError: Error | null = null;
     let firstLockedError: Error | null = null;
+    const requireEncrypted = Boolean(options?.requireEncrypted && !options?.allowPlaintext);
 
     for (const row of rows) {
         if (!row || typeof row !== 'object') continue;
         const envBio = tryParseE2eeEnvelope(row.__e2ee_bio);
+        let envCustomBio: ReturnType<typeof tryParseE2eeEnvelope> = null;
+        let parsedCustomObj: Record<string, any> | null = null;
+        if (!envBio && typeof row.customData === 'string' && row.customData.includes('__e2ee_bio')) {
+            try {
+                const parsedCustom = JSON.parse(row.customData);
+                if (parsedCustom && typeof parsedCustom === 'object') {
+                    envCustomBio = tryParseE2eeEnvelope(parsedCustom.__e2ee_bio);
+                    if (envCustomBio) parsedCustomObj = parsedCustom;
+                }
+            } catch {
+                // abaikan customData non-JSON
+            }
+        }
         const envRow = tryParseE2eeEnvelope(row);
-        const env = envBio || envRow;
+        const env = envBio || envCustomBio || envRow;
         if (!env) {
-            result.push(row);
+            if (requireEncrypted) {
+                rejectedPlaintextRows.push(row);
+            } else {
+                result.push(row);
+            }
             continue;
         }
         encryptedCount++;
         try {
             if (envBio) {
-                const plainBio = await decryptAnyEnvelope<Record<string, any>>(envBio);
+                const plainBio = await decryptAnyEnvelope<Record<string, any>>(envBio, { expectedContext: 'psb' });
                 const merged = { ...row, ...plainBio };
                 delete merged.__e2ee_bio;
                 result.push(merged);
+            } else if (envCustomBio && parsedCustomObj) {
+                const plainBio = await decryptAnyEnvelope<Record<string, any>>(envCustomBio, { expectedContext: 'psb' });
+                const { __e2ee_bio: _drop, ...restCustom } = parsedCustomObj;
+                const merged = {
+                    ...row,
+                    ...plainBio,
+                    customData: JSON.stringify(restCustom),
+                };
+                result.push(merged);
             } else if (envRow) {
-                const plainRow = await decryptAnyEnvelope<Record<string, any>>(envRow);
+                const plainRow = await decryptAnyEnvelope<Record<string, any>>(
+                    envRow,
+                    envRow.mode === 'hybrid_rsa' ? { expectedContext: 'psb' } : undefined
+                );
                 result.push(plainRow);
             }
         } catch (err: any) {
@@ -287,23 +321,137 @@ export const decryptPsbCloudRowsWithReport = async (
         rows: result,
         failedCount: failedReasons.length,
         failedReasons,
+        rejectedPlaintextRows,
+        rejectedPlaintextCount: rejectedPlaintextRows.length,
     };
 };
 
-export const decryptPsbCloudRows = async (rows: any[], activeKeyId?: string | null): Promise<any[]> => {
-    const report = await decryptPsbCloudRowsWithReport(rows, activeKeyId);
+export const decryptPsbCloudRows = async (
+    rows: any[],
+    activeKeyId?: string | null,
+    options?: { requireEncrypted?: boolean; allowPlaintext?: boolean }
+): Promise<any[]> => {
+    const report = await decryptPsbCloudRowsWithReport(rows, activeKeyId, options);
     return report.rows;
+};
+
+export const CURRENT_PSB_GAS_SCRIPT_VERSION = 4;
+
+const KEY_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+
+const generateRandomKeyString = (length: number): string => {
+    const cryptoObj = typeof globalThis !== 'undefined' ? (globalThis as any).crypto : undefined;
+    if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+        const bytes = new Uint8Array(length * 2);
+        cryptoObj.getRandomValues(bytes);
+        let out = '';
+        for (let i = 0; i < bytes.length && out.length < length; i++) {
+            out += KEY_CHARSET[bytes[i] % KEY_CHARSET.length];
+        }
+        return out.slice(0, length);
+    }
+    let fallback = '';
+    while (fallback.length < length) {
+        fallback += KEY_CHARSET[Math.floor(Math.random() * KEY_CHARSET.length)];
+    }
+    return fallback.slice(0, length);
+};
+
+export const generatePsbPublicKey = (): string => `pub_${generateRandomKeyString(24)}`;
+
+export const generatePsbAdminKey = (publicKeyToAvoid?: string): string => {
+    const avoid = (publicKeyToAvoid || '').trim();
+    for (let i = 0; i < 5; i++) {
+        const candidate = `adm_${generateRandomKeyString(36)}`; // total 40 chars (>= 32)
+        if (candidate !== avoid && candidate.length >= 32) {
+            return candidate;
+        }
+    }
+    return `adm_${generateRandomKeyString(40)}`;
+};
+
+export interface PsbGasProbeResult {
+    isLegacyGas: boolean;
+    scriptVersion: number | null;
+    probedAt: number;
+}
+
+const psbGasProbeCache = new Map<string, PsbGasProbeResult>();
+
+export const clearPsbGasProbeCache = (endpointUrl?: string): void => {
+    if (!endpointUrl) {
+        psbGasProbeCache.clear();
+        return;
+    }
+    psbGasProbeCache.delete(endpointUrl.trim());
+};
+
+export const probePsbGasVersion = async (endpointUrl: string): Promise<PsbGasProbeResult> => {
+    const cleanUrl = (endpointUrl || '').trim();
+    const cached = psbGasProbeCache.get(cleanUrl);
+    if (cached) {
+        return cached;
+    }
+
+    const probeUrl = new URL(cleanUrl);
+    probeUrl.searchParams.set('action', 'version');
+
+    const res = await fetch(probeUrl.toString(), { method: 'GET' });
+    if (!res.ok) {
+        throw new Error(`Gagal menghubungi Google Apps Script (HTTP ${res.status}).`);
+    }
+
+    let parsed: any = null;
+    try {
+        parsed = await res.json();
+    } catch {
+        const result: PsbGasProbeResult = { isLegacyGas: true, scriptVersion: null, probedAt: Date.now() };
+        psbGasProbeCache.set(cleanUrl, result);
+        return result;
+    }
+
+    if (
+        !Array.isArray(parsed) &&
+        parsed &&
+        typeof parsed === 'object' &&
+        typeof parsed.scriptVersion === 'number' &&
+        parsed.scriptVersion >= CURRENT_PSB_GAS_SCRIPT_VERSION
+    ) {
+        const result: PsbGasProbeResult = {
+            isLegacyGas: false,
+            scriptVersion: parsed.scriptVersion,
+            probedAt: Date.now(),
+        };
+        psbGasProbeCache.set(cleanUrl, result);
+        return result;
+    }
+
+    const legacyResult: PsbGasProbeResult = {
+        isLegacyGas: true,
+        scriptVersion: !Array.isArray(parsed) && parsed && typeof parsed.scriptVersion === 'number' ? parsed.scriptVersion : null,
+        probedAt: Date.now(),
+    };
+    psbGasProbeCache.set(cleanUrl, legacyResult);
+    return legacyResult;
 };
 
 export interface PsbCloudConnectionParams {
     endpointUrl: string;
     backendProvider?: PsbCloudProvider;
     apiKey?: string;
+    publicKey?: string;
+    adminKey?: string;
 }
 
-export const fetchPsbFromCloudAdapter = async (
+export interface PsbCloudFetchResult {
+    rows: any[];
+    isLegacyGas: boolean;
+    scriptVersion: number | null;
+}
+
+export const fetchPsbFromCloudWithMeta = async (
     params: PsbCloudConnectionParams
-): Promise<any[]> => {
+): Promise<PsbCloudFetchResult> => {
     const provider: PsbCloudProvider = params.backendProvider || 'gas';
     const baseUrl = normalizePsbCloudEndpoint(params.endpointUrl, provider);
     if (!baseUrl) {
@@ -324,40 +472,91 @@ export const fetchPsbFromCloudAdapter = async (
             throw new Error(`Gagal mengambil data dari Supabase (HTTP ${res.status})${errTxt ? ': ' + errTxt.slice(0, 140) : ''}`);
         }
         const rawJson = await res.json();
-        return normalizePsbCloudRows(rawJson);
+        return { rows: normalizePsbCloudRows(rawJson), isLegacyGas: false, scriptVersion: null };
     }
 
-    const fetchInit: RequestInit =
-        provider === 'gas'
-            ? { method: 'GET' }
-            : { method: 'GET', headers: buildWorkerHeaders(params.apiKey) };
+    if (provider === 'gas') {
+        const meta = getPsbCloudProviderMeta(provider);
+        const probe = await probePsbGasVersion(baseUrl);
 
-    const response = await fetch(baseUrl, fetchInit);
+        if (!probe.isLegacyGas) {
+            const adminKey = (params.adminKey || '').trim();
+            if (!adminKey) {
+                throw new Error('Kunci Admin GAS (ADMIN_KEY) belum diisi di Pengaturan Koneksi Cloud PSB.');
+            }
+            const response = await fetch(baseUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    action: 'list',
+                    adminKey,
+                }),
+            });
+            if (!response.ok) {
+                throw new Error(`Gagal menghubungi ${meta.name} (HTTP ${response.status}).`);
+            }
+            const parsed = await response.json();
+            if (parsed && (parsed.result === 'error' || parsed.success === false)) {
+                throw new Error(parsed.error || parsed.message || `Server ${meta.name} menolak akses baca data.`);
+            }
+            if (Array.isArray(parsed) || (parsed && (Array.isArray(parsed.records) || Array.isArray(parsed.data)))) {
+                return {
+                    rows: normalizePsbCloudRows(parsed),
+                    isLegacyGas: false,
+                    scriptVersion: probe.scriptVersion,
+                };
+            }
+            throw new Error(`Format respons ${meta.name} bukan daftar pendaftar.`);
+        }
+
+        // Jalur fallback GET untuk script GAS versi lama (JANGAN kirim POST list ke script lama)
+        const response = await fetch(baseUrl, { method: 'GET' });
+        if (!response.ok) {
+            throw new Error(`Gagal menghubungi ${meta.name} (HTTP ${response.status}).`);
+        }
+
+        let parsed = await response.json();
+
+        // Kompatibilitas dengan script Portal GAS v2 lama jika user mengarahkannya ke endpoint Portal
+        if (!Array.isArray(parsed) && parsed && typeof parsed === 'object' && !Array.isArray(parsed.records)) {
+            const subUrl = new URL(baseUrl);
+            subUrl.searchParams.set('action', 'getPsbSubmissions');
+            const legacyKey = (params.publicKey || params.apiKey || '').trim();
+            if (legacyKey) {
+                subUrl.searchParams.set('apiKey', legacyKey);
+            }
+            const subRes = await fetch(subUrl.toString(), { method: 'GET' });
+            if (subRes.ok) {
+                const subParsed = await subRes.json();
+                if (Array.isArray(subParsed) || Array.isArray(subParsed?.records)) {
+                    parsed = subParsed;
+                }
+            }
+        }
+
+        if (Array.isArray(parsed) || (parsed && (Array.isArray(parsed.records) || Array.isArray(parsed.data)))) {
+            return {
+                rows: normalizePsbCloudRows(parsed),
+                isLegacyGas: true,
+                scriptVersion: probe.scriptVersion,
+            };
+        }
+        if (parsed && parsed.result === 'error') {
+            throw new Error(parsed.error || parsed.message || `Server ${meta.name} mengembalikan error.`);
+        }
+
+        throw new Error(`Format respons ${meta.name} bukan daftar pendaftar.`);
+    }
+
+    const response = await fetch(baseUrl, { method: 'GET', headers: buildWorkerHeaders(params.apiKey) });
     const meta = getPsbCloudProviderMeta(provider);
     if (!response.ok) {
         throw new Error(`Gagal menghubungi ${meta.name} (HTTP ${response.status}).`);
     }
 
-    let parsed = await response.json();
-
-    // Kompatibilitas dengan script Portal GAS v2 lama jika user mengarahkannya ke endpoint Portal
-    if (provider === 'gas' && !Array.isArray(parsed) && parsed && typeof parsed === 'object' && !Array.isArray(parsed.records)) {
-        const subUrl = new URL(baseUrl);
-        subUrl.searchParams.set('action', 'getPsbSubmissions');
-        if (params.apiKey) {
-            subUrl.searchParams.set('apiKey', params.apiKey);
-        }
-        const subRes = await fetch(subUrl.toString(), { method: 'GET' });
-        if (subRes.ok) {
-            const subParsed = await subRes.json();
-            if (Array.isArray(subParsed) || Array.isArray(subParsed?.records)) {
-                parsed = subParsed;
-            }
-        }
-    }
-
+    const parsed = await response.json();
     if (Array.isArray(parsed) || (parsed && (Array.isArray(parsed.records) || Array.isArray(parsed.data)))) {
-        return normalizePsbCloudRows(parsed);
+        return { rows: normalizePsbCloudRows(parsed), isLegacyGas: false, scriptVersion: null };
     }
     if (parsed && parsed.result === 'error') {
         throw new Error(parsed.error || parsed.message || `Server ${meta.name} mengembalikan error.`);
@@ -366,9 +565,16 @@ export const fetchPsbFromCloudAdapter = async (
     throw new Error(`Format respons ${meta.name} bukan daftar pendaftar.`);
 };
 
+export const fetchPsbFromCloudAdapter = async (
+    params: PsbCloudConnectionParams
+): Promise<any[]> => {
+    const res = await fetchPsbFromCloudWithMeta(params);
+    return res.rows;
+};
+
 export const testPsbCloudConnection = async (
     params: PsbCloudConnectionParams
-): Promise<{ ok: boolean; rowCount: number; message: string }> => {
+): Promise<{ ok: boolean; rowCount: number; message: string; isLegacyGas?: boolean; scriptVersion?: number | null }> => {
     const provider: PsbCloudProvider = params.backendProvider || 'gas';
     const cleanUrl = (params.endpointUrl || '').trim();
     if (!cleanUrl) {
@@ -384,17 +590,28 @@ export const testPsbCloudConnection = async (
         throw new Error('Masukkan Supabase Anon / Public Key terlebih dahulu.');
     }
 
-    const rows = await fetchPsbFromCloudAdapter({
+    if (provider === 'gas') {
+        clearPsbGasProbeCache(cleanUrl);
+    }
+
+    const res = await fetchPsbFromCloudWithMeta({
         endpointUrl: cleanUrl,
         backendProvider: provider,
-        apiKey: params.apiKey
+        apiKey: params.apiKey,
+        publicKey: params.publicKey,
+        adminKey: params.adminKey,
     });
 
     const meta = getPsbCloudProviderMeta(provider);
+    const legacyNote = res.isLegacyGas
+        ? ' PERINGATAN: Script GAS masih versi lama (data dapat terbaca lewat GET publik). Segera perbarui script & deploy versi baru.'
+        : '';
     return {
         ok: true,
-        rowCount: rows.length,
-        message: `Terhubung ke ${meta.name}! Terbaca ${rows.length} baris data pendaftar.`
+        rowCount: res.rows.length,
+        message: `Terhubung ke ${meta.name}! Terbaca ${res.rows.length} baris data pendaftar.${legacyNote}`,
+        isLegacyGas: res.isLegacyGas,
+        scriptVersion: res.scriptVersion,
     };
 };
 
@@ -405,8 +622,9 @@ export const testPsbCloudConnection = async (
 export const buildPsbStandaloneCloudHelperJs = (options: {
     provider: PsbCloudProvider;
     endpointObfuscatedExpr: string;
-    driveFolderObfuscatedExpr: string;
+    driveFolderObfuscatedExpr?: string;
     apiKey?: string;
+    publicKey?: string;
     supabaseBucket?: string;
     tahunAjaranAktif?: string;
     jenjangId?: number;
@@ -414,16 +632,26 @@ export const buildPsbStandaloneCloudHelperJs = (options: {
     fieldLabelMapJson: string;
     e2eePublicKey?: string;
     e2eeKeyId?: string;
+    e2eeFingerprint?: string;
 }): string => {
     const providerLiteral = JSON.stringify(options.provider || 'gas');
-    const apiKeyBytesJson = JSON.stringify(obfuscateSecretToCodeArray(options.apiKey || ''));
+    const embeddedClientKey =
+        options.provider === 'gas'
+            ? (options.publicKey || '').trim()
+            : (options.apiKey || '').trim();
+    const apiKeyBytesJson = JSON.stringify(obfuscateSecretToCodeArray(embeddedClientKey));
     const bucketLiteral = JSON.stringify((options.supabaseBucket || 'psb-berkas').trim() || 'psb-berkas');
     const taLiteral = JSON.stringify(options.tahunAjaranAktif || '');
     const jenjangLiteral = JSON.stringify(options.jenjangId ? String(options.jenjangId) : '');
     const sheetLiteral = JSON.stringify(options.sheetName || 'Pendaftar Baru');
     const e2eeSnippet =
         options.e2eePublicKey && options.e2eeKeyId
-            ? buildStandaloneHybridEncryptJsHelper(options.e2eePublicKey, options.e2eeKeyId)
+            ? buildStandaloneHybridEncryptJsHelper(
+                  options.e2eePublicKey,
+                  options.e2eeKeyId,
+                  'psb',
+                  options.e2eeFingerprint
+              )
             : '';
 
     return `
@@ -444,7 +672,6 @@ function _dParam(str){
     }
 }
 const _SEC_TARGET_EP = _dParam(${options.endpointObfuscatedExpr});
-const _SEC_DRIVE_ID = _dParam(${options.driveFolderObfuscatedExpr});
 const _SEC_API_KEY = (function(bytes){
     if(!Array.isArray(bytes) || bytes.length === 0) return '';
     const salt = 43;
@@ -476,6 +703,37 @@ function resolveFieldKey(rawKey){
     return rawKey;
 }
 
+function psbRandomCode(len){
+    const chars = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+    const bytes = new Uint8Array(len);
+    if(typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function'){
+        crypto.getRandomValues(bytes);
+    }else{
+        for(let i = 0; i < len; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    let out = '';
+    for(let i = 0; i < len; i++) out += chars[bytes[i] & 31];
+    return out;
+}
+
+function psbMakeRegNumber(year){
+    const y = year || new Date().getFullYear();
+    return 'PSB-' + y + '-REG-' + psbRandomCode(6);
+}
+
+function psbMakeInitials(nama){
+    const s = String(nama || '').trim();
+    if(!s || s.toUpperCase() === '[TERENKRIPSI E2EE]') return 'X';
+    const cleaned = s.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[^a-zA-Z0-9\\s]/g, ' ').trim();
+    if(!cleaned) return 'X';
+    const tokens = cleaned.split(/\\s+/).filter(Boolean);
+    let out = '';
+    for(let i = 0; i < tokens.length && i < 3; i++){
+        out += tokens[i].charAt(0).toUpperCase();
+    }
+    return out || 'X';
+}
+
 function psbSlug(val){
     return String(val || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'santri';
 }
@@ -495,11 +753,23 @@ function psbDocPrefix(fieldKey, fileName, fieldLabel){
 function psbExt(fileName, mimeType){
     const o = String(fileName || '');
     const dot = o.lastIndexOf('.');
-    if(dot > -1 && dot < o.length - 1) return o.substring(dot).toLowerCase();
-    if(mimeType === 'application/pdf') return '.pdf';
-    if(mimeType === 'image/jpeg') return '.jpg';
-    if(mimeType === 'image/png') return '.png';
+    if(dot > -1 && dot < o.length - 1){
+        const ext = o.substring(dot + 1).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if(ext) return ext === 'jpeg' ? 'jpg' : ext;
+    }
+    if(mimeType === 'application/pdf') return 'pdf';
+    if(mimeType === 'image/jpeg' || mimeType === 'image/jpg') return 'jpg';
+    if(mimeType === 'image/png') return 'png';
+    if(mimeType === 'image/webp') return 'webp';
     return '';
+}
+
+function psbMakeFileName(regNo, nama, jenisBerkas, ext){
+    const inisial = psbMakeInitials(nama);
+    const slugJenis = String(jenisBerkas || 'dokumen').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'dokumen';
+    const cleanExt = String(ext || '').trim().toLowerCase().replace(/^\\./, '').replace(/[^a-z0-9]/g, '');
+    const base = String(regNo || psbMakeRegNumber()) + '_' + inisial + '_' + slugJenis + '-' + psbRandomCode(4);
+    return cleanExt ? (base + '.' + cleanExt) : base;
 }
 
 function validatePsbForm(form){
@@ -543,11 +813,10 @@ function getSupabaseBaseFromEndpoint(ep){
     return clean.replace(/\\/rest\\/v1\\/.*$/i, '').replace(/\\/storage\\/v1\\/.*$/i, '').replace(/\\/+$/, '');
 }
 
-async function uploadFileToSupabaseStorage(baseUrl, bucketName, file, targetKey, fieldLabel, santriName){
+async function uploadFileToSupabaseStorage(baseUrl, bucketName, file, targetKey, fieldLabel, regNumber, santriName){
     const yearFolder = psbSlug(PSB_TAHUN_AJARAN || String(new Date().getFullYear()));
     const prefix = psbDocPrefix(targetKey, file.name, fieldLabel);
-    const stamp = Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-    const fileName = prefix + '-' + psbSlug(santriName) + '-' + stamp + psbExt(file.name, file.type);
+    const fileName = psbMakeFileName(regNumber, santriName, prefix, psbExt(file.name, file.type));
     const objectPath = yearFolder + '/' + fileName;
     const uploadUrl = baseUrl + '/storage/v1/object/' + encodeURIComponent(bucketName) + '/' + objectPath;
 
@@ -598,13 +867,11 @@ async function collectPsbFormPayload(form){
         }
     }
 
+    data.nomorRegistrasi = psbMakeRegNumber();
     data.tanggalDaftar = new Date().toISOString();
     data.jenjangId = PSB_JENJANG_ID;
     data.tahunAjaranAktif = PSB_TAHUN_AJARAN;
     data.sheetName = PSB_SHEET_NAME;
-    if(PSB_CLOUD_PROVIDER === 'gas' && _SEC_DRIVE_ID){
-        data.driveFolderId = _SEC_DRIVE_ID;
-    }
 
     return { data: data, pendingFiles: pendingFiles };
 }
@@ -613,7 +880,7 @@ async function buildEncryptedPsbWirePayload(rawData, attachmentKeys) {
     if (typeof window.__esantriEncryptHybrid !== 'function') {
         return rawData;
     }
-    const metaKeys = ['tanggalDaftar', 'jenjangId', 'tahunAjaranAktif', 'sheetName', 'driveFolderId', 'folderId', 'status'];
+    const metaKeys = ['nomorRegistrasi', 'tanggalDaftar', 'jenjangId', 'tahunAjaranAktif', 'sheetName', 'status'];
     const wirePayload = {};
     const sensitiveBio = {};
     const attSet = {};
@@ -661,7 +928,8 @@ async function dispatchPsbToCloud(form){
                 pf.file,
                 pf.targetKey,
                 pf.fieldLabel,
-                typeof window.__esantriEncryptHybrid === 'function' ? 'terenkripsi' : santriName
+                data.nomorRegistrasi,
+                typeof window.__esantriEncryptHybrid === 'function' ? '' : santriName
             );
         }
 
@@ -707,6 +975,11 @@ async function dispatchPsbToCloud(form){
     const wireData = await buildEncryptedPsbWirePayload(data, attachmentKeys);
 
     if(PSB_CLOUD_PROVIDER === 'gas'){
+        if(!_SEC_API_KEY){
+            throw new Error('Kunci kirim formulir (PUBLIC_KEY) belum diatur. Silakan terbitkan ulang formulir dari aplikasi eSantri Web.');
+        }
+        wireData.action = 'submit';
+        wireData.publicKey = _SEC_API_KEY;
         try{
             const res = await fetch(_SEC_TARGET_EP, {
                 method: 'POST',
@@ -723,7 +996,7 @@ async function dispatchPsbToCloud(form){
                             throw new Error(parsed.message || parsed.error || 'Server Google Apps Script menolak kiriman.');
                         }
                     }catch(jsonErr){
-                        if(jsonErr && jsonErr.message && jsonErr.message.indexOf('Server') !== -1) throw jsonErr;
+                        if(jsonErr && jsonErr.message && (jsonErr.message.indexOf('Server') !== -1 || jsonErr.message.indexOf('terbitkan') !== -1 || jsonErr.message.indexOf('PUBLIC_KEY') !== -1)) throw jsonErr;
                     }
                 }
             }
@@ -770,9 +1043,23 @@ async function dispatchPsbToCloud(form){
 /* ============================================================================
  * 1. GOOGLE APPS SCRIPT v3.1 (Fokus HTML Formulir + Google Drive + Multi-Tab)
  * ============================================================================ */
-export const buildPsbGasScriptV31 = (cleanDriveFolderId: string = ''): string => `/* GOOGLE APPS SCRIPT FOR ESANTRI WEB - SMART PSB v3.1 (Formulir HTML + Google Drive + Multi-Sheet) */
+const escapeGasLiteral = (val: string = ''): string =>
+    String(val || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').trim();
+
+export const buildPsbGasScriptV31 = (
+    cleanDriveFolderId: string = '',
+    defaultPublicKey: string = '',
+    defaultAdminKey: string = ''
+): string => {
+    const safeFolderId = escapeGasLiteral(cleanDriveFolderId);
+    const safePublicKey = escapeGasLiteral(defaultPublicKey);
+    const safeAdminKey = escapeGasLiteral(defaultAdminKey);
+    return `/* GOOGLE APPS SCRIPT FOR ESANTRI WEB - SMART PSB v3.1 (Formulir HTML + Google Drive + Multi-Sheet) */
+var SCRIPT_VERSION = 4;
 var PSB_INTERNAL_SHEETS = ['_psb_portal_config', 'portals', 'portal_sync_logs'];
-var DEFAULT_DRIVE_FOLDER_ID = "${cleanDriveFolderId}";
+var DEFAULT_DRIVE_FOLDER_ID = "${safeFolderId}";
+var DEFAULT_PUBLIC_KEY = "${safePublicKey}";
+var DEFAULT_ADMIN_KEY = "${safeAdminKey}";
 
 function extractCleanFolderId(rawInput) {
   if (!rawInput) return "";
@@ -787,9 +1074,67 @@ function extractCleanFolderId(rawInput) {
   return "";
 }
 
-function doGet(e) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var filterTa = (e && e.parameter && e.parameter.tahunAjaran) ? String(e.parameter.tahunAjaran).trim() : '';
+function resolveConfiguredDriveFolderId() {
+  var props = PropertiesService.getScriptProperties();
+  var fromProp = extractCleanFolderId(props.getProperty('DRIVE_FOLDER_ID') || '');
+  if (fromProp) return fromProp;
+  var fromDefault = extractCleanFolderId(DEFAULT_DRIVE_FOLDER_ID);
+  if (fromDefault) {
+    try { props.setProperty('DRIVE_FOLDER_ID', fromDefault); } catch (e) {}
+  }
+  return fromDefault;
+}
+
+function resolveConfiguredScriptKey(propName, defaultVal) {
+  var props = PropertiesService.getScriptProperties();
+  var fromProp = String(props.getProperty(propName) || '').trim();
+  if (fromProp) return fromProp;
+  var fromDefault = String(defaultVal || '').trim();
+  if (fromDefault) {
+    try { props.setProperty(propName, fromDefault); } catch (e) {}
+  }
+  return fromDefault;
+}
+
+function resolvePublicKey() {
+  return resolveConfiguredScriptKey('PUBLIC_KEY', DEFAULT_PUBLIC_KEY);
+}
+
+function resolveAdminKey() {
+  return resolveConfiguredScriptKey('ADMIN_KEY', DEFAULT_ADMIN_KEY);
+}
+
+function verifyAdminKey(providedKey) {
+  var adm = resolveAdminKey();
+  var pub = resolvePublicKey();
+  // Fail-closed: ADMIN_KEY wajib terkonfigurasi dan tidak boleh sama dengan PUBLIC_KEY
+  if (!adm || adm === pub) return false;
+  return String(providedKey || '').trim() === adm;
+}
+
+function verifyPublicSubmitKey(providedKey) {
+  var pub = resolvePublicKey();
+  if (!pub) {
+    return {
+      ok: false,
+      message: 'PUBLIC_KEY belum dikonfigurasi di script GAS. Salin script terbaru dan terbitkan ulang formulir.'
+    };
+  }
+  if (String(providedKey || '').trim() !== pub) {
+    return {
+      ok: false,
+      message: 'Kunci formulir (PUBLIC_KEY) tidak valid atau sudah diganti. Silakan terbitkan ulang formulir PSB.'
+    };
+  }
+  return { ok: true };
+}
+
+function gasJsonOut(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function collectAllPsbSubmissions(ss, filterTa) {
+  var cleanTa = filterTa ? String(filterTa).trim() : '';
   var sheets = ss.getSheets();
   var combinedData = [];
 
@@ -813,7 +1158,6 @@ function doGet(e) {
         record[headers[j]] = val;
       }
 
-      // Kompatibilitas baris lama bila ada rawJson
       if (record.rawJson && typeof record.rawJson === 'string') {
         try {
           var parsedRaw = JSON.parse(record.rawJson);
@@ -825,12 +1169,219 @@ function doGet(e) {
       }
 
       if (!record.sheetName) record.sheetName = sheet.getName();
-      if (filterTa && record.tahunAjaranAktif && String(record.tahunAjaranAktif).trim() !== filterTa) continue;
+      if (cleanTa && record.tahunAjaranAktif && String(record.tahunAjaranAktif).trim() !== cleanTa) continue;
       combinedData.push(record);
     }
   }
+  return combinedData;
+}
 
-  return ContentService.createTextOutput(JSON.stringify(combinedData)).setMimeType(ContentService.MimeType.JSON);
+var PSB_MAX_POST_BYTES = 22 * 1024 * 1024;
+var PSB_MAX_FILE_BYTES = 5 * 1024 * 1024;
+var PSB_ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+
+function normalizeAllowedMimeType(mime) {
+  var m = String(mime || '').trim().toLowerCase().split(';')[0];
+  if (m === 'image/jpg') m = 'image/jpeg';
+  return m;
+}
+
+function verifyFileMagicBytes(bytes, expectedMime) {
+  if (!bytes || bytes.length < 4) return false;
+  var b0 = bytes[0] & 0xFF;
+  var b1 = bytes[1] & 0xFF;
+  var b2 = bytes[2] & 0xFF;
+  var b3 = bytes[3] & 0xFF;
+  if (expectedMime === 'application/pdf') {
+    return b0 === 0x25 && b1 === 0x50 && b2 === 0x44 && b3 === 0x46;
+  }
+  if (expectedMime === 'image/jpeg') {
+    return b0 === 0xFF && b1 === 0xD8 && b2 === 0xFF;
+  }
+  if (expectedMime === 'image/png') {
+    return b0 === 0x89 && b1 === 0x50 && b2 === 0x4E && b3 === 0x47;
+  }
+  if (expectedMime === 'image/webp') {
+    if (bytes.length < 12) return false;
+    var b8 = bytes[8] & 0xFF;
+    var b9 = bytes[9] & 0xFF;
+    var b10 = bytes[10] & 0xFF;
+    var b11 = bytes[11] & 0xFF;
+    return (
+      b0 === 0x52 && b1 === 0x49 && b2 === 0x46 && b3 === 0x46 &&
+      b8 === 0x57 && b9 === 0x45 && b10 === 0x42 && b11 === 0x50
+    );
+  }
+  return false;
+}
+
+function decodeAndValidateUploadedFile(fileObj) {
+  var mime = normalizeAllowedMimeType(fileObj && fileObj.mime);
+  if (PSB_ALLOWED_MIME_TYPES.indexOf(mime) === -1) {
+    throw new Error('Tipe berkas tidak diizinkan (' + (mime || 'tidak diketahui') + '). Hanya PDF, JPEG, PNG, dan WebP yang diperbolehkan.');
+  }
+  var rawData = String((fileObj && fileObj.data) || '');
+  if (!rawData) {
+    throw new Error('Isi berkas unggahan kosong.');
+  }
+  var cleanB64 = rawData.indexOf(',') !== -1 ? rawData.split(',')[1] : rawData;
+  cleanB64 = cleanB64.replace(/\\s+/g, '');
+  if (cleanB64.length > 7400000) {
+    throw new Error('Ukuran berkas unggahan melebihi batas maksimum 5 MB.');
+  }
+  var bytes = Utilities.base64Decode(cleanB64);
+  if (!bytes || bytes.length === 0) {
+    throw new Error('Data berkas unggahan tidak valid atau kosong.');
+  }
+  if (bytes.length > PSB_MAX_FILE_BYTES) {
+    throw new Error('Ukuran berkas melebihi batas maksimum 5 MB.');
+  }
+  if (!verifyFileMagicBytes(bytes, mime)) {
+    throw new Error('Konten berkas tidak sesuai dengan tipe MIME ' + mime + ' (magic-bytes gagal).');
+  }
+  return { bytes: bytes, mime: mime };
+}
+
+function extractAndValidateDriveFileId(rawInput) {
+  var s = String(rawInput || '').trim();
+  if (!s) {
+    throw new Error('ID atau URL berkas Google Drive wajib diisi.');
+  }
+  var idMatch = s.match(/\\/d\\/([a-zA-Z0-9_-]{15,80})/i);
+  if (idMatch && idMatch[1]) return idMatch[1];
+  var qMatch = s.match(/[?&]id=([a-zA-Z0-9_-]{15,80})/i);
+  if (qMatch && qMatch[1]) return qMatch[1];
+  var clean = s.split('?')[0].split('#')[0].replace(/\\/+$/, '');
+  if (/^[a-zA-Z0-9_-]{15,80}$/.test(clean)) return clean;
+  throw new Error('Format ID atau URL berkas Google Drive tidak valid.');
+}
+
+function isFileInPsbDestinationFolder(file) {
+  var targetFolderId = resolveConfiguredDriveFolderId();
+  var parents = file.getParents();
+  while (parents.hasNext()) {
+    var parent = parents.next();
+    if (parent.isTrashed && parent.isTrashed()) continue;
+    var pId = parent.getId();
+    if (targetFolderId) {
+      if (pId === targetFolderId) return true;
+      var grandParents = parent.getParents();
+      while (grandParents.hasNext()) {
+        var gp = grandParents.next();
+        if ((!gp.isTrashed || !gp.isTrashed()) && gp.getId() === targetFolderId) return true;
+      }
+    } else {
+      var pName = String(parent.getName() || '').toLowerCase();
+      if (pName.indexOf('berkas-psb-') === 0) return true;
+    }
+  }
+  return false;
+}
+
+function digestBytesToHex(digestBytes) {
+  var hex = '';
+  for (var i = 0; i < digestBytes.length; i++) {
+    var b = digestBytes[i] & 0xFF;
+    var h = b.toString(16);
+    if (h.length === 1) h = '0' + h;
+    hex += h;
+  }
+  return hex;
+}
+
+function handleGetFilePost(rawData) {
+  if (!verifyAdminKey(rawData.adminKey)) {
+    return {
+      result: 'error',
+      success: false,
+      message: 'Akses ditolak: ADMIN_KEY tidak valid, kosong, atau belum dikonfigurasi.'
+    };
+  }
+  var fileId = extractAndValidateDriveFileId(rawData.fileId || rawData.fileUrl || rawData.url);
+  var file;
+  try {
+    file = DriveApp.getFileById(fileId);
+  } catch (err) {
+    throw new Error('Berkas tidak ditemukan atau tidak dapat diakses di Google Drive.');
+  }
+  if (!file || file.isTrashed()) {
+    throw new Error('Berkas tidak ditemukan atau sudah berada di tempat sampah Drive.');
+  }
+  if (!isFileInPsbDestinationFolder(file)) {
+    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi.');
+  }
+  var fileSize = Number(file.getSize() || 0);
+  if (fileSize > PSB_MAX_FILE_BYTES) {
+    throw new Error('Ukuran berkas melebihi batas maksimum 5 MB.');
+  }
+  var mime = normalizeAllowedMimeType(file.getMimeType());
+  if (PSB_ALLOWED_MIME_TYPES.indexOf(mime) === -1) {
+    throw new Error('Tipe berkas tidak diizinkan (' + (mime || 'tidak diketahui') + '). Hanya PDF, JPEG, PNG, dan WebP yang diperbolehkan.');
+  }
+  var blob = file.getBlob();
+  var bytes = blob.getBytes();
+  if (bytes.length > PSB_MAX_FILE_BYTES) {
+    throw new Error('Ukuran berkas hasil baca melebihi batas maksimum 5 MB.');
+  }
+  var sha256 = digestBytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes));
+  return {
+    result: 'success',
+    success: true,
+    name: file.getName(),
+    mime: mime,
+    size: bytes.length,
+    sha256: sha256,
+    data: Utilities.base64Encode(bytes)
+  };
+}
+
+function handleDeleteFilePost(rawData) {
+  if (!verifyAdminKey(rawData.adminKey)) {
+    return {
+      result: 'error',
+      success: false,
+      message: 'Akses ditolak: ADMIN_KEY tidak valid, kosong, atau belum dikonfigurasi.'
+    };
+  }
+  var fileId = extractAndValidateDriveFileId(rawData.fileId || rawData.fileUrl || rawData.url);
+  var file;
+  try {
+    file = DriveApp.getFileById(fileId);
+  } catch (err) {
+    throw new Error('Berkas tidak ditemukan atau tidak dapat diakses di Google Drive.');
+  }
+  if (!file) {
+    throw new Error('Berkas tidak ditemukan di Google Drive.');
+  }
+  if (!isFileInPsbDestinationFolder(file)) {
+    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi.');
+  }
+  if (!file.isTrashed()) {
+    file.setTrashed(true);
+  }
+  return {
+    result: 'success',
+    success: true,
+    trashed: true,
+    fileId: fileId
+  };
+}
+
+function doGet(e) {
+  var action = (e && e.parameter && e.parameter.action) ? String(e.parameter.action).trim() : '';
+  if (action === 'version') {
+    return gasJsonOut({
+      result: 'success',
+      success: true,
+      scriptVersion: SCRIPT_VERSION,
+      service: 'esantri-psb-gas'
+    });
+  }
+  return gasJsonOut({
+    result: 'error',
+    success: false,
+    message: 'Akses GET dinonaktifkan demi keamanan. Gunakan POST action "list" dengan ADMIN_KEY.'
+  });
 }
 
 function doPost(e) {
@@ -841,18 +1392,62 @@ function doPost(e) {
     var rawData;
 
     if (e.postData && (e.postData.type === "application/json" || e.postData.type === "text/plain" || e.postData.contents)) {
-      rawData = JSON.parse(e.postData.contents);
+      var rawContents = String(e.postData.contents || '');
+      if (rawContents.length > PSB_MAX_POST_BYTES) {
+        return gasJsonOut({
+          result: 'error',
+          success: false,
+          message: 'Ukuran payload melebihi batas maksimum yang diizinkan (22 MB).'
+        });
+      }
+      rawData = JSON.parse(rawContents);
     } else {
       rawData = e.parameter || {};
+    }
+
+    var action = String(rawData.action || '').trim();
+    if (action === 'list' || action === 'getPsbSubmissions') {
+      if (!verifyAdminKey(rawData.adminKey)) {
+        return gasJsonOut({
+          result: 'error',
+          success: false,
+          message: 'Akses ditolak: ADMIN_KEY tidak valid, kosong, atau belum dikonfigurasi.'
+        });
+      }
+      var records = collectAllPsbSubmissions(ss, rawData.tahunAjaran);
+      return gasJsonOut({
+        result: 'success',
+        success: true,
+        scriptVersion: SCRIPT_VERSION,
+        records: records
+      });
+    }
+    if (action === 'getFile') {
+      return gasJsonOut(handleGetFilePost(rawData));
+    }
+    if (action === 'deleteFile') {
+      return gasJsonOut(handleDeleteFilePost(rawData));
+    }
+
+    var pubCheck = verifyPublicSubmitKey(rawData.publicKey);
+    if (!pubCheck.ok) {
+      return gasJsonOut({
+        result: 'error',
+        success: false,
+        message: pubCheck.message
+      });
     }
 
     var data = {};
     if (rawData.fields && typeof rawData.fields === 'object') {
       for (var fk in rawData.fields) data[fk] = rawData.fields[fk];
     }
-    var skipTransportKeys = ['action', 'portalId', 'apiKey', 'fields', 'submittedAt', 'submissionSource', 'sheetName', 'driveFolderId', 'folderId', 'targetJenjangNama', 'namaJenjang'];
+    var skipTransportKeys = ['action', 'portalId', 'apiKey', 'publicKey', 'adminKey', 'fields', 'submittedAt', 'submissionSource', 'sheetName', 'driveFolderId', 'folderId', 'targetJenjangNama', 'namaJenjang'];
     for (var bk in rawData) {
       if (skipTransportKeys.indexOf(bk) === -1) data[bk] = rawData[bk];
+    }
+    if (!data.nomorRegistrasi || !String(data.nomorRegistrasi).trim()) {
+      data.nomorRegistrasi = 'PSB-' + new Date().getFullYear() + '-REG-' + makeGasRandomCode(6);
     }
 
     var sheetName = String(rawData.sheetName || data.sheetName || "Pendaftar Baru").trim().slice(0, 95);
@@ -861,7 +1456,7 @@ function doPost(e) {
     if (!sheet) {
       sheet = ss.insertSheet(sheetName);
       var initialHeaders = [
-        "Timestamp", "tahunAjaranAktif", "jenjangId", "namaLengkap", "nisn", "nik", "jenisKelamin",
+        "Timestamp", "tahunAjaranAktif", "jenjangId", "nomorRegistrasi", "namaLengkap", "nisn", "nik", "jenisKelamin",
         "tempatLahir", "tanggalLahir", "alamat",
         "namaAyah", "nikAyah", "statusAyah", "pekerjaanAyah", "pendidikanAyah", "penghasilanAyah", "teleponAyah",
         "namaIbu", "nikIbu", "statusIbu", "pekerjaanIbu", "pendidikanIbu", "penghasilanIbu", "teleponIbu",
@@ -888,12 +1483,28 @@ function doPost(e) {
       return digits;
     }
 
-    function toSlug(value) {
-      return String(value || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .replace(/-{2,}/g, '-');
+    function makeGasRandomCode(len) {
+      var chars = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+      var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + ':' + Date.now() + ':' + Math.random());
+      var out = '';
+      for (var i = 0; i < len; i++) {
+        var idx = (digest[i % digest.length] & 0xFF) & 31;
+        out += chars.charAt(idx);
+      }
+      return out;
+    }
+
+    function makeInitialsForFile(rawNama) {
+      var s = String(rawNama || '').trim();
+      if (!s || s.toUpperCase() === '[TERENKRIPSI E2EE]') return 'X';
+      var cleaned = s.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[^a-zA-Z0-9\\s]/g, ' ').trim();
+      if (!cleaned) return 'X';
+      var tokens = cleaned.split(/\\s+/).filter(Boolean);
+      var out = '';
+      for (var i = 0; i < tokens.length && i < 3; i++) {
+        out += tokens[i].charAt(0).toUpperCase();
+      }
+      return out || 'X';
     }
 
     function detectDocPrefix(fieldKey, originalName, fieldLabel) {
@@ -912,21 +1523,24 @@ function doPost(e) {
       var original = String(fileName || '');
       var dotIndex = original.lastIndexOf('.');
       if (dotIndex > -1 && dotIndex < original.length - 1) {
-        return original.substring(dotIndex).toLowerCase();
+        var ext = original.substring(dotIndex + 1).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (ext) return ext === 'jpeg' ? 'jpg' : ext;
       }
-      if (mimeType === 'application/pdf') return '.pdf';
-      if (mimeType === 'image/jpeg') return '.jpg';
-      if (mimeType === 'image/png') return '.png';
+      if (mimeType === 'application/pdf') return 'pdf';
+      if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') return 'jpg';
+      if (mimeType === 'image/png') return 'png';
+      if (mimeType === 'image/webp') return 'webp';
       return '';
     }
 
-    function buildSmartFileName(fieldKey, fileData, payload) {
-      var santriName = payload.namaLengkap || payload.namaSantri || payload.nama || 'santri';
+    function buildStandardFileName(fieldKey, fileData, payload, verifiedMime) {
+      var santriName = payload.namaLengkap || payload.namaSantri || payload.nama || '';
+      var regNo = String(payload.nomorRegistrasi || ('PSB-' + new Date().getFullYear() + '-REG-' + makeGasRandomCode(6))).trim();
+      var inisial = makeInitialsForFile(santriName);
       var prefix = detectDocPrefix(fieldKey, fileData.name, fileData.fieldLabel);
-      var safeName = toSlug(santriName) || 'santri';
-      var ext = extractExtension(fileData.name, fileData.mime);
-      var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd-HHmmss');
-      return prefix + '-' + safeName + '-' + stamp + ext;
+      var ext = extractExtension(fileData.name, verifiedMime || fileData.mime);
+      var base = regNo + '_' + inisial + '_' + prefix + '-' + makeGasRandomCode(4);
+      return ext ? (base + '.' + ext) : base;
     }
 
     function buildYearFolderName(taValue) {
@@ -946,7 +1560,7 @@ function doPost(e) {
     }
 
     var yearFolderName = buildYearFolderName(data.tahunAjaranAktif || rawData.tahunAjaranAktif);
-    var targetFolderId = extractCleanFolderId(rawData.driveFolderId || rawData.folderId || DEFAULT_DRIVE_FOLDER_ID);
+    var targetFolderId = resolveConfiguredDriveFolderId();
     var destinationFolder = null;
     var folderWarning = "";
 
@@ -977,17 +1591,15 @@ function doPost(e) {
       if (data[pKey]) data[pKey] = sanitizePhone(data[pKey]);
     }
 
-    // Upload lampiran ke Google Drive (otomatis ke folder berkas-psb-<tahunAjaran>) & simpan URL hasil share
+    // Upload lampiran ke Google Drive (otomatis ke folder berkas-psb-<tahunAjaran>); berkas mewarisi izin folder tujuan (privat)
     for (var key in data) {
       if (typeof data[key] === 'object' && data[key] !== null && data[key].isFile) {
         var fileData = data[key];
-        var base64Data = String(fileData.data || '');
-        var cleanB64 = base64Data.indexOf(',') !== -1 ? base64Data.split(',')[1] : base64Data;
-        var smartName = buildSmartFileName(key, fileData, data);
-        var blob = Utilities.newBlob(Utilities.base64Decode(cleanB64), fileData.mime || 'application/octet-stream', smartName);
+        var validated = decodeAndValidateUploadedFile(fileData);
+        var smartName = buildStandardFileName(key, fileData, data, validated.mime);
+        var blob = Utilities.newBlob(validated.bytes, validated.mime, smartName);
         var destFolder = resolveDestinationFolder();
         var file = destFolder.createFile(blob);
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         data[key] = file.getUrl();
       }
     }
@@ -1030,6 +1642,7 @@ function doPost(e) {
       result: "success",
       success: true,
       row: nextRow,
+      nomorRegistrasi: data.nomorRegistrasi,
       sheetName: sheetName,
       folderUsed: destinationFolder ? destinationFolder.getId() : "none",
       folderName: destinationFolder ? destinationFolder.getName() : yearFolderName,
@@ -1045,7 +1658,53 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function makeExistingFilesPrivateInFolder(folder, counters) {
+  var files = folder.getFiles();
+  while (files.hasNext()) {
+    var file = files.next();
+    if (file.isTrashed && file.isTrashed()) continue;
+    try {
+      file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+      counters.updated++;
+    } catch (err) {
+      counters.failed++;
+    }
+  }
+  var children = folder.getFolders();
+  while (children.hasNext()) {
+    var child = children.next();
+    if (child.isTrashed && child.isTrashed()) continue;
+    makeExistingFilesPrivateInFolder(child, counters);
+  }
+}
+
+/**
+ * Jalankan secara MANUAL dari editor Google Apps Script (Run > makeExistingFilesPrivate)
+ * untuk mengubah izin berkas PSB lama yang sempat dibagikan publik menjadi PRIVATE.
+ */
+function makeExistingFilesPrivate() {
+  var counters = { updated: 0, failed: 0 };
+  var targetFolderId = resolveConfiguredDriveFolderId();
+  if (targetFolderId) {
+    var rootFolder = DriveApp.getFolderById(targetFolderId);
+    makeExistingFilesPrivateInFolder(rootFolder, counters);
+  } else {
+    var folders = DriveApp.getFolders();
+    while (folders.hasNext()) {
+      var f = folders.next();
+      if (f.isTrashed && f.isTrashed()) continue;
+      var name = String(f.getName() || '').toLowerCase();
+      if (name.indexOf('berkas-psb-') === 0) {
+        makeExistingFilesPrivateInFolder(f, counters);
+      }
+    }
+  }
+  Logger.log('makeExistingFilesPrivate selesai. Diubah ke privat: ' + counters.updated + ', gagal/dilewati: ' + counters.failed);
+  return counters;
 }`;
+};
 
 /* ============================================================================
  * 2. CLOUDFLARE WORKER: D1 SQLITE + R2 ATTACHMENT STORAGE

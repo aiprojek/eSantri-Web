@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import {
+    acceptAndReencryptPlaintextRapor,
     fetchRaporFromCloud,
     parseRaporDataV2,
     syncRaporStructuredData,
@@ -95,6 +96,12 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
         cachedCloudData?: any[];
         cachedWaBlocks?: string[];
     } | null>(null);
+    const [quarantinedPlaintext, setQuarantinedPlaintext] = useState<{
+        source: 'wa' | 'cloud';
+        items: any[];
+        filterOpts: ParseRaporFilterOptions;
+    } | null>(null);
+    const [isReencryptingPlaintext, setIsReencryptingPlaintext] = useState(false);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -118,6 +125,7 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
         if (defaultTemplateId !== undefined) setTargetTemplateId(defaultTemplateId || '');
         setCloudPreview(null);
         setPendingDiffReview(null);
+        setQuarantinedPlaintext(null);
     }, [
         isOpen,
         initialSource,
@@ -190,8 +198,13 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
             const summary = inspectRaporCloudSummary(rows, settings);
             setCloudPreview(summary);
             setConfirmPurgeBloated(false);
-            if (summary.totalRows === 0) {
+            if (summary.totalRows === 0 && (summary.plaintextRejectedCount || 0) === 0) {
                 showToast(`Terhubung ke ${providerMeta.name}, tetapi belum ada baris nilai pada filter tersebut.`, 'info');
+            } else if ((summary.plaintextRejectedCount || 0) > 0) {
+                showToast(
+                    `${summary.plaintextRejectedCount} baris plaintext ditolak karena E2EE Rapor aktif (tidak disimpan otomatis).`,
+                    'error'
+                );
             } else {
                 showToast(
                     `Terdeteksi ${summary.uniqueStudents} santri di ${providerMeta.name} (${summary.tabs.length} grup/tab).`,
@@ -259,6 +272,7 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
             let totalSuccess = 0;
             let totalErrors: string[] = [];
             let tabsCount = 0;
+            const rejectedItemsAccum: any[] = [];
 
             if (importSource === 'wa') {
                 const blocks =
@@ -268,9 +282,12 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                         .filter(Boolean);
 
                 for (const block of blocks) {
-                    const { successCount, errors } = await parseRaporDataV2(block, settings, filterOpts);
+                    const { successCount, errors, stats } = await parseRaporDataV2(block, settings, filterOpts);
                     totalSuccess += successCount;
                     totalErrors = [...totalErrors, ...errors];
+                    if (stats?.rejectedPlaintextItems?.length) {
+                        rejectedItemsAccum.push(...stats.rejectedPlaintextItems);
+                    }
                 }
             } else {
                 const cleanUrl = cloudScriptUrl.trim();
@@ -293,6 +310,9 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                 totalSuccess = result.successCount;
                 totalErrors = result.errors;
                 tabsCount = result.stats.tabsDetected.length;
+                if (result.stats.rejectedPlaintextItems?.length) {
+                    rejectedItemsAccum.push(...result.stats.rejectedPlaintextItems);
+                }
 
                 if (isAdminOrGlobalWrite && cleanUrl) {
                     try {
@@ -319,6 +339,20 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
 
             setPendingDiffReview(null);
 
+            if (rejectedItemsAccum.length > 0) {
+                setQuarantinedPlaintext({
+                    source: importSource,
+                    items: rejectedItemsAccum,
+                    filterOpts
+                });
+                showToast(
+                    `${rejectedItemsAccum.length} kiriman nilai plaintext ditolak karena E2EE Rapor aktif (tidak disimpan otomatis).`,
+                    'error'
+                );
+            } else {
+                setQuarantinedPlaintext(null);
+            }
+
             if (totalSuccess > 0) {
                 const tabSuffix =
                     importSource === 'cloud' && tabsCount > 0
@@ -342,8 +376,10 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                 }
                 setWaInput('');
                 onSuccess?.();
-                onClose();
-            } else if (totalErrors.length === 0) {
+                if (rejectedItemsAccum.length === 0) {
+                    onClose();
+                }
+            } else if (totalErrors.length === 0 && rejectedItemsAccum.length === 0) {
                 showToast(
                     mode === 'fill_empty_only'
                         ? 'Tidak ada sel kosong baru yang perlu diisi (seluruh nilai lokal dipertahankan).'
@@ -362,6 +398,30 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
             showAlert('Gagal Menarik / Memproses Data', (e as Error).message);
         } finally {
             setIsProcessing(false);
+        }
+    };
+
+    const handleAcceptAndReencryptPlaintext = async () => {
+        if (!quarantinedPlaintext || quarantinedPlaintext.items.length === 0) return;
+        setIsReencryptingPlaintext(true);
+        try {
+            const res = await acceptAndReencryptPlaintextRapor(
+                quarantinedPlaintext.items,
+                settings,
+                quarantinedPlaintext.filterOpts
+            );
+            setQuarantinedPlaintext(null);
+            setWaInput('');
+            showToast(
+                `${res.importedCount} nilai plaintext diterima & disimpan${res.reencryptedCloudCount > 0 ? ` (${res.reencryptedCloudCount} dienkripsi ulang ke Cloud)` : ''}.`,
+                'success'
+            );
+            onSuccess?.();
+            onClose();
+        } catch (e) {
+            showAlert('Gagal Terima & Enkripsi Ulang', (e as Error).message);
+        } finally {
+            setIsReencryptingPlaintext(false);
         }
     };
 
@@ -481,6 +541,41 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
 
                 {/* Body */}
                 <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+                    {quarantinedPlaintext && quarantinedPlaintext.items.length > 0 && (
+                        <div className="p-4 rounded-2xl bg-red-50 border-2 border-red-300 text-xs text-red-950 space-y-2.5">
+                            <div className="flex items-start gap-2.5">
+                                <i className="bi bi-shield-fill-exclamation text-red-600 text-base shrink-0 mt-0.5"></i>
+                                <div className="flex-1 space-y-1">
+                                    <div className="font-bold text-sm text-red-900">
+                                        {quarantinedPlaintext.items.length} Paket Nilai Plaintext Ditolak (E2EE Rapor Aktif)
+                                    </div>
+                                    <p className="leading-relaxed text-red-800">
+                                        E2EE modul Rapor aktif sehingga setoran nilai tanpa enkripsi <strong>tidak disimpan otomatis dan tidak dihapus dari cloud</strong>. Jika kiriman ini sah dari guru/backup tepercaya, klik tombol di bawah untuk menerima dan mengenkripsi ulang.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setQuarantinedPlaintext(null)}
+                                    disabled={isReencryptingPlaintext}
+                                    className="px-3 py-1.5 rounded-lg bg-white border border-red-200 text-red-800 font-semibold text-xs hover:bg-red-100"
+                                >
+                                    Tutup Peringatan
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => void handleAcceptAndReencryptPlaintext()}
+                                    disabled={isReencryptingPlaintext}
+                                    className="px-3.5 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 disabled:bg-red-300 text-white font-bold text-xs flex items-center gap-1.5"
+                                >
+                                    <i className={`bi ${isReencryptingPlaintext ? 'bi-arrow-repeat animate-spin' : 'bi-lock-fill'}`}></i>
+                                    <span>{isReencryptingPlaintext ? 'Memproses...' : `Terima & enkripsi ulang (${quarantinedPlaintext.items.length})`}</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {pendingDiffReview && (
                         <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-300 space-y-3 animate-in fade-in">
                             <div className="flex items-start gap-2.5">
@@ -772,6 +867,15 @@ export const RaporWaCloudImportModal: React.FC<RaporWaCloudImportModalProps> = (
                                     ) : (
                                         <div className="text-[11px] text-slate-500">
                                             Belum ada tab nilai yang cocok dengan filter saat ini.
+                                        </div>
+                                    )}
+
+                                    {(cloudPreview.plaintextRejectedCount || 0) > 0 && (
+                                        <div className="p-3 rounded-lg bg-red-50 border border-red-300 text-red-950 text-[11px] flex items-start gap-2">
+                                            <i className="bi bi-shield-fill-exclamation text-red-600 shrink-0 mt-0.5"></i>
+                                            <div>
+                                                <strong>{cloudPreview.plaintextRejectedCount} Baris Plaintext Ditolak:</strong> E2EE modul Rapor aktif. Baris tanpa amplop enkripsi dikarantina agar dapat ditinjau saat Anda klik <em>Tarik &amp; Simpan Nilai</em>.
+                                            </div>
                                         </div>
                                     )}
 
@@ -1130,7 +1234,23 @@ export const RaporCloudPullControl: React.FC<RaporCloudPullControlProps> = ({
 
             setQuickDiffState(null);
 
-            if (result.successCount > 0) {
+            const rejectedItems = result.stats.rejectedPlaintextItems || [];
+            if (rejectedItems.length > 0) {
+                showConfirmation(
+                    `${rejectedItems.length} Data Nilai Plaintext Ditolak (E2EE Aktif)`,
+                    `E2EE modul Rapor aktif sehingga ${rejectedItems.length} baris tanpa enkripsi tidak disimpan otomatis (dan tidak dihapus dari cloud). Klik "Terima & enkripsi ulang" bila data tersebut memang sah dari guru.`,
+                    async () => {
+                        try {
+                            const res = await acceptAndReencryptPlaintextRapor(rejectedItems, settings, baseFilterOpts);
+                            showToast(`${res.importedCount} nilai plaintext diterima & disimpan${res.reencryptedCloudCount > 0 ? ` (${res.reencryptedCloudCount} dienkripsi ulang ke Cloud)` : ''}.`, 'success');
+                            onSyncComplete?.();
+                        } catch (reErr) {
+                            showAlert('Gagal Terima & Enkripsi Ulang', (reErr as Error).message);
+                        }
+                    },
+                    { confirmColor: 'amber', confirmText: `Terima & enkripsi ulang (${rejectedItems.length})` }
+                );
+            } else if (result.successCount > 0) {
                 const tabCount = result.stats.tabsDetected.length;
                 const modeNote =
                     conflictMode === 'fill_empty_only' ? ' (hanya sel kosong)' : '';

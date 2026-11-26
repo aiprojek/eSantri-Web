@@ -19,6 +19,7 @@ import { APP_VERSION } from './version';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LoadingFallback } from './components/common/LoadingFallback';
 import { E2eeUnlockBanner } from './components/common/E2eeUnlockBanner';
+import { ensureDeviceVaultHydrated } from './services/e2eeService';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 
 // --- Lazy Load Pages with Retry ---
@@ -302,6 +303,10 @@ const AppContent: React.FC = () => {
             setShowWelcomeModal(true);
         }
     }, [settings.multiUserMode]);
+
+    useEffect(() => {
+        ensureDeviceVaultHydrated().catch(() => {});
+    }, []);
 
     useEffect(() => {
         if (!isLoading) {

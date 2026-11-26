@@ -5,7 +5,7 @@ import { createClient, WebDAVClient } from 'webdav';
 import { migrateUserPermissions } from './permissionMigrationService';
 import { setAuditSyncMute } from './logService';
 import { mergePortalConfig } from './portalGasService';
-import { decryptBytesSym, E2EE_CHANGED_EVENT, encryptBytesSym, tryParseE2eeEnvelope } from './e2eeService';
+import { decryptBytesSym, E2EE_CHANGED_EVENT, encryptBytesSym, ensureDeviceVaultHydrated, isDeviceUnlockedForConfig, tryParseE2eeEnvelope } from './e2eeService';
 import { sanitizePendaftar } from '../utils/sanitizePendaftar';
 import { mergeSyncedUserCredentials, sanitizeUserForExternalSync } from './authService';
 
@@ -29,6 +29,7 @@ const compressData = async (data: any, options?: { attachPublicE2eeMeta?: E2eeCo
     const settingsList = await db.settings.toArray();
     const e2eeConfig = settingsList[0]?.e2eeConfig;
     if (e2eeConfig?.enabled && e2eeConfig?.modules?.sync) {
+        await ensureDeviceVaultHydrated();
         const envelope: any = await encryptBytesSym(
             new Uint8Array(gzipBuffer),
             e2eeConfig,
@@ -44,13 +45,35 @@ const compressData = async (data: any, options?: { attachPublicE2eeMeta?: E2eeCo
     return gzipBuffer;
 };
 
+export class E2eePlaintextRejectedError extends Error {
+    code = 'E2EE_PLAINTEXT_REJECTED' as const;
+    payload?: any;
+    constructor(message: string, payload?: any) {
+        super(message);
+        this.name = 'E2eePlaintextRejectedError';
+        this.payload = payload;
+    }
+}
+
+const isSyncE2eeActive = async (): Promise<boolean> => {
+    try {
+        const settingsList = await db.settings.toArray();
+        const cfg = settingsList[0]?.e2eeConfig;
+        return Boolean(cfg?.enabled && cfg?.modules?.sync);
+    } catch {
+        return false;
+    }
+};
+
 /**
  * Mendekompresi ArrayBuffer/String. 
  * Mendukung E2EE envelope + GZIP + Backward Compatibility JSON lama.
+ * Saat rejectPlaintext=true (E2EE modul Sync aktif), payload tanpa amplop E2EE ditolak tanpa dihapus dari cloud.
  */
 const decompressData = async (
     input: ArrayBuffer | string,
-    onLockedWithMeta?: (meta: E2eeConfig) => Promise<void>
+    onLockedWithMeta?: (meta: E2eeConfig) => Promise<void>,
+    options?: { rejectPlaintext?: boolean }
 ): Promise<any> => {
     let buffer: ArrayBuffer;
     if (typeof input === 'string') {
@@ -59,6 +82,8 @@ const decompressData = async (
         buffer = input;
     }
 
+    let wasEncrypted = false;
+
     // Cek apakah payload berupa amplop E2EE JSON
     try {
         const maybeText = new TextDecoder().decode(buffer);
@@ -66,8 +91,10 @@ const decompressData = async (
             const parsedJson = JSON.parse(maybeText);
             const env = tryParseE2eeEnvelope(parsedJson);
             if (env && env.mode === 'sym_aes') {
+                wasEncrypted = true;
+                await ensureDeviceVaultHydrated();
                 try {
-                    const plainBytes = await decryptBytesSym(env);
+                    const plainBytes = await decryptBytesSym(env, { expectedContext: 'sync-bundle' });
                     if (env.encoding === 'json') {
                         return JSON.parse(new TextDecoder().decode(plainBytes));
                     }
@@ -79,30 +106,57 @@ const decompressData = async (
                     throw decryptErr;
                 }
             } else if (!env && (parsedJson.santri || parsedJson.data || parsedJson.users || parsedJson.timestamp)) {
+                if (options?.rejectPlaintext) {
+                    throw new E2eePlaintextRejectedError(
+                        'E2EE_PLAINTEXT_REJECTED: Data Cloud masih berupa plaintext (tidak terenkripsi E2EE) padahal E2EE modul Sync aktif.',
+                        parsedJson
+                    );
+                }
                 return parsedJson;
             }
         }
     } catch (e: any) {
-        if (e?.message?.includes('E2EE_LOCKED') || e?.message?.includes('mendekripsi')) {
+        if (
+            e instanceof E2eePlaintextRejectedError ||
+            e?.code === 'E2EE_PLAINTEXT_REJECTED' ||
+            e?.message?.includes('E2EE_LOCKED') ||
+            e?.message?.includes('E2EE_PLAINTEXT_REJECTED') ||
+            e?.message?.includes('mendekripsi')
+        ) {
             throw e;
         }
         // bukan JSON amplop E2EE, lanjut ke dekompresi GZIP
     }
 
+    let decodedPayload: any;
     try {
         const stream = new Blob([buffer]).stream();
         const decompressedStream = stream.pipeThrough(new DecompressionStream('gzip'));
-        const decompressedRes = await new Response(decompressedStream).json();
-        return decompressedRes;
+        decodedPayload = await new Response(decompressedStream).json();
     } catch (e) {
         try {
             const text = new TextDecoder().decode(buffer);
-            return JSON.parse(text);
+            decodedPayload = JSON.parse(text);
         } catch (jsonError) {
             console.error("Gagal dekompresi dan gagal parsing JSON biasa:", jsonError);
             throw new Error("File rusak atau format tidak dikenali.");
         }
     }
+
+    if (!wasEncrypted && options?.rejectPlaintext) {
+        throw new E2eePlaintextRejectedError(
+            'E2EE_PLAINTEXT_REJECTED: Paket data Cloud masih plaintext (tanpa amplop E2EE) padahal E2EE modul Sync aktif.',
+            decodedPayload
+        );
+    }
+    return decodedPayload;
+};
+
+export const decodeSyncPayload = async (
+    input: ArrayBuffer | string,
+    options?: { rejectPlaintext?: boolean }
+): Promise<any> => {
+    return await decompressData(input, undefined, options);
 };
 
 const syncLockedE2eeMetaToLocal = async (meta?: E2eeConfig) => {
@@ -345,7 +399,15 @@ export const getCloudStorageStats = async (config: CloudSyncConfig) => {
     return null;
 };
 
-export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
+export interface FetchPsbFromDropboxReport {
+    rows: any[];
+    rejectedPlaintextFiles: string[];
+}
+
+export const fetchPsbFromDropboxWithReport = async (
+    token: string,
+    options?: { allowPlaintext?: boolean }
+): Promise<FetchPsbFromDropboxReport> => {
     try {
         const response = await fetchWithRetry('https://api.dropboxapi.com/2/files/list_folder', {
             method: 'POST',
@@ -364,9 +426,12 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
             .slice(0, 10);
 
         let allPendaftar: any[] = [];
+        const rejectedPlaintextFiles: string[] = [];
         const seenIds = new Set();
         const settingsRows = await db.settings.toArray();
-        const activeKeyId = settingsRows[0]?.e2eeConfig?.enabled ? settingsRows[0]?.e2eeConfig?.keyId : null;
+        const activeCfg = settingsRows[0]?.e2eeConfig;
+        const activeKeyId = activeCfg?.enabled ? activeCfg?.keyId : null;
+        const rejectPlaintext = Boolean(activeCfg?.enabled && activeCfg?.modules?.sync && !options?.allowPlaintext);
         let encryptedFileCount = 0;
         let lockedErrorCount = 0;
         let firstLockedError: Error | null = null;
@@ -383,8 +448,13 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
                 const buffer = await dlResponse.arrayBuffer();
                 let json: any;
                 try {
-                    json = await decompressData(buffer, syncLockedE2eeMetaToLocal);
+                    json = await decompressData(buffer, syncLockedE2eeMetaToLocal, { rejectPlaintext });
                 } catch (fileErr: any) {
+                    if (fileErr instanceof E2eePlaintextRejectedError || fileErr?.code === 'E2EE_PLAINTEXT_REJECTED') {
+                        rejectedPlaintextFiles.push(file.name);
+                        console.warn(`Menolak file inbox PSB plaintext (${file.name}) karena E2EE Sync aktif.`);
+                        continue;
+                    }
                     const msg = String(fileErr?.message || '');
                     if (msg.includes('E2EE_LOCKED')) {
                         encryptedFileCount++;
@@ -417,7 +487,7 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
             throw firstLockedError;
         }
         
-        return allPendaftar;
+        return { rows: allPendaftar, rejectedPlaintextFiles };
     } catch (error: any) {
         console.error("Error fetching PSB from Cloud:", error);
         if (error?.message?.includes('E2EE_LOCKED')) {
@@ -425,6 +495,11 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
         }
         throw new Error("Gagal mengambil data dari Dropbox. Cek koneksi internet.");
     }
+};
+
+export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
+    const report = await fetchPsbFromDropboxWithReport(token);
+    return report.rows;
 };
 
 // Helper to filter data for incremental sync
@@ -527,8 +602,12 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
 };
 
 // ... downloadAndMergeMaster (updated) ...
-export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
+export const downloadAndMergeMaster = async (
+    config: CloudSyncConfig,
+    options?: { allowPlaintext?: boolean }
+) => {
     let masterData;
+    const rejectPlaintext = (await isSyncE2eeActive()) && !options?.allowPlaintext;
 
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
@@ -547,7 +626,7 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         
         // UPDATE: Handle Decompression
         const buffer = await response.arrayBuffer();
-        masterData = await decompressData(buffer, syncLockedE2eeMetaToLocal);
+        masterData = await decompressData(buffer, syncLockedE2eeMetaToLocal, { rejectPlaintext });
 
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
@@ -556,7 +635,7 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         }
         const contents = await client.getFileContents(`${CLOUD_ROOT}/${MASTER_FILENAME}`);
         // WebDAV client might return string or buffer. decompressData handles both.
-        masterData = await decompressData(contents as any, syncLockedE2eeMetaToLocal);
+        masterData = await decompressData(contents as any, syncLockedE2eeMetaToLocal, { rejectPlaintext });
     } else {
          throw new Error("Provider tidak valid");
     }
@@ -785,8 +864,13 @@ const TABLE_LABELS: Record<string, string> = {
     settings: 'Pengaturan Pondok'
 };
 
-export const inspectInboxFile = async (config: CloudSyncConfig, file: SyncFileRecord): Promise<InboxFileInspection> => {
+export const inspectInboxFile = async (
+    config: CloudSyncConfig,
+    file: SyncFileRecord,
+    options?: { allowPlaintext?: boolean }
+): Promise<InboxFileInspection> => {
     let fileContent;
+    const rejectPlaintext = (await isSyncE2eeActive()) && !options?.allowPlaintext;
 
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
@@ -798,11 +882,11 @@ export const inspectInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
             }
         });
         const buffer = await response.arrayBuffer();
-        fileContent = await decompressData(buffer, syncLockedE2eeMetaToLocal);
+        fileContent = await decompressData(buffer, syncLockedE2eeMetaToLocal, { rejectPlaintext });
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
         const contents = await client.getFileContents(file.path_lower);
-        fileContent = await decompressData(contents as any, syncLockedE2eeMetaToLocal);
+        fileContent = await decompressData(contents as any, syncLockedE2eeMetaToLocal, { rejectPlaintext });
     } else {
         throw new Error("Provider tidak valid");
     }
@@ -838,8 +922,14 @@ export const inspectInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
 };
 
 // ... processInboxFile (updated for validation & decompression) ...
-export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRecord, resolvedConflicts?: ConflictItem[]) => {
+export const processInboxFile = async (
+    config: CloudSyncConfig,
+    file: SyncFileRecord,
+    resolvedConflicts?: ConflictItem[],
+    options?: { allowPlaintext?: boolean }
+) => {
     let fileContent;
+    const rejectPlaintext = (await isSyncE2eeActive()) && !options?.allowPlaintext;
 
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
@@ -852,13 +942,13 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
         });
         // UPDATE: Handle Decompression
         const buffer = await response.arrayBuffer();
-        fileContent = await decompressData(buffer, syncLockedE2eeMetaToLocal);
+        fileContent = await decompressData(buffer, syncLockedE2eeMetaToLocal, { rejectPlaintext });
 
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
         const contents = await client.getFileContents(file.path_lower);
         // WebDAV client returns string or buffer
-        fileContent = await decompressData(contents as any, syncLockedE2eeMetaToLocal);
+        fileContent = await decompressData(contents as any, syncLockedE2eeMetaToLocal, { rejectPlaintext });
     } else {
         throw new Error("Provider tidak valid");
     }
@@ -1131,8 +1221,26 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
     return { timestamp: masterData.timestamp };
 };
 
-export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
+export const acceptAndReencryptMasterFromCloud = async (config: CloudSyncConfig) => {
+    await ensureDeviceVaultHydrated();
+    const settingsRows = await db.settings.toArray();
+    const cfg = settingsRows[0]?.e2eeConfig;
+    if (cfg?.enabled && !isDeviceUnlockedForConfig(cfg)) {
+        throw new Error('E2EE_LOCKED: Buka kunci Master Password E2EE terlebih dahulu sebelum menerima & mengenkripsi ulang data.');
+    }
+    const merged = await downloadAndMergeMaster(config, { allowPlaintext: true });
+    if (merged.status === 'merged') {
+        await publishMasterData(config);
+    }
+    return merged;
+};
+
+export const updateAccountFromCloud = async (
+    config: CloudSyncConfig,
+    options?: { allowPlaintext?: boolean }
+) => {
     let data: any = null;
+    const rejectPlaintext = (await isSyncE2eeActive()) && !options?.allowPlaintext;
     
     const handleLockedWithMeta = async (meta?: E2eeConfig) => {
         await syncLockedE2eeMetaToLocal(meta);
@@ -1147,7 +1255,7 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
         const path = `tenants/${tenantId}/users`;
         const q = query(collection(fdb, path));
         const snapshot = await getDocs(q);
-        const rawUsers = snapshot.docs.map(d => d.data());
+        const rawUserDocs = snapshot.docs.map(d => ({ id: d.id, data: d.data() }));
 
         let rawSettingsDoc: any = null;
         try {
@@ -1163,21 +1271,38 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
 
         if (rawSettingsDoc && tryParseE2eeEnvelope(rawSettingsDoc)) {
             try {
-                rawSettingsDoc = await decryptAnyEnvelope(rawSettingsDoc);
+                rawSettingsDoc = await decryptAnyEnvelope(rawSettingsDoc, {
+                    expectedContext: 'fs-settings',
+                    expectedDocId: 'main',
+                });
             } catch {
                 await handleLockedWithMeta(rawSettingsDoc.e2eeConfig);
             }
+        } else if (rawSettingsDoc && rejectPlaintext) {
+            throw new E2eePlaintextRejectedError(
+                'E2EE_PLAINTEXT_REJECTED: Dokumen pengaturan di Firestore berbentuk plaintext sedangkan E2EE modul Sync aktif.'
+            );
         }
 
         const decryptedUsers: any[] = [];
-        for (const u of rawUsers) {
+        for (const uEntry of rawUserDocs) {
+            const u = uEntry.data;
             if (tryParseE2eeEnvelope(u)) {
                 try {
-                    decryptedUsers.push(await decryptAnyEnvelope(u));
+                    decryptedUsers.push(
+                        await decryptAnyEnvelope(u, {
+                            expectedContext: 'fs-users',
+                            expectedDocId: uEntry.id,
+                        })
+                    );
                 } catch {
                     await handleLockedWithMeta(rawSettingsDoc?.e2eeConfig);
                 }
             } else {
+                if (rejectPlaintext) {
+                    console.warn(`Menolak dokumen users/${uEntry.id} plaintext di Firestore karena E2EE Sync aktif.`);
+                    continue;
+                }
                 decryptedUsers.push(u);
             }
         }
@@ -1197,7 +1322,7 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
         });
         
         const buffer = await response.arrayBuffer();
-        data = await decompressData(buffer, handleLockedWithMeta);
+        data = await decompressData(buffer, handleLockedWithMeta, { rejectPlaintext });
 
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
@@ -1205,7 +1330,7 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
             throw new Error("File konfigurasi akun tidak ditemukan di server WebDAV.");
         }
         const contents = await client.getFileContents(`${CLOUD_ROOT}/${MASTER_CONFIG_FILENAME}`);
-        data = await decompressData(contents as any, handleLockedWithMeta);
+        data = await decompressData(contents as any, handleLockedWithMeta, { rejectPlaintext });
     }
 
     if (data) {

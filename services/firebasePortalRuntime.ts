@@ -1,8 +1,14 @@
 import type { Pendaftar, PondokSettings, PsbConfig } from '../types';
 import { liteDb, doc, getDoc, setDoc, serverTimestamp } from '../firebaseLite';
 import { storage, ref, uploadBytes, getDownloadURL } from '../firebaseStorage';
-import { encryptObjectHybridWithPublicKey, isWebCryptoAvailable } from './e2eeService';
+import {
+    assertPinnedPublicKeyFingerprint,
+    encryptObjectHybridWithPublicKey,
+    isWebCryptoAvailable,
+    normalizePublicKeyFingerprint,
+} from './e2eeService';
 import { assertSafePsbUploadFile, sanitizePendaftar, sanitizePsbSubmissionFields } from '../utils/sanitizePendaftar';
+import { detectPsbDocKind, makeFileName, makeRegNumber, normalizeDocExtension } from '../utils/psbNaming';
 
 export const fetchPublicPortalSettings = async (tenantId: string) => {
     const tenantDoc = await getDoc(doc(liteDb, 'publicPortals', tenantId));
@@ -30,6 +36,7 @@ interface SubmitPortalPsbRegistrationInput {
     fields: Record<string, unknown>;
     e2eePublicKey?: string;
     e2eeKeyId?: string;
+    e2eeFingerprint?: string;
 }
 
 const NON_PII_FIELDS = new Set([
@@ -49,22 +56,42 @@ export const submitPortalPsbRegistration = async ({
     fields,
     e2eePublicKey,
     e2eeKeyId,
+    e2eeFingerprint,
 }: SubmitPortalPsbRegistrationInput) => {
     const pendaftarId = Date.now().toString();
     const year = new Date().getFullYear();
-    const regNumber = `PSB-${year}-REG-${pendaftarId.slice(-4)}`;
+    const regNumber = makeRegNumber(year);
 
     let pubSpki = e2eePublicKey || '';
     let keyId = e2eeKeyId || '';
+    let serverFingerprint = '';
     if (!pubSpki || !keyId) {
         try {
             const pubSettings = (await fetchPublicPortalSettings(tenantId)) as any;
             if (pubSettings?.psbE2ee?.publicKeySpki && pubSettings?.psbE2ee?.keyId) {
                 pubSpki = String(pubSettings.psbE2ee.publicKeySpki);
                 keyId = String(pubSettings.psbE2ee.keyId);
+                serverFingerprint = normalizePublicKeyFingerprint(pubSettings?.psbE2ee?.fingerprint);
             }
         } catch {
             // Tetap lanjutkan tanpa override jika dokumen publik tidak terjangkau
+        }
+    }
+
+    const pinnedFingerprint = normalizePublicKeyFingerprint(e2eeFingerprint || config.pinnedE2eeFingerprint);
+    if (pinnedFingerprint && (!pubSpki || !keyId)) {
+        throw new Error('Formulir memiliki pin fingerprint E2EE, tetapi Public Key E2EE server tidak tersedia. Pendaftaran dibatalkan demi keamanan.');
+    }
+
+    if (pubSpki && keyId) {
+        if (!isWebCryptoAvailable()) {
+            throw new Error('Enkripsi E2EE (Web Crypto) tidak tersedia di konteks ini. Buka formulir lewat HTTPS atau localhost.');
+        }
+        if (pinnedFingerprint) {
+            await assertPinnedPublicKeyFingerprint(pubSpki, pinnedFingerprint);
+        }
+        if (serverFingerprint) {
+            await assertPinnedPublicKeyFingerprint(pubSpki, serverFingerprint);
         }
     }
 
@@ -85,11 +112,14 @@ export const submitPortalPsbRegistration = async ({
         if (value instanceof File) {
             assertSafePsbUploadFile(value);
             const fieldLabel = config.customFields?.find((field) => field.id === fieldId)?.label || fieldId;
-            const safeLabel = fieldLabel.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-            const safeName = useE2ee
-                ? 'terenkripsi'
-                : String(cleanFields.namaLengkap || 'TanpaNama').replace(/[^a-z0-9]/gi, '_');
-            const filename = `${safeLabel}-${safeName}-${Date.now()}`;
+            const docKind = detectPsbDocKind(fieldId, value.name, fieldLabel);
+            const ext = normalizeDocExtension(value.name, value.type);
+            const filename = makeFileName({
+                nomorRegistrasi: regNumber,
+                nama: useE2ee ? '' : String(cleanFields.namaLengkap || ''),
+                jenisBerkas: docKind,
+                ext,
+            });
             const storageRef = ref(storage, `tenants/${tenantId}/psb/${filename}`);
 
             const uploadTask = uploadBytes(storageRef, value).then(async (snapshot) => {
@@ -147,7 +177,10 @@ export const submitPortalPsbRegistration = async ({
                 sensitiveBio[k] = v;
             }
         }
-        const envelope = await encryptObjectHybridWithPublicKey(sensitiveBio, pubSpki, keyId);
+        const envelope = await encryptObjectHybridWithPublicKey(sensitiveBio, pubSpki, keyId, {
+            context: 'psb',
+            expectedFingerprint: pinnedFingerprint || serverFingerprint || undefined,
+        });
         // Pertahankan URL lampiran (tanpa isi teks kustom sensitif) & bungkus biodata dalam __e2ee_bio
         const sanitizedCustomData: Record<string, unknown> = {
             __e2ee_bio: JSON.stringify(envelope),

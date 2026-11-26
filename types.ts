@@ -220,6 +220,7 @@ export interface Santri {
 
     catatan?: string; // Catatan khusus santri (format Markdown / teks terformat)
     customData?: string; // Data kustom JSON dari formulir pendaftaran PSB
+    portalPin?: string; // PIN Portal Wali Santri (minimal 6 digit CSPRNG)
 
     riwayatStatus?: RiwayatStatus[];
     prestasi?: Prestasi[];
@@ -550,8 +551,11 @@ export interface PsbFormTemplate {
     backendProvider?: PsbCloudProvider;
     googleScriptUrl?: string;
     cloudApiKey?: string;
+    cloudPublicKey?: string;
+    cloudAdminKey?: string;
     driveFolderId?: string;
     supabaseBucket?: string;
+    pinnedE2eeFingerprint?: string;
     fieldHints?: Record<string, string>;
     biayaPendaftaran?: number;
     infoRekening?: string;
@@ -591,8 +595,11 @@ export interface PsbConfig {
     backendProvider?: PsbCloudProvider;
     googleScriptUrl?: string;
     cloudApiKey?: string;
+    cloudPublicKey?: string;
+    cloudAdminKey?: string;
     driveFolderId?: string;
     supabaseBucket?: string;
+    pinnedE2eeFingerprint?: string;
     registrationDeadline?: string;
     fieldHints?: Record<string, string>;
     namaAdminPsb?: string;
@@ -764,6 +771,8 @@ export interface PortalConfig {
     // Google Apps Script (GAS)
     gasEndpoint?: string;
     gasApiKey?: string;
+    gasPublicKey?: string;
+    gasAdminKey?: string;
     // Cloudflare Pages / Worker (D1/KV)
     cloudflareWorkerUrl?: string;
     cloudflareApiKey?: string;
@@ -774,6 +783,7 @@ export interface PortalConfig {
     supabaseAnonKey?: string;
     supabaseTable?: string;
     // Tema & Modul
+    portalRequirePin?: boolean;
     theme: 'teal' | 'blue' | 'indigo' | 'slate' | 'rose' | 'emerald' | 'cyan';
     showFinance: boolean;
     showAcademic: boolean;
@@ -849,13 +859,17 @@ export interface E2eeModuleToggles {
 
 export interface E2eeConfig {
     enabled: boolean;
-    version: 1;
+    version: number;
+    kdfVersion?: number;
+    kdfIterations?: number;
+    recoveryKdfIterations?: number;
     keyId: string;
     salt: string;
     recoverySalt: string;
     passwordWrappedMdk: string;
     recoveryWrappedMdk: string;
     publicKeySpki: string;
+    publicKeyFingerprint?: string;
     encryptedPrivateKeyPkcs8: string;
     keyCheck: string;
     passwordHint?: string;
@@ -1267,6 +1281,40 @@ export interface Pendaftar extends Omit<Santri, 'id' | 'status' | 'riwayatStatus
     fotoUrl?: string;
     kamarId?: number;
     lastModified?: number;
+}
+
+export type SantriBerkasJenis = 'kk' | 'akta' | 'ijazah' | 'foto' | 'lainnya';
+export type SantriBerkasSumber = 'gas' | 'cloudflare_d1' | 'cloudflare_r2' | 'supabase' | 'firebase' | 'lokal';
+export type SantriBerkasStatusUnduh = 'tersimpan' | 'cloud' | 'gagal' | 'tidak_didukung';
+
+export interface SantriBerkas {
+    id?: number;
+    santriId?: number;
+    pendaftarId?: number;
+    jenis: SantriBerkasJenis;
+    fieldId: string;
+    fieldLabel?: string;
+    namaBerkas?: string;
+    mime: string;
+    ukuran: number;
+    sha256: string;
+    sumberSha256?: string;
+    blob?: Blob;
+    sumber: SantriBerkasSumber;
+    sumberRef: string;
+    statusUnduh: SantriBerkasStatusUnduh;
+    pesanError?: string;
+    terenkripsi: boolean;
+    encryptionMeta?: {
+        iv: string;
+        kid: string;
+        context: string;
+        kdf: 'hkdf-sha256';
+    };
+    asliTanpaKompresi?: boolean;
+    cloudDeletedAt?: string;
+    createdAt: string;
+    lastModified: number;
 }
 
 export interface AuditLog {

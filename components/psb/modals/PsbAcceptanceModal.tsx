@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Pendaftar, PondokSettings } from '../../../types';
+import { useAppContext } from '../../../AppContext';
+import {
+    BERKAS_UNSUPPORTED_BACKEND_LABEL,
+    canAccessSantriBerkas,
+    isAttachmentBackendOfflineSupported,
+} from '../../../services/santriBerkasService';
 import { getPsbRegistrationNumber, openWhatsappChat, generatePsbAcceptanceMessage, healPendaftarRecord, getPendaftarPhone, getPendaftarWaliName } from '../utils/psbUtils';
 
 export interface PsbPlacementOption {
@@ -18,6 +24,11 @@ export interface PsbBillingOption {
     jatuhTempo?: string;
 }
 
+export interface PsbAttachmentOption {
+    saveAttachments: boolean;
+    simpanAsliTanpaKompresi: boolean;
+}
+
 interface PsbAcceptanceModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -27,7 +38,8 @@ interface PsbAcceptanceModalProps {
     onConfirmed: (
         pendaftarOrList: Pendaftar | Pendaftar[],
         billingOption?: PsbBillingOption,
-        placementOption?: PsbPlacementOption
+        placementOption?: PsbPlacementOption,
+        attachmentOption?: PsbAttachmentOption
     ) => Promise<void>;
 }
 
@@ -39,6 +51,10 @@ export const PsbAcceptanceModal: React.FC<PsbAcceptanceModalProps> = ({
     settings,
     onConfirmed
 }) => {
+    const { currentUser } = useAppContext();
+    const canManageBerkas = canAccessSantriBerkas(currentUser);
+    const backendSupport = useMemo(() => isAttachmentBackendOfflineSupported(settings), [settings]);
+
     const items = useMemo(() => {
         const list = rawPendaftarList && rawPendaftarList.length > 0
             ? rawPendaftarList
@@ -69,6 +85,8 @@ export const PsbAcceptanceModal: React.FC<PsbAcceptanceModalProps> = ({
     const [sendWa, setSendWa] = useState<boolean>(true);
     const [batasDaftarUlang, setBatasDaftarUlang] = useState<string>('');
     const [rekeningTujuan, setRekeningTujuan] = useState<string>('');
+    const [saveAttachments, setSaveAttachments] = useState<boolean>(canManageBerkas && backendSupport.supported);
+    const [simpanAsliTanpaKompresi, setSimpanAsliTanpaKompresi] = useState<boolean>(false);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
     // Filtered Kelas & Rombel for primary placement selector
@@ -149,7 +167,9 @@ export const PsbAcceptanceModal: React.FC<PsbAcceptanceModalProps> = ({
         setRekeningTujuan(settings.telepon ? `Hubungi Bendahara / POSKO (${settings.telepon})` : 'Rekening Resmi Pesantren');
         setCreateBilling(true);
         setSendWa(!isBulk && !!waliPhone);
-    }, [isOpen, firstPendaftar?.id, isBulk]);
+        setSaveAttachments(canManageBerkas && backendSupport.supported);
+        setSimpanAsliTanpaKompresi(false);
+    }, [isOpen, firstPendaftar?.id, isBulk, canManageBerkas, backendSupport.supported]);
 
     const hasMixedJenjang = useMemo(() => {
         if (!isBulk) return false;
@@ -244,7 +264,12 @@ export const PsbAcceptanceModal: React.FC<PsbAcceptanceModalProps> = ({
                 jatuhTempo: batasDaftarUlang || undefined
             };
 
-            await onConfirmed(isBulk ? items : firstPendaftar, billingOption, placementOption);
+            const attachmentOption: PsbAttachmentOption = {
+                saveAttachments: canManageBerkas && backendSupport.supported && saveAttachments,
+                simpanAsliTanpaKompresi,
+            };
+
+            await onConfirmed(isBulk ? items : firstPendaftar, billingOption, placementOption, attachmentOption);
 
             if (!isBulk && sendWa && waliPhone) {
                 const msg = generatePsbAcceptanceMessage(firstPendaftar, settings, {
@@ -525,6 +550,49 @@ export const PsbAcceptanceModal: React.FC<PsbAcceptanceModalProps> = ({
                             </div>
                         )}
                     </div>
+
+                    {/* Opsi Simpan Lampiran Offline ke Perangkat */}
+                    {canManageBerkas && (
+                        <div className="border border-sky-200 bg-sky-50/50 rounded-xl p-4 space-y-2.5 text-xs">
+                            <label className={`flex items-start gap-3 select-none ${backendSupport.supported ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}>
+                                <input
+                                    type="checkbox"
+                                    checked={backendSupport.supported ? saveAttachments : false}
+                                    disabled={!backendSupport.supported}
+                                    onChange={e => setSaveAttachments(e.target.checked)}
+                                    className="mt-1 w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-gray-300 disabled:opacity-50"
+                                />
+                                <div className="space-y-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="font-bold text-sm text-sky-950">
+                                            Simpan lampiran ke perangkat
+                                        </span>
+                                        {!backendSupport.supported && (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                                {BERKAS_UNSUPPORTED_BACKEND_LABEL}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <span className="text-xs text-sky-800 block">
+                                        {backendSupport.supported
+                                            ? 'Mengunduh berkas lampiran pendaftar (KK, akta, ijazah, pas foto) ke penyimpanan offline perangkat setelah diterima. Jika unduhan gagal, penerimaan santri tetap berhasil dan dapat diulang nanti.'
+                                            : (backendSupport.reason || `Penarikan lampiran otomatis ${BERKAS_UNSUPPORTED_BACKEND_LABEL}.`)}
+                                    </span>
+                                </div>
+                            </label>
+                            {backendSupport.supported && saveAttachments && (
+                                <label className="flex items-center gap-2 pl-7 text-[11px] text-sky-900 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={simpanAsliTanpaKompresi}
+                                        onChange={e => setSimpanAsliTanpaKompresi(e.target.checked)}
+                                        className="w-3.5 h-3.5 rounded text-sky-600 focus:ring-sky-500 border-gray-300"
+                                    />
+                                    <span>Simpan gambar asli tanpa kompresi (ukuran penuh, default dikompresi ke 1600px JPEG)</span>
+                                </label>
+                            )}
+                        </div>
+                    )}
 
                     {/* Opsi Kirim WhatsApp (Single Mode) */}
                     {!isBulk && (

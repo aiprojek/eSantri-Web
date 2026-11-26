@@ -1,0 +1,82 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Global Default-Deny Safety Net
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string &&
+        id.size() >= 1 &&
+        id.size() <= 128 &&
+        id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidFileName(fileName) {
+      return fileName is string &&
+        fileName.size() >= 1 &&
+        fileName.size() <= 200 &&
+        fileName.matches('^[a-zA-Z0-9._\\-]+$');
+    }
+
+    function tenantOwner(tenantId) {
+      return isAuthenticated() && isValidId(tenantId) && request.auth.uid == tenantId;
+    }
+
+    function hasMemberLink(tenantId) {
+      return isValidId(tenantId) &&
+        firestore.exists(/databases/(default)/documents/tenants/$(tenantId)/metadata/memberLinks/$(request.auth.uid));
+    }
+
+    function hasLegacyMemberAccess(tenantId) {
+      return isValidId(tenantId) &&
+        firestore.exists(/databases/(default)/documents/tenants/$(tenantId)/metadata/members) &&
+        request.auth.uid in firestore.get(/databases/(default)/documents/tenants/$(tenantId)/metadata/members).data.uids;
+    }
+
+    function isTenantMember(tenantId) {
+      return isAuthenticated() && isValidId(tenantId) && (
+        tenantOwner(tenantId) ||
+        hasMemberLink(tenantId) ||
+        hasLegacyMemberAccess(tenantId)
+      );
+    }
+
+    function isAllowedPsbContentType() {
+      return request.resource != null &&
+        request.resource.contentType != null &&
+        request.resource.contentType in [
+          'application/pdf',
+          'image/jpeg',
+          'image/png',
+          'image/webp'
+        ];
+    }
+
+    function isWithinPsbSizeLimit() {
+      return request.resource != null &&
+        request.resource.size > 0 &&
+        request.resource.size <= 5 * 1024 * 1024;
+    }
+
+    // Lampiran PSB per tenant:
+    // - Upload publik dibatasi hanya `create` (tidak boleh overwrite `update`), maks 5 MB, MIME terizinkan.
+    // - Baca/daftar/hapus dibatasi khusus anggota tenant terautentikasi.
+    // Catatan: getDownloadURL menghasilkan URL bertoken unduh; lihat docs/psb-hybrid-operational-guide.md.
+    match /tenants/{tenantId}/psb/{fileName} {
+      allow get: if isValidId(tenantId) && isValidFileName(fileName) && isTenantMember(tenantId);
+      allow list: if isValidId(tenantId) && isTenantMember(tenantId);
+      allow create: if isValidId(tenantId) &&
+        isValidFileName(fileName) &&
+        isWithinPsbSizeLimit() &&
+        isAllowedPsbContentType();
+      allow update: if false;
+      allow delete: if isValidId(tenantId) && isValidFileName(fileName) && isTenantMember(tenantId);
+    }
+  }
+}

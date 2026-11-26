@@ -1,4 +1,4 @@
-import { getStorage, ref, uploadBytes, getDownloadURL, FirebaseStorage } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, getDownloadURL, getBlob, deleteObject, FirebaseStorage } from 'firebase/storage';
 import { getFirebaseApp, isFirebaseClientConfigReady } from './firebaseApp';
 
 let _storage: FirebaseStorage | null = null;
@@ -22,4 +22,4 @@ export const storage: FirebaseStorage = new Proxy({} as FirebaseStorage, {
   }
 });
 
-export { ref, uploadBytes, getDownloadURL, isFirebaseClientConfigReady };
+export { ref, uploadBytes, getDownloadURL, getBlob, deleteObject, isFirebaseClientConfigReady };

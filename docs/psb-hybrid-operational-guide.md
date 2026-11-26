@@ -120,3 +120,82 @@ Catatan metode WhatsApp:
 - Operator wajib simpan akses akun Google pemilik script dengan aman.
 - Setiap perubahan form/script harus melewati `Checklist Uji 5 Menit`.
 - Jangan mengganti struktur field form tanpa uji sinkronisasi ke rekap.
+
+## Keamanan Firebase Storage Rules & `getDownloadURL` (Jika Menggunakan Firebase)
+
+Jika pondok menggunakan mode **Firebase** (`tenants/{tenantId}/psb/{fileName}`):
+
+1. **Template Rules di Repo (`storage.rules` & `firebase.json`)**:
+   - `storage.rules` menerapkan pola *default-deny* untuk seluruh bucket, lalu mengizinkan `create` lampiran PSB per tenant (`tenants/{tenantId}/psb/{fileName}`) dengan batas ukuran **maksimal 5 MB**, tipe MIME terbatas pada `application/pdf`, `image/jpeg`, `image/png`, dan `image/webp`, serta menolak penimpaan file (`allow update: if false`).
+   - Akses `get`, `list`, dan `delete` di Storage dibatasi hanya untuk anggota tenant yang terautentikasi (`isTenantMember(tenantId)`).
+2. **Perilaku & Risiko Token `getDownloadURL`**:
+   - Fungsi `getDownloadURL()` menghasilkan tautan HTTPS berisi parameter `?alt=media&token=...` agar admin dapat langsung mempratinjau dokumen/foto.
+   - Siapa pun yang memperoleh URL lengkap beserta token tersebut dapat mengunduh berkas selama token belum dicabut di Firebase Console Storage (meskipun akses `list`/direktori tetap diblokir).
+   - **Praktik aman:** Jangan pernah membagikan tautan `getDownloadURL` lampiran PSB ke publik/pihak luar. Setelah berkas selesai diverifikasi atau diarsipkan secara offline, hapus/cabut token file lama bila sudah tidak diperlukan.
+3. **Deploy Manual via Firebase CLI** *(perubahan di repo belum diterapkan otomatis ke proyek cloud Anda)*:
+   ```bash
+   firebase login
+   firebase use <ID_PROJECT_FIREBASE_ANDA>
+   firebase deploy --only firestore:rules,storage
+   ```
+
+## Catatan Keamanan Lampiran PSB (Tidak Dienkripsi E2EE)
+
+- Sesuai keputusan desain produk agar panitia dapat langsung mempratinjau dan memverifikasi dokumen dari Google Drive / Storage / backend, **berkas lampiran PSB (KK, akta kelahiran, ijazah/SKL, pas foto) diunggah dalam bentuk mentah (tidak dienkripsi E2EE)**.
+- Saat modul E2EE PSB diaktifkan, perlindungan E2EE berlaku pada **biodata dan isian teks** (`__e2ee_bio`), disertai verifikasi pin fingerprint public key.
+- Untuk menjaga kerahasiaan lampiran mentah:
+  1. Gunakan skrip GAS v4+ (tidak memberi izin `ANYONE_WITH_LINK`, hanya mengikuti izin folder tujuan privat akun panitia).
+  2. Batasi akses folder Google Drive / R2 / Supabase / Firebase Console hanya untuk admin yang berwenang.
+  3. Arsipkan dokumen secara berkala lalu pindahkan ke tempat sampah / hapus file sementara di cloud jika masa seleksi telah selesai.
+
+## Konfigurasi CORS Bucket Firebase Storage (Wajib untuk Unduh Berkas Offline)
+
+Agar fitur **"Simpan lampiran ke perangkat"** maupun ekspor ZIP pada backend **Firebase** dapat membaca isi berkas lewat Firebase Storage SDK (`getBlob` / `getDownloadURL`), bucket Cloud Storage perlu mengizinkan permintaan `GET`/`HEAD` dari origin aplikasi admin Anda:
+
+1. Buat file `cors.json`:
+   ```json
+   [
+     {
+       "origin": ["https://DOMAIN_APLIKASI_ANDA", "http://localhost:3000"],
+       "method": ["GET", "HEAD"],
+       "maxAgeSeconds": 3600
+     }
+   ]
+   ```
+2. Terapkan ke bucket Firebase Storage (ganti `<NAMA_BUCKET>` sesuai `storageBucket` di konfigurasi Firebase):
+   ```bash
+   gsutil cors set cors.json gs://<NAMA_BUCKET>
+   ```
+3. **Status Provider Lain:**
+   - **Google Apps Script + Drive (`gas`):** Didukung penuh melalui aksi `POST action=getFile` dengan `ADMIN_KEY` dan verifikasi checksum `sha256`.
+   - **Cloudflare D1/R2 & Supabase:** Belum didukung untuk penarikan lampiran offline sampai pembaruan autentikasi skrip backend (`X-API-Key: ADMIN_KEY` / `createSignedUrl` dengan sesi admin) selesai diterapkan.
+
+## Keamanan Akses Lokal & Enkripsi `santriBerkas` (Offline IndexedDB)
+
+Lampiran yang ditarik ke penyimpanan perangkat disimpan pada tabel lokal `santriBerkas` di IndexedDB dan **dikecualikan** dari seluruh jalur sinkronisasi cloud (Firebase, Dropbox, WebDAV) maupun ekspor/impor JSON reguler.
+
+1. **Enkripsi Lokal E2EE (`berkas-local`, Fail-Closed):**
+   - Jika E2EE aktif, isi berkas dienkripsi di perangkat menggunakan kunci turunan **HKDF-SHA256** (`info: berkas-local`) dari Master Key Device Vault sebelum ditulis ke `santriBerkas`.
+   - Checksum `sha256` selalu dihitung dari isi asli (*plaintext*) sebelum enkripsi agar integritas tetap dapat diverifikasi saat ekspor/pemulihan.
+   - Bila E2EE aktif tetapi Master Password sedang terkunci saat penarikan berlangsung, aplikasi **menolak menyimpan plaintext** dan menandai status entri sebagai `cloud` (*Menunggu buka kunci Master Password E2EE*).
+2. **Pembatas Hak Akses Sisi Klien (Client-Side Boundary):**
+   - Akses melihat, mempratinjau, mengunduh ulang, menerapkan `fotoUrl`, mencadangkan/memulihkan `.ZIP`, dan menghapus `santriBerkas` dibatasi baik di antarmuka maupun di lapisan layanan (`santriBerkasService`) hanya untuk `role === 'admin'`, `permissions.psb === 'write'`, atau `permissions.santri === 'write'`, disertai pencatatan di `auditLogs` (`logActivity`).
+   - **Batasan Penting:** Karena eSantri adalah aplikasi SPA lokal-pertama (*client-side*), pengecekan peran dan hak akses di aplikasi merupakan **pembatas antarmuka/layanan di sisi klien (*client-side boundary*), bukan batas keamanan kriptografis atau server yang keras**. Skrip *same-origin* atau pengguna dengan akses fisik penuh ke DevTools/IndexedDB tetap dapat mengakses penyimpanan browser, sehingga kunci perlindungan kriptografis sejati bergantung pada pengaktifan E2EE dan penguncian sesi Device Vault saat perangkat ditinggalkan.
+3. **Mitigasi Same-Origin, Sanitasi, dan Pratinjau Aman:**
+   - Seluruh hasil unduhan divalidasi MIME allowlist (`image/jpeg`, `image/png`, `image/webp`, `application/pdf`), *magic bytes*, serta batas ukuran maks **5 MB** untuk menolak spoofing HTML/skrip.
+   - Pratinjau berkas dilakukan di modal *in-app* melalui `createSafeBlobPreviewUrl` dengan pembersihan `URL.revokeObjectURL`, tanpa membuka tab baru berisiko (`window.open`), serta didukung konfigurasi CSP Tauri (`object-src 'none'; frame-src 'self' blob:`) agar pratinjau PDF lokal tetap aman tanpa melonggarkan eksekusi skrip.
+
+## Hapus Salinan Cloud (Pasca Verifikasi & Cadangan Offline)
+
+Untuk mengurangi risiko penyimpanan berkas mentah berkepanjangan di cloud/Drive setelah masa seleksi selesai:
+
+1. **Prasyarat Wajib (Ditolak Jika Belum Terpenuhi):**
+   - Salinan cloud **hanya boleh dihapus** untuk entri `santriBerkas` yang sudah berstatus `tersimpan`, memiliki payload `Blob` lokal non-kosong, dan memiliki checksum `sha256` 64-heksadesimal yang valid.
+   - Pastikan Anda sudah mengekspor cadangan **Arsip ZIP Berkas** (atau ZIP cadangan terenkripsi di `Pengaturan > Backup`) sebelum menghapus salinan cloud.
+2. **Perilaku per Provider:**
+   - **GAS + Google Drive (`gas`):** Mengirim `POST action=deleteFile` disertai `ADMIN_KEY`; memindahkan file di dalam folder tujuan PSB ke **Trash Google Drive** (`file.setTrashed(true)`).
+   - **Firebase Storage (`firebase`):** Memanggil `deleteObject` pada Storage SDK sesuai aturan `storage.rules` (`allow delete: if isTenantMember(tenantId)`). Penghapusan bersifat permanen di bucket Storage.
+   - **Cloudflare D1/R2 & Supabase:** Tetap menolak dengan status **belum didukung oleh backend ini**.
+3. **Pelestarian Salinan Lokal & Audit:**
+   - Menghapus salinan cloud hanya menandai `cloudDeletedAt` pada metadata lokal dan **tidak menghapus** berkas offline pada tabel `santriBerkas`. Setiap penghapusan dicatat di `auditLogs`.
+

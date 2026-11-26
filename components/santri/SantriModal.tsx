@@ -12,6 +12,8 @@ import { TabDataDiri } from './santriModal/TabDataDiri';
 import { TabDataOrangTua } from './santriModal/TabDataOrangTua';
 import { TabRiwayatStatus } from './santriModal/TabRiwayatStatus';
 import { TabDataLain } from './modals/TabDataLain';
+import { TabBerkasSantri } from './santriModal/TabBerkasSantri';
+import { canAccessSantriBerkas } from '../../services/santriBerkasService';
 
 interface SantriModalProps {
   isOpen: boolean;
@@ -28,8 +30,9 @@ export const SantriModal: React.FC<SantriModalProps> = ({
   santriData,
   onSwitchToBulk
 }) => {
-  const { settings, showAlert } = useAppContext();
+  const { settings, showAlert, currentUser } = useAppContext();
   const { santriList } = useSantriContext();
+  const canViewBerkasTab = canAccessSantriBerkas(currentUser) && Boolean(santriData && santriData.id > 0);
   const formMethods = useForm<Santri>();
   const { handleSubmit, formState: { isSubmitting }, watch, setValue, getValues, reset } = formMethods;
 
@@ -175,6 +178,9 @@ export const SantriModal: React.FC<SantriModalProps> = ({
                         <TabButton tabId="dataOrtu" label="Data Orang Tua & Wali" icon="bi-people" />
                         <TabButton tabId="riwayatStatus" label="Riwayat Status" icon="bi-clock-history" />
                         <TabButton tabId="dataLain" label="Data Lain-lain" icon="bi-journal-text" />
+                        {canViewBerkasTab && (
+                            <TabButton tabId="berkas" label="Berkas" icon="bi-folder2-open" />
+                        )}
                     </div>
                 </div>
 
@@ -188,6 +194,9 @@ export const SantriModal: React.FC<SantriModalProps> = ({
                             openPrestasiModal={(p) => { setEditingPrestasi(p); setIsPrestasiModalOpen(true); }}
                             openPelanggaranModal={(p) => { setEditingPelanggaran(p); setIsPelanggaranModalOpen(true); }}
                         />
+                    )}
+                    {canViewBerkasTab && activeTab === 'berkas' && (
+                        <TabBerkasSantri formMethods={formMethods} santriData={santriData} />
                     )}
                 </div>
             </div>

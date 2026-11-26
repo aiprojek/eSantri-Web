@@ -14,10 +14,12 @@ import {
     decryptPortalSantriSummary,
     deriveFirebasePortalLookupCandidates,
     derivePortalAuthHashCandidates,
+    derivePortalPinVerificationHash,
     isEncryptedPortalRecord,
     isWebCryptoAvailable,
     normalizePortalDob,
     normalizePortalNis,
+    normalizePortalPin,
 } from '../../services/e2eeService';
 
 const PORTAL_THEMES: Record<string, {
@@ -236,6 +238,8 @@ export const PublicPortal: React.FC = () => {
 
     const [nisInput, setNisInput] = useState('');
     const [dobInput, setDobInput] = useState('');
+    const [pinInput, setPinInput] = useState('');
+    const [showPinInput, setShowPinInput] = useState(false);
     const [isLoggingIn, setIsLoggingIn] = useState(false);
     const [loginNotice, setLoginNotice] = useState<string>('');
     const [loggedInSantri, setLoggedInSantri] = useState<PortalSantriSummary | null>(null);
@@ -617,16 +621,66 @@ export const PublicPortal: React.FC = () => {
         );
     }
 
+    const getLoginBackoffKey = () => `esantri_portal_login_rl_${resolvedConn.portalId || tenantId || 'default'}`;
+
+    const readLoginBackoff = (): { fails: number; until: number } => {
+        try {
+            const raw = sessionStorage.getItem(getLoginBackoffKey());
+            if (!raw) return { fails: 0, until: 0 };
+            const parsed = JSON.parse(raw);
+            return {
+                fails: Number(parsed?.fails || 0),
+                until: Number(parsed?.until || 0),
+            };
+        } catch {
+            return { fails: 0, until: 0 };
+        }
+    };
+
+    const recordLoginBackoffFailure = () => {
+        const current = readLoginBackoff();
+        const nextFails = current.fails + 1;
+        const delaySeconds = nextFails <= 1 ? 0 : nextFails === 2 ? 2 : nextFails === 3 ? 5 : nextFails === 4 ? 15 : 30;
+        const until = delaySeconds > 0 ? Date.now() + delaySeconds * 1000 : 0;
+        try {
+            sessionStorage.setItem(getLoginBackoffKey(), JSON.stringify({ fails: nextFails, until }));
+        } catch {}
+        return { fails: nextFails, delaySeconds, until };
+    };
+
+    const clearLoginBackoff = () => {
+        try {
+            sessionStorage.removeItem(getLoginBackoffKey());
+        } catch {}
+    };
+
     const handlePortalLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        const backoff = readLoginBackoff();
+        if (backoff.until > Date.now()) {
+            const waitSec = Math.max(1, Math.ceil((backoff.until - Date.now()) / 1000));
+            setLoginNotice(`Terlalu banyak percobaan login gagal. Silakan tunggu ${waitSec} detik sebelum mencoba lagi.`);
+            return;
+        }
+
         const normalizedNis = nisInput.replace(/\s+/g, '').trim();
-        if (!normalizedNis || !dobInput.trim()) {
-            setLoginNotice('Silakan isi NIS dan tanggal lahir santri terlebih dahulu.');
+        const normPin = normalizePortalPin(pinInput);
+        const requirePin = Boolean(tenantSettings?.portalConfig?.portalRequirePin);
+        if (!normalizedNis || !dobInput.trim() || (requirePin && !normPin)) {
+            setLoginNotice(
+                requirePin
+                    ? 'Silakan isi NIS, Tanggal Lahir, dan PIN Portal santri terlebih dahulu.'
+                    : 'Silakan isi NIS dan tanggal lahir santri terlebih dahulu.'
+            );
             return;
         }
 
         const cleanNis = normalizePortalNis(normalizedNis);
         const cleanDob = normalizePortalDob(dobInput.trim());
+        const e2eePortalActive = Boolean(tenantSettings?.e2eeConfig?.enabled && tenantSettings?.e2eeConfig?.modules?.portal);
+        const pinAuthHash = normPin && isWebCryptoAvailable()
+            ? await derivePortalPinVerificationHash(resolvedConn.portalId, normalizedNis, normPin)
+            : '';
 
         const matchAndDecryptCandidate = async (
             list: any[],
@@ -638,11 +692,13 @@ export const PublicPortal: React.FC = () => {
                 if (isEncryptedPortalRecord(s)) {
                     return authHashes.includes(s.nis);
                 }
-                return normalizePortalNis(s.nis) === cleanNis && normalizePortalDob(s.tanggalLahir) === cleanDob;
+                if (normalizePortalNis(s.nis) !== cleanNis || normalizePortalDob(s.tanggalLahir) !== cleanDob) return false;
+                if (s.pinAuthHash && s.pinAuthHash !== pinAuthHash) return false;
+                return true;
             });
             if (!found) return null;
             if (isEncryptedPortalRecord(found)) {
-                return await decryptPortalSantriSummary<PortalSantriSummary>(found, portalId, normalizedNis, dobInput.trim());
+                return await decryptPortalSantriSummary<PortalSantriSummary>(found, portalId, normalizedNis, dobInput.trim(), normPin);
             }
             return found as PortalSantriSummary;
         };
@@ -652,7 +708,7 @@ export const PublicPortal: React.FC = () => {
         try {
             let matched: PortalSantriSummary | null = null;
             const authHashes = isWebCryptoAvailable()
-                ? await derivePortalAuthHashCandidates(resolvedConn.portalId, normalizedNis, dobInput.trim())
+                ? await derivePortalAuthHashCandidates(resolvedConn.portalId, normalizedNis, dobInput.trim(), normPin)
                 : [];
 
             if (resolvedConn.gasEndpoint) {
@@ -663,35 +719,55 @@ export const PublicPortal: React.FC = () => {
                         normalizedNis,
                         dobInput.trim(),
                         resolvedConn.gasApiKey,
-                        legacySantriList
+                        legacySantriList,
+                        normPin,
+                        e2eePortalActive
                     );
                 } catch (gasErr) {
                     console.warn('Login via GAS gagal, mencoba provider berikutnya:', gasErr);
                 }
             }
 
-            // Cek Cloudflare Worker jika provider cloudflare (E2EE authHash v2 -> v1 lebih dulu, lalu plaintext fallback)
+            // Cek Cloudflare Worker jika provider cloudflare (kirim POST; tidak pernah kirim plaintext nis+dob di query URL)
             if (!matched && tenantSettings?.portalConfig?.provider === 'cloudflare' && tenantSettings.portalConfig.cloudflareWorkerUrl) {
                 try {
                     const cfUrl = tenantSettings.portalConfig.cloudflareWorkerUrl.replace(/\/+$/, '');
-                    const attempts: Array<{ qNis: string; qDob: string }> = [
-                        ...authHashes.map((h) => ({ qNis: h, qDob: 'e2ee' })),
-                        { qNis: cleanNis, qDob: cleanDob },
-                    ];
+                    const attempts: Array<{ qNis: string; qDob: string }> = authHashes.map((h) => ({ qNis: h, qDob: 'e2ee' }));
+                    if (!e2eePortalActive) {
+                        attempts.push({ qNis: cleanNis, qDob: cleanDob });
+                    }
                     for (const att of attempts) {
-                        const cfRes = await fetch(`${cfUrl}?action=loginSantri&portalId=${encodeURIComponent(resolvedConn.portalId)}&nis=${encodeURIComponent(att.qNis)}&dob=${encodeURIComponent(att.qDob)}`);
+                        const cfRes = await fetch(`${cfUrl}?action=loginSantri&portalId=${encodeURIComponent(resolvedConn.portalId)}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                action: 'loginSantri',
+                                portalId: resolvedConn.portalId,
+                                nis: att.qNis,
+                                dob: att.qDob,
+                                ...(pinAuthHash ? { pinAuthHash } : {}),
+                            }),
+                        });
+                        if (cfRes.status === 429) {
+                            throw new Error('Terlalu banyak percobaan login gagal. Silakan tunggu beberapa menit.');
+                        }
                         if (cfRes.ok) {
                             const cfJson = await cfRes.json();
                             const candidate = cfJson?.data?.santri || cfJson?.santri;
                             if (cfJson?.success && candidate) {
-                                matched = isEncryptedPortalRecord(candidate)
-                                    ? await decryptPortalSantriSummary<PortalSantriSummary>(candidate, resolvedConn.portalId, normalizedNis, dobInput.trim())
-                                    : candidate;
-                                break;
+                                if (isEncryptedPortalRecord(candidate)) {
+                                    matched = await decryptPortalSantriSummary<PortalSantriSummary>(candidate, resolvedConn.portalId, normalizedNis, dobInput.trim(), normPin);
+                                } else if (!candidate.pinAuthHash || candidate.pinAuthHash === pinAuthHash) {
+                                    matched = candidate;
+                                }
+                                if (matched) break;
                             }
                         }
                     }
                 } catch (cfErr) {
+                    if ((cfErr as Error)?.message?.includes('Terlalu banyak')) {
+                        throw cfErr;
+                    }
                     console.warn('Login via Cloudflare Worker gagal:', cfErr);
                 }
             }
@@ -724,12 +800,14 @@ export const PublicPortal: React.FC = () => {
                         tenantId && tenantId !== 'default-portal'
                             ? tenantId
                             : (tenantSettings?.cloudSyncConfig?.firebasePairedTenantId || resolvedConn.portalId);
-                    const lookupIds = await deriveFirebasePortalLookupCandidates(resolvedConn.portalId, normalizedNis, dobInput.trim());
+                    const lookupIds = await deriveFirebasePortalLookupCandidates(resolvedConn.portalId, normalizedNis, dobInput.trim(), normPin);
                     const entryRec = await fetchPublicPortalEntry(fbTargetId, lookupIds);
                     if (entryRec) {
-                        matched = isEncryptedPortalRecord(entryRec)
-                            ? await decryptPortalSantriSummary<PortalSantriSummary>(entryRec, resolvedConn.portalId, normalizedNis, dobInput.trim())
-                            : (entryRec as PortalSantriSummary);
+                        if (isEncryptedPortalRecord(entryRec)) {
+                            matched = await decryptPortalSantriSummary<PortalSantriSummary>(entryRec, resolvedConn.portalId, normalizedNis, dobInput.trim(), normPin);
+                        } else if (!(entryRec as any).pinAuthHash || (entryRec as any).pinAuthHash === pinAuthHash) {
+                            matched = entryRec as PortalSantriSummary;
+                        }
                     } else {
                         const fbDoc = await fetchPublicPortalSettings(fbTargetId) as any;
                         const fbList: any[] = fbDoc?.santriSummary || [];
@@ -747,21 +825,29 @@ export const PublicPortal: React.FC = () => {
 
             // Fallback ke database lokal untuk Mode Pratinjau / Testing Mandiri
             if (!matched) {
-                matched = await getLocalSantriSummary(normalizedNis, dobInput.trim(), tenantSettings || undefined);
+                matched = await getLocalSantriSummary(normalizedNis, dobInput.trim(), tenantSettings || undefined, normPin);
             }
 
             if (!matched) {
+                const failState = recordLoginBackoffFailure();
                 setLoggedInSantri(null);
-                setLoginNotice('NIS atau tanggal lahir tidak sesuai dengan data santri aktif. Silakan periksa kembali.');
+                setLoginNotice(
+                    failState.delaySeconds > 0
+                        ? `Data tidak ditemukan atau kredensial tidak sesuai. Silakan tunggu ${failState.delaySeconds} detik sebelum mencoba lagi.`
+                        : 'Data tidak ditemukan atau kredensial tidak sesuai.'
+                );
                 return;
             }
+            clearLoginBackoff();
             setLoggedInSantri(matched);
             if (featureItems.length > 0) {
                 setActiveFeature(featureItems[0].key as any);
             }
         } catch (err) {
+            recordLoginBackoffFailure();
             setLoggedInSantri(null);
-            setLoginNotice((err as Error)?.message || 'NIS atau tanggal lahir tidak sesuai. Silakan periksa kembali.');
+            const msg = (err as Error)?.message || '';
+            setLoginNotice(msg.includes('Terlalu banyak') ? msg : 'Data tidak ditemukan atau kredensial tidak sesuai.');
         } finally {
             setIsLoggingIn(false);
         }
@@ -840,8 +926,41 @@ export const PublicPortal: React.FC = () => {
                                     required
                                     className={`w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 ${theme.ringFocus}`}
                                 />
+                            </div>
+                            <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide">
+                                        PIN Portal Santri (6 Digit)
+                                    </label>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${portalConfig?.portalRequirePin ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-600'}`}>
+                                        {portalConfig?.portalRequirePin ? 'Wajib' : 'Opsional'}
+                                    </span>
+                                </div>
+                                <div className="relative">
+                                    <input
+                                        type={showPinInput ? 'text' : 'password'}
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                        maxLength={12}
+                                        value={pinInput}
+                                        onChange={(e) => setPinInput(e.target.value)}
+                                        placeholder="Masukkan 6 digit PIN dari Pondok"
+                                        required={Boolean(portalConfig?.portalRequirePin)}
+                                        className={`w-full rounded-xl border border-slate-300 px-3.5 py-2.5 pr-10 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 ${theme.ringFocus}`}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPinInput((prev) => !prev)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        aria-label="Tampilkan atau sembunyikan PIN"
+                                    >
+                                        <i className={`bi ${showPinInput ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                                    </button>
+                                </div>
                                 <p className="mt-1 text-[11px] text-slate-500">
-                                    Verifikasi keamanan satu pintu: data hanya dibuka untuk santri yang terautentikasi.
+                                    {portalConfig?.portalRequirePin
+                                        ? 'Verifikasi ganda: NIS, Tanggal Lahir, dan PIN Portal rahasia dari pengurus pondok.'
+                                        : 'Isi PIN jika pengurus pondok sudah membagikan kartu PIN santri.'}
                                 </p>
                             </div>
                             <button
@@ -929,6 +1048,7 @@ export const PublicPortal: React.FC = () => {
                                         setLoggedInSantri(null);
                                         setNisInput('');
                                         setDobInput('');
+                                        setPinInput('');
                                         setLoginNotice('');
                                     }}
                                 >

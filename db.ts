@@ -1,6 +1,6 @@
 
 import Dexie, { Table } from 'dexie';
-import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, JurnalMengajarRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal, JadwalUjian, PayrollRecord, PiketSchedule, ProdukKoperasi, TransaksiKoperasi, RiwayatStok, KeuanganKoperasi, PendingOrder, ChartOfAccount, Diskon, Supplier, PembayaranHutang, Warehouse, StockTransfer, DigitalAsset } from './types';
+import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, SantriBerkas, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, JurnalMengajarRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal, JadwalUjian, PayrollRecord, PiketSchedule, ProdukKoperasi, TransaksiKoperasi, RiwayatStok, KeuanganKoperasi, PendingOrder, ChartOfAccount, Diskon, Supplier, PembayaranHutang, Warehouse, StockTransfer, DigitalAsset } from './types';
 
 export interface PondokSettingsWithId extends PondokSettings {
   id?: number;
@@ -49,6 +49,7 @@ export class ESantriDatabase extends Dexie {
   warehouses!: Table<Warehouse, number>;
   stockTransfers!: Table<StockTransfer, number>;
   digitalAssets!: Table<DigitalAsset, string>;
+  santriBerkas!: Table<SantriBerkas, number>;
 
   constructor() {
     super('eSantriDB');
@@ -101,6 +102,10 @@ export class ESantriDatabase extends Dexie {
       tagihan: '++id, santriId, [santriId+biayaId+bulan+tahun], [santriId+biayaId], status, lastModified'
     }).upgrade(async () => {
        // Removes unique constraint &[santriId+biayaId+tahun+bulan] to support partial payments (cicilan)
+    });
+
+    (this as any).version(53).stores({
+      santriBerkas: '++id, santriId, pendaftarId, jenis, statusUnduh, [pendaftarId+fieldId], fieldId, lastModified'
     });
   }
 }

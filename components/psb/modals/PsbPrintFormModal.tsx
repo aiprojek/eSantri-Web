@@ -247,7 +247,7 @@ const PsbApplicantFormContent: React.FC<{
                         maxHeight: '120px'
                     }}
                 >
-                    {pasFotoUrl ? (
+                    {pasFotoUrl && !/drive\.google\.com|googleusercontent\.com/i.test(String(pasFotoUrl)) ? (
                         <img
                             src={pasFotoUrl}
                             alt="Pas Foto"
@@ -260,8 +260,12 @@ const PsbApplicantFormContent: React.FC<{
                         <div className="text-slate-500 flex flex-col items-center">
                             <i className="bi bi-person-bounding-box text-2xl mb-1"></i>
                             <span className="text-[9px] font-bold uppercase leading-tight">
-                                Pas Foto
-                                <br />3 x 4 cm
+                                {pasFotoUrl ? 'Pas Foto di Drive' : (
+                                    <>
+                                        Pas Foto
+                                        <br />3 x 4 cm
+                                    </>
+                                )}
                             </span>
                         </div>
                     )}

@@ -27,6 +27,8 @@ import {
     buildStandaloneHybridEncryptJsHelper,
     decryptAnyEnvelope,
     encryptObjectHybridWithPublicKey,
+    ensureDeviceVaultHydrated,
+    isDeviceUnlockedForConfig,
     tryParseE2eeEnvelope
 } from './e2eeService';
 
@@ -1454,7 +1456,7 @@ export const generateRaporFormHtml = (
         let toastTimer = null;
         const loadedBaselineBySantri = {};
         ${settings.e2eeConfig?.enabled && settings.e2eeConfig?.modules?.rapor && settings.e2eeConfig?.publicKeySpki
-            ? buildStandaloneHybridEncryptJsHelper(settings.e2eeConfig.publicKeySpki, settings.e2eeConfig.keyId)
+            ? buildStandaloneHybridEncryptJsHelper(settings.e2eeConfig.publicKeySpki, settings.e2eeConfig.keyId, 'rapor')
             : ''}
         ${buildStandaloneCloudHelperJs({
             providerVar: backendProvider,
@@ -2862,7 +2864,7 @@ const unwrapEncryptedRaporDataMap = async (
                 nis?: string;
                 data?: Record<string, any>;
                 clearedKeys?: string[];
-            }>(env);
+            }>(env, { expectedContext: 'rapor' });
             if (inner.santriName) santriName = inner.santriName;
             if (inner.nis) nis = inner.nis;
             if (Array.isArray(inner.clearedKeys)) {
@@ -2917,6 +2919,7 @@ export const fetchRaporFromCloud = async (
     cloudOptions?: {
         backendProvider?: RaporCloudProvider;
         apiKey?: string;
+        allowPlaintext?: boolean;
     }
 ): Promise<any[]> => {
     try {
@@ -2928,6 +2931,16 @@ export const fetchRaporFromCloud = async (
             },
             filterOptions
         );
+
+        let e2eeRaporActive = false;
+        try {
+            const settingsRows = await db.settings.toArray();
+            const cfg = settingsRows[0]?.e2eeConfig;
+            e2eeRaporActive = Boolean(cfg?.enabled && cfg?.modules?.rapor);
+        } catch {
+            e2eeRaporActive = false;
+        }
+        const rejectPlaintext = Boolean(e2eeRaporActive && !cloudOptions?.allowPlaintext);
 
         const decodedRows: any[] = [];
         let encryptedRowCount = 0;
@@ -2944,7 +2957,12 @@ export const fetchRaporFromCloud = async (
             }
             const e2eeKeys = Object.keys(parsedData).filter((k) => k.startsWith('__e2ee_'));
             if (e2eeKeys.length === 0) {
-                decodedRows.push({ ...row, _e2eeChunkCount: 0, _e2eeSkippedChunks: 0 });
+                decodedRows.push({
+                    ...row,
+                    _e2eeChunkCount: 0,
+                    _e2eeSkippedChunks: 0,
+                    ...(rejectPlaintext ? { _e2eePlaintextRejected: true } : {}),
+                });
                 continue;
             }
             encryptedRowCount++;
@@ -3011,6 +3029,7 @@ export interface ParseRaporFilterOptions {
     allowedRombelIds?: number[];
     dryRun?: boolean;
     conflictMode?: 'overwrite' | 'fill_empty_only';
+    allowPlaintext?: boolean;
 }
 
 export interface RaporSyncConflictItem {
@@ -3033,6 +3052,8 @@ export interface RaporSyncStats {
     tabsDetected: string[];
     skippedLockedCount: number;
     skippedOutOfScopeCount: number;
+    rejectedPlaintextCount?: number;
+    rejectedPlaintextItems?: any[];
 }
 
 export interface RaporCloudInspectionSummary {
@@ -3045,6 +3066,7 @@ export interface RaporCloudInspectionSummary {
     latestTimestamp: string | null;
     maxChunksPerRow: number;
     bloatedRowCount: number;
+    plaintextRejectedCount?: number;
 }
 
 const RESERVED_CLOUD_ROW_KEYS = new Set([
@@ -3061,6 +3083,31 @@ const RESERVED_CLOUD_ROW_KEYS = new Set([
     'DataJSON'
 ]);
 
+export const hasRaporRowE2eeEncryption = (row: any): boolean => {
+    if (!row || typeof row !== 'object') return false;
+    if (Number(row._e2eeChunkCount) > 0) return true;
+    let parsedRowData: Record<string, any> = {};
+    if (row.DataJSON) {
+        try {
+            parsedRowData = typeof row.DataJSON === 'string' ? JSON.parse(row.DataJSON) : row.DataJSON;
+        } catch {
+            parsedRowData = {};
+        }
+    } else if (row.data && typeof row.data === 'object') {
+        parsedRowData = row.data;
+    }
+    return Boolean(
+        parsedRowData &&
+        typeof parsedRowData === 'object' &&
+        Object.keys(parsedRowData).some((k) => k.startsWith('__e2ee_'))
+    );
+};
+
+export const isRaporCloudRowPlaintextRejected = (row: any, rejectPlaintext: boolean): boolean => {
+    if (!rejectPlaintext || !row) return false;
+    return Boolean(row._e2eePlaintextRejected || !hasRaporRowE2eeEncryption(row));
+};
+
 export const inspectRaporCloudSummary = (
     rows: any[],
     settings: PondokSettings
@@ -3075,9 +3122,14 @@ export const inspectRaporCloudSummary = (
     let latestTsIso: string | null = null;
     let maxChunksPerRow = 0;
     let bloatedRowCount = 0;
+    let plaintextRejectedCount = 0;
 
     for (const row of safeRows) {
         if (!row) continue;
+        if (row._e2eePlaintextRejected) {
+            plaintextRejectedCount++;
+            continue;
+        }
         let rowChunks = typeof row._e2eeChunkCount === 'number' ? row._e2eeChunkCount : 0;
         if (rowChunks === 0 && row.DataJSON) {
             try {
@@ -3123,7 +3175,7 @@ export const inspectRaporCloudSummary = (
     }
 
     return {
-        totalRows: safeRows.length,
+        totalRows: safeRows.length - plaintextRejectedCount,
         uniqueStudents: studentSet.size,
         tabs: Array.from(tabMap.entries()).map(([name, rowCount]) => ({ name, rowCount })),
         periods: Array.from(periodSet),
@@ -3138,7 +3190,8 @@ export const inspectRaporCloudSummary = (
         }),
         latestTimestamp: latestTsIso,
         maxChunksPerRow,
-        bloatedRowCount
+        bloatedRowCount,
+        plaintextRejectedCount
     };
 };
 
@@ -3158,6 +3211,12 @@ export const syncRaporStructuredData = async (
     const conflicts: RaporSyncConflictItem[] = [];
     let skippedLockedCount = 0;
     let skippedOutOfScopeCount = 0;
+    const rejectedPlaintextItems: any[] = [];
+    const rejectPlaintext = Boolean(
+        settings.e2eeConfig?.enabled &&
+        settings.e2eeConfig?.modules?.rapor &&
+        !filterOptions?.allowPlaintext
+    );
 
     const isDryRun = Boolean(filterOptions?.dryRun);
     const conflictMode = filterOptions?.conflictMode || 'overwrite';
@@ -3224,7 +3283,12 @@ export const syncRaporStructuredData = async (
 
         for (const rawRec of payload.records || []) {
             let rec = rawRec;
-            if (rawRec?.data && typeof rawRec.data === 'object' && Object.keys(rawRec.data).some((k) => k.startsWith('__e2ee_'))) {
+            const hasE2eeChunks = Boolean(
+                rawRec?.data &&
+                typeof rawRec.data === 'object' &&
+                Object.keys(rawRec.data).some((k) => k.startsWith('__e2ee_'))
+            );
+            if (hasE2eeChunks) {
                 try {
                     const unwrapped = await unwrapEncryptedRaporDataMap(rawRec.data);
                     const { __cleared: _drop, ...cleanData } = unwrapped.data;
@@ -3246,6 +3310,13 @@ export const syncRaporStructuredData = async (
                     errors.push(`Santri #${rawRec.santriId}: ${errMsg}`);
                     continue;
                 }
+            } else if (rejectPlaintext) {
+                rejectedPlaintextItems.push({
+                    kind: 'structured',
+                    meta: payload.meta,
+                    record: rawRec,
+                });
+                continue;
             }
             const santriIdNum = Number(rec.santriId);
             if (!santriIdNum) continue;
@@ -3476,10 +3547,6 @@ export const syncRaporStructuredData = async (
                 continue;
             }
 
-            if (row.SheetName) {
-                tabsDetectedSet.add(String(row.SheetName));
-            }
-
             let parsedRowData: Record<string, any> = {};
             if (row.DataJSON) {
                 try {
@@ -3487,6 +3554,15 @@ export const syncRaporStructuredData = async (
                 } catch {
                     parsedRowData = {};
                 }
+            }
+
+            if (isRaporCloudRowPlaintextRejected({ ...row, DataJSON: parsedRowData }, rejectPlaintext)) {
+                rejectedPlaintextItems.push(row);
+                continue;
+            }
+
+            if (row.SheetName) {
+                tabsDetectedSet.add(String(row.SheetName));
             }
 
             // Fallback two-way: jika ada kolom ekstra langsung pada objek row (misal [KEY]), ikut gabungkan atau deteksi pengosongan sel
@@ -3596,7 +3672,9 @@ export const syncRaporStructuredData = async (
         conflicts,
         tabsDetected: Array.from(tabsDetectedSet),
         skippedLockedCount,
-        skippedOutOfScopeCount
+        skippedOutOfScopeCount,
+        rejectedPlaintextCount: rejectedPlaintextItems.length,
+        rejectedPlaintextItems
     };
 
     return {
@@ -3604,6 +3682,128 @@ export const syncRaporStructuredData = async (
         errors,
         stats
     };
+};
+
+export const acceptAndReencryptPlaintextRapor = async (
+    items: any[],
+    settings: PondokSettings,
+    filterOptions?: ParseRaporFilterOptions
+): Promise<{ importedCount: number; reencryptedCloudCount: number }> => {
+    await ensureDeviceVaultHydrated();
+    const e2eeCfg = settings.e2eeConfig;
+    if (e2eeCfg?.enabled && !isDeviceUnlockedForConfig(e2eeCfg)) {
+        throw new Error('E2EE_LOCKED: Buka kunci Master Password E2EE terlebih dahulu sebelum menerima & mengenkripsi ulang nilai.');
+    }
+
+    let importedCount = 0;
+    const cloudRowsToImport: any[] = [];
+    const structuredMap = new Map<string, { meta: any; records: any[] }>();
+
+    for (const item of items || []) {
+        if (item?.kind === 'structured' && item.meta && item.record) {
+            const mKey = `${item.meta.tahunAjaran || ''}|${item.meta.semester || ''}|${item.meta.templateId || ''}|${item.meta.rombelId || 0}`;
+            if (!structuredMap.has(mKey)) {
+                structuredMap.set(mKey, { meta: item.meta, records: [] });
+            }
+            structuredMap.get(mKey)!.records.push(item.record);
+        } else {
+            const cleanRow = { ...item };
+            delete cleanRow._e2eePlaintextRejected;
+            cloudRowsToImport.push(cleanRow);
+        }
+    }
+
+    if (cloudRowsToImport.length > 0) {
+        const res = await syncRaporStructuredData(cloudRowsToImport, settings, {
+            ...filterOptions,
+            dryRun: false,
+            conflictMode: filterOptions?.conflictMode || 'overwrite',
+            allowPlaintext: true
+        });
+        importedCount += res.successCount;
+    }
+
+    for (const group of structuredMap.values()) {
+        const res = await syncRaporStructuredData(group, settings, {
+            ...filterOptions,
+            dryRun: false,
+            conflictMode: filterOptions?.conflictMode || 'overwrite',
+            allowPlaintext: true
+        });
+        importedCount += res.successCount;
+    }
+
+    let reencryptedCloudCount = 0;
+    const cleanUrl = (settings.raporCloudConfig?.googleScriptUrl || '').trim();
+    if (cleanUrl && e2eeCfg?.enabled && e2eeCfg?.modules?.rapor && e2eeCfg?.publicKeySpki && cloudRowsToImport.length > 0) {
+        try {
+            const periodGroups = new Map<string, { meta: any; records: any[] }>();
+            for (const row of cloudRowsToImport) {
+                const ta = String(row.TahunAjaran || '').trim();
+                const sem = String(row.Semester || 'Ganjil').trim();
+                const rId = parseInt(String(row.RombelID || '0'), 10) || 0;
+                const tplId = String(row.TemplateID || filterOptions?.templateId || '').trim();
+                const gKey = `${ta}|${sem}|${rId}|${tplId}`;
+                if (!periodGroups.has(gKey)) {
+                    const tplObj = settings.raporTemplates?.find((t) => t.id === tplId);
+                    const rObj = settings.rombel.find((r) => Number(r.id) === rId);
+                    periodGroups.set(gKey, {
+                        meta: {
+                            rombelId: rId,
+                            rombelName: rObj?.nama || String(row.RombelNama || 'Rombel'),
+                            templateId: tplId,
+                            templateName: tplObj?.name || 'Rapor',
+                            tahunAjaran: ta,
+                            semester: sem,
+                            tabMode: settings.raporCloudConfig?.tabMode || 'per_rombel',
+                            timestamp: new Date().toISOString(),
+                        },
+                        records: [],
+                    });
+                }
+                let parsedData: Record<string, any> = {};
+                try {
+                    parsedData = typeof row.DataJSON === 'string' ? JSON.parse(row.DataJSON) : (row.DataJSON || {});
+                } catch {}
+                const env = await encryptObjectHybridWithPublicKey(
+                    {
+                        santriName: row.NamaSantri || '',
+                        nis: row.NIS || '',
+                        data: parsedData,
+                        clearedKeys: [],
+                    },
+                    e2eeCfg.publicKeySpki,
+                    e2eeCfg.keyId,
+                    { context: 'rapor' }
+                );
+                const chunkKey = `__e2ee_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+                periodGroups.get(gKey)!.records.push({
+                    santriId: parseInt(String(row.SantriID || '0'), 10),
+                    nis: '',
+                    santriName: '[E2EE]',
+                    rombelId: rId,
+                    rombelName: String(row.RombelNama || 'Rombel'),
+                    data: { [chunkKey]: JSON.stringify(env) },
+                });
+            }
+            for (const grp of periodGroups.values()) {
+                if (grp.records.length === 0) continue;
+                const pushRes = await pushRaporPayloadToCloudAdapter(
+                    {
+                        endpointUrl: cleanUrl,
+                        backendProvider: settings.raporCloudConfig?.backendProvider || 'gas',
+                        apiKey: settings.raporCloudConfig?.apiKey,
+                    },
+                    grp
+                );
+                reencryptedCloudCount += pushRes.pushedStudents || 0;
+            }
+        } catch (err) {
+            console.warn('Re-enkripsi ke staging Cloud Rapor melewati error non-fatal:', err);
+        }
+    }
+
+    return { importedCount, reencryptedCloudCount };
 };
 
 export const parseRaporDataV2 = async (
@@ -3745,7 +3945,8 @@ export const pushRaporGradesToCloud = async (
                           clearedKeys: rec.clearedKeys || []
                       },
                       params.settings.e2eeConfig!.publicKeySpki,
-                      params.settings.e2eeConfig!.keyId
+                      params.settings.e2eeConfig!.keyId,
+                      { context: 'rapor' }
                   );
                   const chunkKey = `__e2ee_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
                   return {

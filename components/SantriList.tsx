@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { useSantriFilter } from '../hooks/useSantriFilter';
@@ -54,12 +54,52 @@ const SantriList: React.FC = () => {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    const [sortOrder, setSortOrder] = useState<'newest' | 'name-asc' | 'nis-asc'>('newest');
+
     useEffect(() => {
         setCurrentPage(1);
-    }, [santriFilters]);
+    }, [santriFilters, sortOrder]);
 
-    const paginatedSantri = filteredSantri.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-    const totalPages = Math.ceil(filteredSantri.length / itemsPerPage);
+    const sortedSantri = useMemo(() => {
+        const copy = [...filteredSantri];
+        if (sortOrder === 'name-asc') {
+            copy.sort((a, b) => (a.namaLengkap || '').localeCompare(b.namaLengkap || '', 'id'));
+        } else if (sortOrder === 'nis-asc') {
+            copy.sort((a, b) => (a.nis || '').localeCompare(b.nis || '', 'id', { numeric: true }));
+        } else {
+            copy.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+        }
+        return copy;
+    }, [filteredSantri, sortOrder]);
+
+    const hasActiveFilters = Boolean(
+        (santriFilters.search || '').trim() ||
+        santriFilters.jenjang ||
+        santriFilters.kelas ||
+        santriFilters.rombel ||
+        santriFilters.status ||
+        santriFilters.gender ||
+        santriFilters.provinsi ||
+        santriFilters.kabupatenKota ||
+        santriFilters.kecamatan
+    );
+
+    const handleResetFilters = () => {
+        setSantriFilters({
+            search: '',
+            jenjang: '',
+            kelas: '',
+            rombel: '',
+            status: '',
+            gender: '',
+            provinsi: '',
+            kabupatenKota: '',
+            kecamatan: '',
+        });
+    };
+
+    const paginatedSantri = sortedSantri.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    const totalPages = Math.ceil(sortedSantri.length / itemsPerPage);
 
     const handleEdit = (santri: Santri) => {
         setEditingSantri(santri);
@@ -310,11 +350,58 @@ const SantriList: React.FC = () => {
                     filters={santriFilters}
                     onChange={setSantriFilters}
                     title="Filter Santri"
-                    searchPlaceholder="Cari Nama, NIS, atau NIK..."
-                    resultCount={filteredSantri.length}
+                    searchPlaceholder="Cari Nama, NIS, NISN, atau NIK..."
+                    resultCount={sortedSantri.length}
                     showGender
+                    extraDesktop={
+                        <div>
+                            <label className="app-label mb-1.5 block pl-1 min-h-[1.25rem] truncate whitespace-nowrap">
+                                Urutkan
+                            </label>
+                            <select
+                                value={sortOrder}
+                                onChange={(e) => setSortOrder(e.target.value as 'newest' | 'name-asc' | 'nis-asc')}
+                                className="app-select h-10 text-sm font-semibold"
+                            >
+                                <option value="newest">Terbaru</option>
+                                <option value="name-asc">Nama (A–Z)</option>
+                                <option value="nis-asc">NIS</option>
+                            </select>
+                        </div>
+                    }
+                    extraMobile={
+                        <div>
+                            <label className="app-label mb-1.5 ml-0.5 block text-xs font-bold text-slate-700">
+                                Urutkan
+                            </label>
+                            <select
+                                value={sortOrder}
+                                onChange={(e) => setSortOrder(e.target.value as 'newest' | 'name-asc' | 'nis-asc')}
+                                className="app-select rounded-xl py-2.5 px-3 text-sm font-semibold"
+                            >
+                                <option value="newest">Terbaru</option>
+                                <option value="name-asc">Nama (A–Z)</option>
+                                <option value="nis-asc">NIS</option>
+                            </select>
+                        </div>
+                    }
                     className="border-0 p-0 shadow-none"
                 />
+
+                {hasActiveFilters && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 py-2 text-xs text-amber-900">
+                        <span>
+                            Filter aktif: menampilkan <strong>{sortedSantri.length}</strong> dari <strong>{santriList.length}</strong> total santri.
+                        </span>
+                        <button
+                            type="button"
+                            onClick={handleResetFilters}
+                            className="font-bold text-amber-800 underline hover:text-amber-950"
+                        >
+                            Reset Filter
+                        </button>
+                    </div>
+                )}
 
                 {selectedIds.length > 0 && canWrite && (
                     <div className="app-toolbar animate-fade-in-down">
@@ -366,7 +453,7 @@ const SantriList: React.FC = () => {
                                 )}
                                 <td className="flex items-center gap-3 p-4 font-bold text-slate-800">
                                     <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full border border-teal-100 bg-teal-50">
-                                         {s.fotoUrl && !s.fotoUrl.includes('text=Foto') ? <img src={s.fotoUrl} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-xs font-bold text-teal-600">{s.namaLengkap.charAt(0)}</div>}
+                                         {s.fotoUrl && !s.fotoUrl.includes('text=Foto') ? <img src={s.fotoUrl} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-xs font-bold text-teal-600">{(s.namaLengkap || '?').charAt(0)}</div>}
                                     </div>
                                     {s.namaLengkap}
                                 </td>
@@ -450,7 +537,7 @@ const SantriList: React.FC = () => {
                             <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border border-teal-100 bg-teal-50">
                                 {s.fotoUrl && !s.fotoUrl.includes('text=Foto')
                                     ? <img src={s.fotoUrl} alt="" className="h-full w-full object-cover" />
-                                    : <div className="flex h-full w-full items-center justify-center text-sm font-bold text-teal-600">{s.namaLengkap.charAt(0)}</div>}
+                                    : <div className="flex h-full w-full items-center justify-center text-sm font-bold text-teal-600">{(s.namaLengkap || '?').charAt(0)}</div>}
                             </div>
                             <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm font-bold text-slate-800">{s.namaLengkap}</p>

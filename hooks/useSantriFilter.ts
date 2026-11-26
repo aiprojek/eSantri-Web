@@ -33,18 +33,19 @@ export const useSantriFilter = (santriList: Santri[], filters: Filters, setFilte
   };
 
   const filteredSantri = useMemo(() => {
+    const searchLower = (filters.search || '').trim().toLowerCase();
     return santriList.filter(s => {
-      const searchLower = filters.search.toLowerCase();
-      const nameMatch = s.namaLengkap.toLowerCase().includes(searchLower);
-      const nisMatch = s.nis.toLowerCase().includes(searchLower);
-      const nikMatch = s.nik?.toLowerCase().includes(searchLower) || false;
+      const nameMatch = (s.namaLengkap || '').toLowerCase().includes(searchLower);
+      const nisMatch = (s.nis || '').toLowerCase().includes(searchLower);
+      const nisnMatch = (s.nisn || '').toLowerCase().includes(searchLower);
+      const nikMatch = (s.nik || '').toLowerCase().includes(searchLower);
 
-      const provinsiMatch = !filters.provinsi || s.alamat.provinsi?.toLowerCase().includes(filters.provinsi.toLowerCase());
-      const kabupatenMatch = !filters.kabupatenKota || s.alamat.kabupatenKota?.toLowerCase().includes(filters.kabupatenKota.toLowerCase());
-      const kecamatanMatch = !filters.kecamatan || s.alamat.kecamatan?.toLowerCase().includes(filters.kecamatan.toLowerCase());
+      const provinsiMatch = !filters.provinsi || (s.alamat?.provinsi || '').toLowerCase().includes(filters.provinsi.toLowerCase());
+      const kabupatenMatch = !filters.kabupatenKota || (s.alamat?.kabupatenKota || '').toLowerCase().includes(filters.kabupatenKota.toLowerCase());
+      const kecamatanMatch = !filters.kecamatan || (s.alamat?.kecamatan || '').toLowerCase().includes(filters.kecamatan.toLowerCase());
 
       return (
-        (nameMatch || nisMatch || nikMatch) &&
+        (!searchLower || nameMatch || nisMatch || nisnMatch || nikMatch) &&
         (!filters.jenjang || Number(s.jenjangId) === parseInt(filters.jenjang, 10)) &&
         (!filters.kelas || Number(s.kelasId) === parseInt(filters.kelas, 10)) &&
         (!filters.rombel || Number(s.rombelId) === parseInt(filters.rombel, 10)) &&

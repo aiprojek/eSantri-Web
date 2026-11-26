@@ -51,6 +51,12 @@ import {
     PSB_ALL_STANDARD_FIELD_KEYS
 } from './utils/psbUtils';
 
+import {
+    checkPendaftarAgainstSantriPool,
+    describeExistingSantriLocation,
+    partitionPendaftarForAcceptance,
+} from './utils/psbAcceptanceGuard';
+
 const PendaftarModal = React.lazy(() => import('./modals/PendaftarModal').then((module) => ({ default: module.PendaftarModal })));
 const BulkPendaftarEditor = React.lazy(() => import('./modals/BulkPendaftarEditor').then((module) => ({ default: module.BulkPendaftarEditor })));
 
@@ -65,7 +71,7 @@ interface PsbRekapProps {
 
 export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onImportFromWA, onUpdateList, canWrite, onSaveConfig }) => {
     const { showToast, showConfirmation, showAlert, currentUser } = useAppContext();
-    const { santriList, onBulkAddSantri } = useSantriContext();
+    const { santriList, setSantriFilters } = useSantriContext();
     const { activeYear: defaultActiveYear } = getPsbAcademicYearOptions(settings);
     const activePsbTa = (settings.psbConfig?.tahunAjaranAktif || defaultActiveYear || '').trim();
 
@@ -1085,59 +1091,110 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         pendaftarOrList: Pendaftar | Pendaftar[],
         billingOption?: PsbBillingOption,
         placementOption?: PsbPlacementOption,
-        attachmentOption?: PsbAttachmentOption
+        attachmentOption?: PsbAttachmentOption,
+        behaviorOption?: { ignoreIdentifierConflict?: boolean }
     ) => {
         if (!canWrite) return;
         const rawList = Array.isArray(pendaftarOrList) ? pendaftarOrList : [pendaftarOrList];
         if (rawList.length === 0) return;
 
-        // Guard against duplicate migration into Data Santri (checks live santriList + same batch)
-        const alreadyMigratedNames: string[] = [];
-        const workingSantriPool: Santri[] = [...santriList];
-        const list = rawList.filter((p) => {
-            const cleanNik = (p.nik || '').trim();
-            const cleanNisn = (p.nisn || '').trim();
-            const cleanNama = (p.namaLengkap || '').trim().toLowerCase();
-            const cleanDob = (p.tanggalLahir || '').trim().slice(0, 10);
-            const isDuplicateInSantri = workingSantriPool.some(s => {
-                if (s.deleted) return false;
-                if (p.santriId && s.id === p.santriId) return true;
-                if (cleanNik && cleanNik.length >= 8 && (s.nik || '').trim() === cleanNik) return true;
-                if (cleanNisn && cleanNisn.length >= 6 && (s.nisn || '').trim() === cleanNisn) return true;
-                if (
-                    cleanNama &&
-                    cleanDob &&
-                    (s.namaLengkap || '').trim().toLowerCase() === cleanNama &&
-                    (s.tanggalLahir || '').trim().slice(0, 10) === cleanDob
-                ) {
-                    return true;
-                }
-                if (
-                    p.status === 'Diterima' &&
-                    cleanNama &&
-                    (s.namaLengkap || '').trim().toLowerCase() === cleanNama
-                ) {
-                    return true;
-                }
-                return false;
+        const clearSantriViewFilters = () => {
+            setSantriFilters({
+                search: '',
+                jenjang: '',
+                kelas: '',
+                rombel: '',
+                status: '',
+                gender: '',
+                provinsi: '',
+                kabupatenKota: '',
+                kecamatan: '',
             });
-            if (isDuplicateInSantri) {
-                alreadyMigratedNames.push(p.namaLengkap);
-                return false;
-            }
-            return true;
-        });
-
-        if (list.length === 0) {
-            showToast(
-                `Calon santri (${alreadyMigratedNames.join(', ')}) sudah terdaftar di Data Santri Aktif. Duplikasi dicegah otomatis.`,
-                'info'
-            );
-            return;
-        }
+        };
 
         try {
+            // Selalu baca kondisi santri terbaru langsung dari Dexie agar tidak mengandalkan state yang tertinggal
+            const freshSantriPool = await db.santri.filter((s) => !s.deleted).toArray();
+            const basePool = freshSantriPool.length > 0 || santriList.length === 0 ? freshSantriPool : [...santriList];
+
+            const { toMigrate, exactDuplicates, identifierConflicts } = partitionPendaftarForAcceptance(
+                rawList,
+                basePool,
+                { ignoreIdentifierConflict: behaviorOption?.ignoreIdentifierConflict }
+            );
+
+            // Pastikan pendaftar yang memang sudah ada di Data Santri tertaut santriId & status='Diterima'
             const now = Date.now();
+            if (exactDuplicates.length > 0) {
+                const syncLinks: Pendaftar[] = [];
+                for (const dup of exactDuplicates) {
+                    if (dup.pendaftar.status !== 'Diterima' || dup.pendaftar.santriId !== dup.matchedSantri.id) {
+                        syncLinks.push({
+                            ...dup.pendaftar,
+                            status: 'Diterima',
+                            santriId: dup.matchedSantri.id,
+                            nis: dup.matchedSantri.nis || dup.pendaftar.nis,
+                            deleted: false,
+                            lastModified: now,
+                        });
+                    }
+                    if (canManageBerkas && dup.pendaftar.id && dup.matchedSantri.id) {
+                        try {
+                            await linkPendaftarBerkasToSantri(dup.pendaftar.id, dup.matchedSantri.id, currentUser);
+                        } catch {
+                            // non-fatal
+                        }
+                    }
+                }
+                if (syncLinks.length > 0) {
+                    await db.pendaftar.bulkPut(syncLinks);
+                    onUpdateList();
+                }
+            }
+
+            if (toMigrate.length === 0) {
+                if (identifierConflicts.length > 0 && exactDuplicates.length === 0) {
+                    const firstConflict = identifierConflicts[0];
+                    const idLabel = firstConflict.reason === 'nik' ? 'NIK' : 'NISN';
+                    const matchedDesc = describeExistingSantriLocation(firstConflict.matchedSantri, settings);
+                    const conflictNames = identifierConflicts.map((c) => c.pendaftar.namaLengkap).join(', ');
+                    showConfirmation(
+                        `Konfirmasi Kemiripan ${idLabel}`,
+                        `${idLabel} milik ${conflictNames} cocok dengan santri yang sudah ada di Data Santri: ${matchedDesc}. Jika ini memang calon santri baru yang berbeda, klik "Tetap Terima" untuk memasukkannya ke Data Santri.`,
+                        () => {
+                            void handleAcceptConfirmed(
+                                rawList,
+                                billingOption,
+                                placementOption,
+                                attachmentOption,
+                                { ignoreIdentifierConflict: true }
+                            );
+                        },
+                        { confirmText: 'Tetap Terima Sebagai Santri Baru', confirmColor: 'blue' }
+                    );
+                    return;
+                }
+
+                clearSantriViewFilters();
+                const details = exactDuplicates
+                    .slice(0, 5)
+                    .map((d) => `• ${describeExistingSantriLocation(d.matchedSantri, settings)}`)
+                    .join('\n');
+                const extraNote = exactDuplicates.length > 5
+                    ? `\n(+${exactDuplicates.length - 5} santri lainnya)`
+                    : '';
+                showAlert(
+                    'Santri Sudah Terdaftar di Data Santri',
+                    `Calon santri berikut sudah ada di Data Santri sehingga tidak digandakan:\n\n${details}${extraNote}\n\nFilter pencarian di menu Data Santri telah direset agar data langsung terlihat.`
+                );
+                return;
+            }
+
+            // Deduplikasi internal jika dalam satu batch ada dua baris pendaftar yang sama persis
+            const workingSantriPool: Santri[] = [...basePool];
+            const list: Pendaftar[] = [];
+            const batchDuplicateNames: string[] = exactDuplicates.map((d) => d.pendaftar.namaLengkap);
+
             const operatorName = currentUser?.fullName || currentUser?.username || 'Panitia PSB';
             const newSantriList: Santri[] = [];
             const newTagihanList: Tagihan[] = [];
@@ -1166,7 +1223,16 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 }
             }
 
-            list.forEach((pendaftar) => {
+            toMigrate.forEach((pendaftar) => {
+                const inBatchCheck = checkPendaftarAgainstSantriPool(pendaftar, workingSantriPool, {
+                    ignoreIdentifierConflict: true,
+                });
+                if (inBatchCheck.kind === 'exact_duplicate') {
+                    batchDuplicateNames.push(pendaftar.namaLengkap);
+                    return;
+                }
+
+                list.push(pendaftar);
                 const santriId = generateSyncSafeId();
                 const newSantri = buildSantriFromPendaftar(pendaftar, santriId, placementOption);
 
@@ -1188,7 +1254,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                         id: generateSyncSafeId(),
                         santriId,
                         biayaId: billingOption.biayaId || 0,
-                        deskripsi: list.length > 1
+                        deskripsi: toMigrate.length > 1
                             ? `${billingOption.deskripsi || 'Daftar Ulang Santri Baru'} - ${pendaftar.namaLengkap}`
                             : (billingOption.deskripsi || `Daftar Ulang - ${pendaftar.namaLengkap}`),
                         bulan: billingMonth,
@@ -1212,47 +1278,70 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 });
             });
 
-            await (db as any).transaction('rw', db.santri, db.tagihan, db.pendaftar, async () => {
-                await db.santri.bulkPut(newSantriList);
-                if (newTagihanList.length > 0) {
-                    await db.tagihan.bulkPut(newTagihanList);
-                }
-                await db.pendaftar.bulkPut(updatedPendaftarList);
-            });
+            if (newSantriList.length > 0) {
+                await (db as any).transaction('rw', db.santri, db.tagihan, db.pendaftar, async () => {
+                    await db.santri.bulkPut(newSantriList);
+                    if (newTagihanList.length > 0) {
+                        await db.tagihan.bulkPut(newTagihanList);
+                    }
+                    await db.pendaftar.bulkPut(updatedPendaftarList);
+                });
 
-            await logActivity(
-                'INSERT',
-                'santri',
-                list.length === 1 ? newSantriList[0].id : `psb-accept-${now}`,
-                null,
-                {
-                    source: 'PSB',
-                    acceptedCount: newSantriList.length,
-                    skippedDuplicates: alreadyMigratedNames.length,
-                    generatedBillingCount: newTagihanList.length,
-                    sampleSantri: newSantriList.slice(0, 5).map(s => ({ id: s.id, nama: s.namaLengkap, nis: s.nis }))
-                },
-                operatorName
-            );
+                clearSantriViewFilters();
+
+                await logActivity(
+                    'INSERT',
+                    'santri',
+                    newSantriList.length === 1 ? newSantriList[0].id : `psb-accept-${now}`,
+                    null,
+                    {
+                        source: 'PSB',
+                        acceptedCount: newSantriList.length,
+                        skippedDuplicates: batchDuplicateNames.length,
+                        generatedBillingCount: newTagihanList.length,
+                        sampleSantri: newSantriList.slice(0, 5).map(s => ({ id: s.id, nama: s.namaLengkap, nis: s.nis }))
+                    },
+                    operatorName
+                );
+            }
 
             const kelasNama = settings.kelas.find(k => k.id === placementOption?.kelasId)?.nama;
             const rombelNama = settings.rombel.find(r => r.id === placementOption?.rombelId)?.nama;
             const infoPenempatan = kelasNama ? ` ke ${kelasNama}${rombelNama ? ` (${rombelNama})` : ''}` : '';
-            const skippedInfo = alreadyMigratedNames.length > 0 ? ` (${alreadyMigratedNames.length} duplikat dilewati)` : '';
+            const skippedInfo = batchDuplicateNames.length > 0 ? ` (${batchDuplicateNames.length} duplikat dilewati)` : '';
 
-            setSelectedIds(prev => prev.filter(id => !rawList.some(p => p.id === id)));
+            setSelectedIds(prev => prev.filter(id => !updatedPendaftarList.some(p => p.id === id)));
             onUpdateList();
 
-            if (list.length === 1) {
+            if (list.length === 1 && newSantriList.length === 1) {
                 const nisLabel = newSantriList[0].nis ? ` [NIS: ${newSantriList[0].nis}]` : '';
                 showToast(
                     `${list[0].namaLengkap}${nisLabel} resmi diterima & dimigrasikan${infoPenempatan}!${billingOption?.createBilling ? ' Tagihan daftar ulang telah dibuat.' : ''}${skippedInfo}`,
                     'success'
                 );
-            } else {
+            } else if (newSantriList.length > 0) {
                 showToast(
-                    `${list.length} santri resmi diterima & dimigrasikan${infoPenempatan}!${billingOption?.createBilling ? ' Tagihan daftar ulang telah dibuat.' : ''}${skippedInfo}`,
+                    `${newSantriList.length} santri resmi diterima & dimigrasikan${infoPenempatan}!${billingOption?.createBilling ? ' Tagihan daftar ulang telah dibuat.' : ''}${skippedInfo}`,
                     'success'
+                );
+            }
+
+            if (identifierConflicts.length > 0) {
+                const firstConflict = identifierConflicts[0];
+                const idLabel = firstConflict.reason === 'nik' ? 'NIK' : 'NISN';
+                showConfirmation(
+                    `Konfirmasi Kemiripan ${idLabel} (Sebagian Data)`,
+                    `${identifierConflicts.length} calon santri (${identifierConflicts.map(c => c.pendaftar.namaLengkap).join(', ')}) memiliki ${idLabel} yang sama dengan santri lain (${describeExistingSantriLocation(firstConflict.matchedSantri, settings)}). Tetap masukkan sebagai santri baru?`,
+                    () => {
+                        void handleAcceptConfirmed(
+                            identifierConflicts.map((c) => c.pendaftar),
+                            billingOption,
+                            placementOption,
+                            attachmentOption,
+                            { ignoreIdentifierConflict: true }
+                        );
+                    },
+                    { confirmText: 'Tetap Terima Sebagai Santri Baru', confirmColor: 'blue' }
                 );
             }
 

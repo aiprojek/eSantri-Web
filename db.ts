@@ -107,6 +107,10 @@ export class ESantriDatabase extends Dexie {
     (this as any).version(53).stores({
       santriBerkas: '++id, santriId, pendaftarId, jenis, statusUnduh, [pendaftarId+fieldId], fieldId, lastModified'
     });
+
+    (this as any).version(54).stores({
+      pendaftar: '++id, namaLengkap, jenjangId, tanggalDaftar, status, santriId, lastModified'
+    });
   }
 }
 

@@ -940,4 +940,47 @@ describe('santriBerkas End-to-End Offline Attachment Flows (Butir 3.10)', () => 
         expect(auditLogs.some((l) => l.table_name === 'santriBerkas' && l.new_data?.action === 'hapus_salinan_cloud')).toBe(true);
         expect(auditLogs.some((l) => l.table_name === 'santriBerkas' && l.new_data?.action === 'hapus_salinan_cloud_massal')).toBe(true);
     });
+
+    it('resolves newly accepted pendaftar via indexed santriId without SchemaError and pulls attachments', async () => {
+        const admin = makeUser({ id: 1, username: 'admin-tab-berkas', role: 'admin' });
+        const settings = makeSettings();
+        const acceptedSantriId = 9501;
+        const kkId = '1FileAcceptedSantriKk0011223344';
+
+        await db.santri.put(makeSantri({ id: acceptedSantriId, namaLengkap: 'Santri Baru PSB' }));
+        await db.pendaftar.put(
+            makePendaftar({
+                id: 951,
+                santriId: acceptedSantriId,
+                status: 'Diterima',
+                deleted: false,
+                customData: JSON.stringify({
+                    uploadKk: `https://drive.google.com/file/d/${kkId}/view`,
+                }),
+            })
+        );
+
+        const matchingPendaftar = await db.pendaftar.where('santriId').equals(acceptedSantriId).toArray();
+        const linkedPendaftar = matchingPendaftar.find((p) => !p.deleted) || matchingPendaftar[0] || null;
+        expect(linkedPendaftar).not.toBeNull();
+        expect(linkedPendaftar?.id).toBe(951);
+
+        const mockFetch = createGasFetchMock({
+            [kkId]: { name: 'kk.png', mime: 'image/png', bytes: PNG_BYTES },
+        });
+        const pullSummary = await savePendaftarAttachmentsToDevice([linkedPendaftar!], {
+            settings,
+            currentUser: admin,
+            simpanAsliTanpaKompresi: true,
+            onlyFailedOrCloud: true,
+            fetcherConfig: { fetchImpl: mockFetch, baseBackoffMs: 0 },
+        });
+        expect(pullSummary.saved).toBe(1);
+
+        await linkPendaftarBerkasToSantri(linkedPendaftar!.id, acceptedSantriId, admin);
+        const berkasList = await getSantriBerkasBySantri(acceptedSantriId, linkedPendaftar!.id, admin);
+        expect(berkasList).toHaveLength(1);
+        expect(berkasList[0].santriId).toBe(acceptedSantriId);
+        expect(berkasList[0].statusUnduh).toBe('tersimpan');
+    });
 });

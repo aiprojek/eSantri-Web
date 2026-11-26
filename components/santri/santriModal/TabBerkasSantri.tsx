@@ -61,7 +61,8 @@ export const TabBerkasSantri: React.FC<TabBerkasSantriProps> = ({ formMethods, s
         if (!canManageBerkas || !santriId || santriId <= 0) {
             return { berkasList: [], linkedPendaftar: null };
         }
-        const linkedPendaftar = (await db.pendaftar.where('santriId').equals(santriId).first()) || null;
+        const matchingPendaftar = await db.pendaftar.where('santriId').equals(santriId).toArray();
+        const linkedPendaftar = matchingPendaftar.find((p) => !p.deleted) || matchingPendaftar[0] || null;
         const berkasList = await getSantriBerkasBySantri(santriId, linkedPendaftar?.id, currentUser);
         return { berkasList, linkedPendaftar };
     }, [canManageBerkas, santriId, currentUser]) || { berkasList: [], linkedPendaftar: null };

@@ -15,6 +15,10 @@ describe('santriBerkas Schema & Exclusion Guardrails (Butir 3.1)', () => {
         );
         expect(dbSrc).toContain('.version(51).stores({');
         expect(dbSrc).toContain('.version(52).stores({');
+        expect(dbSrc).toContain('.version(54).stores({');
+        expect(dbSrc).toContain(
+            "pendaftar: '++id, namaLengkap, jenjangId, tanggalDaftar, status, santriId, lastModified'"
+        );
     });
 
     it('excludes santriBerkas from Firebase TABLES_TO_SYNC', () => {

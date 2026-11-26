@@ -1049,18 +1049,12 @@ export const syncPortalBridgeToGas = async (settings: PondokSettings): Promise<{
     }
 
     let result: PortalFetchResponse = {};
-    try {
-        result = await response.json();
-    } catch {
-        const text = await response.text();
-        if (!text) {
-            result = { success: true };
-        } else {
-            try {
-                result = JSON.parse(text);
-            } catch {
-                throw new Error(`Respon GAS tidak valid JSON: ${text.slice(0, 200)}`);
-            }
+    const rawRespText = await response.text().catch(() => '');
+    if (rawRespText) {
+        try {
+            result = JSON.parse(rawRespText);
+        } catch {
+            throw new Error(`Respon GAS tidak valid JSON: ${rawRespText.slice(0, 200)}`);
         }
     }
     if (result?.success === false) {
@@ -1152,7 +1146,7 @@ export const syncPsbPublicConfigToGas = async (
 ): Promise<{ syncedUrls: string[]; syncedAt: string; payloadSize: number }> => {
     const effectivePsbConfig = overridePsbConfig || settings.psbConfig;
     const portalGasUrl = settings.portalConfig?.gasEndpoint?.trim() || '';
-    const isValidGas = (u?: string) => Boolean(u && /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/i.test(u.trim()));
+    const isValidGas = (u?: string) => Boolean(u && /^https:\/\/script\.google\.com\/(?:a\/(?:macros\/[^/\s]+\/|[^/\s]+\/macros\/)|macros\/)s\/[^/\s]+\/exec(?:\?.*)?$/i.test(u.trim()));
 
     const candidateUrls = new Set<string>();
     if (isValidGas(overrideGasUrl)) candidateUrls.add(overrideGasUrl!.trim());
@@ -1214,18 +1208,12 @@ export const syncPsbPublicConfigToGas = async (
         }
 
         let result: PortalFetchResponse = {};
-        try {
-            result = await response.json();
-        } catch {
-            const text = await response.text();
-            if (!text) {
-                result = { success: true };
-            } else {
-                try {
-                    result = JSON.parse(text);
-                } catch {
-                    throw new Error(`Respon GAS tidak valid JSON: ${text.slice(0, 200)}`);
-                }
+        const rawRespText = await response.text().catch(() => '');
+        if (rawRespText) {
+            try {
+                result = JSON.parse(rawRespText);
+            } catch {
+                throw new Error(`Respon GAS tidak valid JSON: ${rawRespText.slice(0, 200)}`);
             }
         }
         if (result?.success === false) {
@@ -1686,7 +1674,21 @@ const PSB_MAX_POST_BYTES = 22000000;
 function doGet(e) {
   try {
     const a = ((e && e.parameter && e.parameter.action) || '').trim();
-    if (a === 'version') return out({ success: true, result: 'success', scriptVersion: SCRIPT_VERSION, service: 'esantri-portal-gas' });
+    if (a === 'version') {
+      const pub = resolvePublicKey();
+      const adm = resolveAdminKey();
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      return out({
+        success: true,
+        result: 'success',
+        scriptVersion: SCRIPT_VERSION,
+        service: 'esantri-portal-gas',
+        hasPublicKey: Boolean(pub),
+        hasAdminKey: Boolean(adm),
+        keysEqual: Boolean(adm && adm === pub),
+        hasSpreadsheet: Boolean(ss)
+      });
+    }
     if (a === 'getPortalPublicInfo') return out(getPortalPublicInfo(e));
     if (a === 'loginSantri') return out(loginSantri(e));
     if (a === 'getPortalConfig') return out(getPortalPublicInfo(e)); // Diamankan: hanya profil publik
@@ -1720,8 +1722,16 @@ function out(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function ensureSheet(name, headers) {
+function getActiveSpreadsheetOrThrow() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    throw new Error('Spreadsheet aktif tidak ditemukan. Pastikan Apps Script dibuat dari Google Sheets (Ekstensi > Apps Script), bukan script standalone.');
+  }
+  return ss;
+}
+
+function ensureSheet(name, headers) {
+  const ss = getActiveSpreadsheetOrThrow();
   let sh = ss.getSheetByName(name);
   if (!sh) { sh = ss.insertSheet(name); }
   const currentHeaders = sh.getRange(1, 1, 1, headers.length).getValues()[0];
@@ -1773,12 +1783,17 @@ function sanitizeScriptKeyValue(val) {
 function resolveScriptKey(propName, constVal) {
   const props = PropertiesService.getScriptProperties();
   const fromProp = sanitizeScriptKeyValue(props.getProperty(propName) || '');
-  if (fromProp) return fromProp;
   const fromConst = sanitizeScriptKeyValue(constVal);
-  if (fromConst) {
-    try { props.setProperty(propName, fromConst); } catch (e) {}
+  const seedPropName = propName + '_SEED';
+  const fromSeed = sanitizeScriptKeyValue(props.getProperty(seedPropName) || '');
+  if (fromConst && (!fromProp || fromConst !== fromSeed)) {
+    try {
+      props.setProperty(propName, fromConst);
+      props.setProperty(seedPropName, fromConst);
+    } catch (e) {}
+    return fromConst;
   }
-  return fromConst;
+  return fromProp || fromConst;
 }
 
 function resolvePublicKey() {
@@ -1789,11 +1804,35 @@ function resolveAdminKey() {
   return resolveScriptKey('ADMIN_KEY', ADMIN_KEY);
 }
 
-function verifyAdminKey(inputAdminKey) {
+function diagnoseAdminKey(inputAdminKey) {
   const expectedAdmin = resolveAdminKey();
   const expectedPublic = resolvePublicKey();
-  if (!expectedAdmin || expectedAdmin === expectedPublic) return false;
-  return expectedAdmin === String(inputAdminKey || '').trim();
+  if (!expectedAdmin) {
+    return {
+      ok: false,
+      errorCode: 'MISSING_ADMIN_KEY',
+      message: 'Akses ditolak: ADMIN_KEY belum dikonfigurasi pada Script GAS.'
+    };
+  }
+  if (expectedAdmin === expectedPublic) {
+    return {
+      ok: false,
+      errorCode: 'ADMIN_EQUALS_PUBLIC',
+      message: 'Akses ditolak: ADMIN_KEY tidak boleh sama dengan PUBLIC_KEY.'
+    };
+  }
+  if (expectedAdmin !== String(inputAdminKey || '').trim()) {
+    return {
+      ok: false,
+      errorCode: 'ADMIN_KEY_MISMATCH',
+      message: 'Akses ditolak: ADMIN_KEY tidak cocok dengan kunci yang aktif di Script GAS.'
+    };
+  }
+  return { ok: true };
+}
+
+function verifyAdminKey(inputAdminKey) {
+  return diagnoseAdminKey(inputAdminKey).ok;
 }
 
 function verifyPublicSubmitKey(inputPublicKey) {
@@ -1985,12 +2024,16 @@ const PSB_ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'i
 function resolveConfiguredDriveFolderId() {
   const props = PropertiesService.getScriptProperties();
   const fromProp = extractCleanDriveFolderId(props.getProperty('DRIVE_FOLDER_ID') || '');
-  if (fromProp) return fromProp;
   const fromDefault = extractCleanDriveFolderId(DEFAULT_DRIVE_FOLDER_ID);
-  if (fromDefault) {
-    try { props.setProperty('DRIVE_FOLDER_ID', fromDefault); } catch (e) {}
+  const seed = extractCleanDriveFolderId(props.getProperty('DRIVE_FOLDER_ID_SEED') || '');
+  if (fromDefault && (!fromProp || fromDefault !== seed)) {
+    try {
+      props.setProperty('DRIVE_FOLDER_ID', fromDefault);
+      props.setProperty('DRIVE_FOLDER_ID_SEED', fromDefault);
+    } catch (e) {}
+    return fromDefault;
   }
-  return fromDefault;
+  return fromProp || fromDefault;
 }
 
 function normalizeAllowedMimeType(mime) {
@@ -2198,10 +2241,11 @@ function deleteFilePost(body) {
 }
 
 function getPsbSubmissionsPost(body) {
-  if (!verifyAdminKey(body.adminKey)) {
-    throw new Error('Akses ditolak: ADMIN_KEY tidak valid atau belum dikonfigurasi.');
+  const auth = diagnoseAdminKey(body.adminKey);
+  if (!auth.ok) {
+    return { success: false, result: 'error', errorCode: auth.errorCode, message: auth.message };
   }
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getActiveSpreadsheetOrThrow();
   const sh = ss.getSheetByName(SHEET_PSB);
   if (!sh) return { success: true, result: 'success', scriptVersion: SCRIPT_VERSION, records: [] };
   const rows = sh.getDataRange().getValues();

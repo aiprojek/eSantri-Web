@@ -34,8 +34,12 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
     const currentUrl = settings.psbConfig?.googleScriptUrl || '';
     const currentProvider: PsbCloudProvider = settings.psbConfig?.backendProvider || 'gas';
     const currentApiKey = settings.psbConfig?.cloudApiKey || '';
-    const initialPublicKey = settings.psbConfig?.cloudPublicKey || (currentProvider === 'gas' ? generatePsbPublicKey() : '');
-    const initialAdminKey = settings.psbConfig?.cloudAdminKey || (currentProvider === 'gas' ? generatePsbAdminKey(initialPublicKey) : '');
+    const savedPub = (settings.psbConfig?.cloudPublicKey || '').trim();
+    const savedAdm = (settings.psbConfig?.cloudAdminKey || '').trim();
+    const initialPublicKey = savedPub || (currentProvider === 'gas' ? generatePsbPublicKey() : '');
+    const initialAdminKey = (savedAdm && savedAdm !== initialPublicKey)
+        ? savedAdm
+        : (currentProvider === 'gas' ? generatePsbAdminKey(initialPublicKey) : '');
     const currentFolderId = settings.psbConfig?.driveFolderId || '';
     const currentBucket = settings.psbConfig?.supabaseBucket || 'psb-berkas';
 
@@ -70,6 +74,10 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
                 return buildPsbGasScriptV31(cleanDriveFolderId, cloudPublicKey.trim(), cloudAdminKey.trim());
         }
     }, [backendProvider, cleanDriveFolderId, cloudPublicKey, cloudAdminKey]);
+
+    const hasUnsavedKeyChanges =
+        backendProvider === 'gas' &&
+        (cloudPublicKey.trim() !== savedPub || cloudAdminKey.trim() !== savedAdm);
 
     if (!isOpen) return null;
 
@@ -472,9 +480,16 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
                             )}
                         </button>
 
+                        {hasUnsavedKeyChanges && (
+                            <div className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 text-[11px] text-amber-900 leading-snug">
+                                <i className="bi bi-exclamation-triangle-fill text-amber-600 mr-1.5"></i>
+                                Kunci GAS di form ini <strong>belum tersimpan</strong> ke pengaturan aplikasi. Setelah <strong>Test Koneksi</strong> berhasil (atau sebelum menutup jendela), pastikan klik <strong>Simpan Konfigurasi</strong> agar kunci tidak berubah lagi saat modal dibuka ulang.
+                            </div>
+                        )}
+
                         {testResult && (
                             <div
-                                className={`p-3 rounded-xl border text-xs leading-relaxed ${
+                                className={`p-3 rounded-xl border text-xs leading-relaxed whitespace-pre-line ${
                                     testResult.success
                                         ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
                                         : 'bg-rose-50 border-rose-200 text-rose-900'
@@ -502,9 +517,15 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
                         {showScriptBox && (
                             <div className="mt-2 space-y-2">
                                 {backendProvider === 'gas' && (
-                                    <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-950 leading-relaxed space-y-1">
+                                    <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-950 leading-relaxed space-y-1.5">
                                         <div>
-                                            <strong>Pembaruan Script GAS:</strong> Setelah menempel kode terbaru di Apps Script, wajib klik <strong>Deploy &gt; Manage deployments &gt; Edit &gt; Version: New version</strong> (bukan New deployment agar URL <code>/exec</code> tetap sama), jalankan fungsi manual <code>makeExistingFilesPrivate()</code> di editor untuk memprivatkan berkas lama, lalu <strong>terbitkan ulang formulir HTML</strong> agar membawa <code>PUBLIC_KEY</code> terbaru.
+                                            <strong>Setup Awal / Pembaruan Script GAS:</strong>
+                                            <ol className="list-decimal pl-4 mt-1 space-y-0.5">
+                                                <li>Buka <strong>Google Spreadsheet</strong> panitia PSB &gt; <strong>Ekstensi &gt; Apps Script</strong> (wajib dibuat dari Spreadsheet, bukan script kosong).</li>
+                                                <li>Tempel kode di bawah (kunci <code>DEFAULT_PUBLIC_KEY</code> &amp; <code>DEFAULT_ADMIN_KEY</code> sudah otomatis tertanam), lalu simpan (<kbd>Ctrl+S</kbd>).</li>
+                                                <li>Klik <strong>Deploy &gt; New deployment &gt; Web app</strong> &gt; Execute as: <strong>Me</strong> &gt; Who has access: <strong>Anyone (Siapa saja)</strong> &gt; salin URL <code>/exec</code>. Jika memperbarui script lama, wajib klik <strong>Deploy &gt; Manage deployments &gt; Edit &gt; Version: New version</strong> (jangan hanya klik Save!).</li>
+                                                <li>Jalankan fungsi <code>makeExistingFilesPrivate()</code> 1x di editor jika sebelumnya pernah memakai script lama, lalu klik <strong>Simpan Konfigurasi</strong> &amp; <strong>terbitkan ulang formulir HTML</strong>.</li>
+                                            </ol>
                                         </div>
                                         <div>
                                             <strong>Catatan Lampiran:</strong> Berkas lampiran PSB (KK, akta, ijazah, pas foto) diunggah mentah (tidak dienkripsi E2EE) agar tetap dapat dibuka di Google Drive/backend panitia.

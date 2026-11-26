@@ -29,11 +29,18 @@ function doGet(e) {
   try {
     const action = ((e && e.parameter && e.parameter.action) || "").trim();
     if (action === "version") {
+      const pub = resolvePublicKey();
+      const adm = resolveAdminKey();
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
       return jsonResponse({
         success: true,
         result: "success",
         scriptVersion: SCRIPT_VERSION,
         service: "esantri-portal-gas",
+        hasPublicKey: Boolean(pub),
+        hasAdminKey: Boolean(adm),
+        keysEqual: Boolean(adm && adm === pub),
+        hasSpreadsheet: Boolean(ss),
       });
     }
     if (action === "getPortalConfig" || action === "getPortalPublicInfo") {
@@ -99,8 +106,18 @@ function jsonResponse(obj) {
   );
 }
 
-function ensureSheet(name, headers) {
+function getActiveSpreadsheetOrThrow() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    throw new Error(
+      "Spreadsheet aktif tidak ditemukan. Pastikan project Apps Script dibuat dari Google Sheets (Ekstensi > Apps Script), bukan script standalone.",
+    );
+  }
+  return ss;
+}
+
+function ensureSheet(name, headers) {
+  const ss = getActiveSpreadsheetOrThrow();
   let sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
@@ -180,12 +197,17 @@ function sanitizeConfigKeyValue(val) {
 function resolveScriptKey(propName, constVal) {
   const props = PropertiesService.getScriptProperties();
   const fromProp = sanitizeConfigKeyValue(props.getProperty(propName) || "");
-  if (fromProp) return fromProp;
   const fromConst = sanitizeConfigKeyValue(constVal);
-  if (fromConst) {
-    try { props.setProperty(propName, fromConst); } catch (e) {}
+  const seedPropName = propName + "_SEED";
+  const fromSeed = sanitizeConfigKeyValue(props.getProperty(seedPropName) || "");
+  if (fromConst && (!fromProp || fromConst !== fromSeed)) {
+    try {
+      props.setProperty(propName, fromConst);
+      props.setProperty(seedPropName, fromConst);
+    } catch (e) {}
+    return fromConst;
   }
-  return fromConst;
+  return fromProp || fromConst;
 }
 
 function resolvePublicKey() {
@@ -199,12 +221,35 @@ function resolveAdminKey() {
   return resolveScriptKey("ADMIN_KEY", ADMIN_KEY);
 }
 
-function verifyAdminKey(inputAdminKey) {
+function diagnoseAdminKey(inputAdminKey) {
   const expectedAdmin = resolveAdminKey();
   const expectedPublic = resolvePublicKey();
-  // Fail closed: ADMIN_KEY wajib ada dan tidak boleh sama dengan PUBLIC_KEY
-  if (!expectedAdmin || expectedAdmin === expectedPublic) return false;
-  return expectedAdmin === String(inputAdminKey || "").trim();
+  if (!expectedAdmin) {
+    return {
+      ok: false,
+      errorCode: "MISSING_ADMIN_KEY",
+      message: "Akses ditolak: ADMIN_KEY belum dikonfigurasi pada Script GAS.",
+    };
+  }
+  if (expectedAdmin === expectedPublic) {
+    return {
+      ok: false,
+      errorCode: "ADMIN_EQUALS_PUBLIC",
+      message: "Akses ditolak: ADMIN_KEY tidak boleh sama dengan PUBLIC_KEY.",
+    };
+  }
+  if (expectedAdmin !== String(inputAdminKey || "").trim()) {
+    return {
+      ok: false,
+      errorCode: "ADMIN_KEY_MISMATCH",
+      message: "Akses ditolak: ADMIN_KEY tidak cocok dengan kunci yang aktif di Script GAS.",
+    };
+  }
+  return { ok: true };
+}
+
+function verifyAdminKey(inputAdminKey) {
+  return diagnoseAdminKey(inputAdminKey).ok;
 }
 
 function verifyPublicSubmitKey(inputPublicKey) {
@@ -246,12 +291,16 @@ const PSB_ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "i
 function resolveConfiguredDriveFolderId() {
   const props = PropertiesService.getScriptProperties();
   const fromProp = extractCleanDriveFolderId(props.getProperty("DRIVE_FOLDER_ID") || "");
-  if (fromProp) return fromProp;
   const fromDefault = extractCleanDriveFolderId(DEFAULT_DRIVE_FOLDER_ID);
-  if (fromDefault) {
-    try { props.setProperty("DRIVE_FOLDER_ID", fromDefault); } catch (e) {}
+  const seed = extractCleanDriveFolderId(props.getProperty("DRIVE_FOLDER_ID_SEED") || "");
+  if (fromDefault && (!fromProp || fromDefault !== seed)) {
+    try {
+      props.setProperty("DRIVE_FOLDER_ID", fromDefault);
+      props.setProperty("DRIVE_FOLDER_ID_SEED", fromDefault);
+    } catch (e) {}
+    return fromDefault;
   }
-  return fromDefault;
+  return fromProp || fromDefault;
 }
 
 function normalizeAllowedMimeType(mime) {
@@ -560,10 +609,16 @@ function handleGetPortalConfig(e) {
 }
 
 function handleGetPsbSubmissionsPost(body) {
-  if (!verifyAdminKey(body.adminKey)) {
-    throw new Error("Akses ditolak: ADMIN_KEY tidak valid atau belum dikonfigurasi.");
+  const auth = diagnoseAdminKey(body.adminKey);
+  if (!auth.ok) {
+    return {
+      success: false,
+      result: "error",
+      errorCode: auth.errorCode,
+      message: auth.message,
+    };
   }
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getActiveSpreadsheetOrThrow();
   const sh = ss.getSheetByName(SHEET_PSB);
   if (!sh) return { success: true, result: "success", scriptVersion: SCRIPT_VERSION, records: [] };
   const rows = sh.getDataRange().getValues();

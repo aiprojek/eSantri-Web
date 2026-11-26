@@ -92,6 +92,13 @@ Jika langkah 1-6 sukses, form aman dipakai operasional.
 - Biasanya script lama belum diganti.
 - Paste ulang script terbaru dari Form Builder, lalu redeploy `/exec`.
 
+### Test Koneksi GAS selalu gagal meski `PUBLIC_KEY` dan `ADMIN_KEY` sudah diisi
+
+- **Wajib `New version` saat update script:** Jika Anda mengedit `Code.gs` pada deployment yang sudah ada, klik **Deploy > Manage deployments > Edit (ikon pensil) > Version: New version > Deploy**. Menekan Save saja tidak memperbarui URL `/exec`.
+- **Izin Web App:** Pastikan `Execute as: Me` dan `Who has access: Anyone` (`Siapa saja`), bukan `Only myself`.
+- **Terikat ke Google Sheets:** Pastikan script dibuat lewat **Google Spreadsheet > Ekstensi > Apps Script** (bukan project Apps Script kosong/standalone).
+- **Script Properties lama:** Mulai skrip v4 dengan pelacakan `*_SEED`, memperbarui `DEFAULT_PUBLIC_KEY` / `DEFAULT_ADMIN_KEY` di `Code.gs` otomatis menyegarkan `Script Properties` setelah deploy versi baru. Jika Anda sebelumnya menyetel `ADMIN_KEY` secara manual di **Project Settings > Script Properties**, pastikan nilainya persis sama dengan kolom `ADMIN_KEY` di aplikasi dan jangan lupa klik **Simpan Konfigurasi** di modal aplikasi.
+
 ## Batasan yang Perlu Dipahami
 
 - Form publik tidak boleh memuat pairing code Dropbox/WebDAV.

@@ -1,11 +1,14 @@
 import fs from 'fs';
 import path from 'path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     buildPsbGasScriptV31,
     buildPsbStandaloneCloudHelperJs,
+    clearPsbGasProbeCache,
     generatePsbPublicKey,
     generatePsbAdminKey,
+    isPsbCloudEndpointValid,
+    testPsbCloudConnection,
 } from '../services/psbCloudService';
 import { getPortalGasScriptV2 } from '../services/portalGasService';
 import { obfuscateSecretToCodeArray } from '../services/raporCloudService';
@@ -26,13 +29,22 @@ describe('PSB & Portal GAS security hardening (Fase 1)', () => {
         { name: 'docs/portal-gas-template.gs', code: portalGasTemplateContent },
     ];
 
-    it.each(gasSources)('$name includes mandatory security markers and removes ANYONE_WITH_LINK', ({ code }) => {
+    afterEach(() => {
+        clearPsbGasProbeCache();
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+    });
+
+    it.each(gasSources)('$name includes mandatory security markers, seed key rotation, and removes ANYONE_WITH_LINK', ({ code }) => {
         expect(code).toMatch(/SCRIPT_VERSION\s*=\s*4/);
         expect(code).toContain('ADMIN_KEY');
         expect(code).toContain('PUBLIC_KEY');
+        expect(code).toContain('_SEED');
+        expect(code).toContain('diagnoseAdminKey');
         expect(code).toContain('verifyAdminKey');
         expect(code).toContain('verifyPublicSubmitKey');
         expect(code).toContain('resolveConfiguredDriveFolderId');
+        expect(code).toContain('hasSpreadsheet');
         expect(code).toContain('getFile');
         expect(code).toContain('deleteFile');
         expect(code).toContain('isFileInPsbDestinationFolder');
@@ -102,6 +114,107 @@ describe('PSB & Portal GAS security hardening (Fase 1)', () => {
         const portalHtml = generateStandalonePortalHtml(minimalSettings, minimalPortalConfig);
         expect(portalHtml).not.toContain(adminKey);
         expect(portalHtml).not.toContain('gasAdminKey');
+    });
+
+    it('validates consumer and Workspace GAS /exec URLs and rejects /dev URLs', () => {
+        expect(isPsbCloudEndpointValid('https://script.google.com/macros/s/AKfycb12345/exec', 'gas')).toBe(true);
+        expect(isPsbCloudEndpointValid('https://script.google.com/a/macros/ponpes.sch.id/s/AKfycb12345/exec', 'gas')).toBe(true);
+        expect(isPsbCloudEndpointValid('https://script.google.com/a/ponpes.sch.id/macros/s/AKfycb12345/exec', 'gas')).toBe(true);
+        expect(isPsbCloudEndpointValid('https://script.google.com/macros/s/AKfycb12345/dev', 'gas')).toBe(false);
+    });
+
+    it('diagnoses CORS/network failures, HTML login redirects, equal keys, and ADMIN_KEY mismatches clearly', async () => {
+        const endpoint = 'https://script.google.com/macros/s/AKfycbTEST123/exec';
+
+        await expect(
+            testPsbCloudConnection({
+                endpointUrl: endpoint,
+                backendProvider: 'gas',
+                publicKey: 'same_key_12345678901234567890123456',
+                adminKey: 'same_key_12345678901234567890123456',
+            })
+        ).rejects.toThrow(/ADMIN_KEY tidak boleh sama dengan PUBLIC_KEY/i);
+
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+        );
+        await expect(
+            testPsbCloudConnection({ endpointUrl: endpoint, backendProvider: 'gas', publicKey, adminKey })
+        ).rejects.toThrow(/Who has access: Anyone/i);
+
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockResolvedValue(
+                new Response('<!DOCTYPE html><html><title>accounts.google.com ServiceLogin</title></html>', {
+                    status: 200,
+                    headers: { 'content-type': 'text/html' },
+                })
+            )
+        );
+        await expect(
+            testPsbCloudConnection({ endpointUrl: endpoint, backendProvider: 'gas', publicKey, adminKey })
+        ).rejects.toThrow(/halaman login Google/i);
+
+        const mismatchFetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+            if ((init?.method || 'GET') === 'GET') {
+                return new Response(
+                    JSON.stringify({
+                        result: 'success',
+                        success: true,
+                        scriptVersion: 4,
+                        hasPublicKey: true,
+                        hasAdminKey: true,
+                        keysEqual: false,
+                        hasSpreadsheet: true,
+                    }),
+                    { status: 200 }
+                );
+            }
+            return new Response(
+                JSON.stringify({
+                    result: 'error',
+                    success: false,
+                    errorCode: 'ADMIN_KEY_MISMATCH',
+                    message: 'Mismatch',
+                }),
+                { status: 200 }
+            );
+        });
+        vi.stubGlobal('fetch', mismatchFetch);
+        await expect(
+            testPsbCloudConnection({ endpointUrl: endpoint, backendProvider: 'gas', publicKey, adminKey })
+        ).rejects.toThrow(/Version: New version/i);
+
+        const successFetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+            if ((init?.method || 'GET') === 'GET') {
+                return new Response(
+                    JSON.stringify({
+                        result: 'success',
+                        success: true,
+                        scriptVersion: 4,
+                        hasPublicKey: true,
+                        hasAdminKey: true,
+                        keysEqual: false,
+                        hasSpreadsheet: true,
+                    }),
+                    { status: 200 }
+                );
+            }
+            return new Response(
+                JSON.stringify({
+                    result: 'success',
+                    success: true,
+                    scriptVersion: 4,
+                    records: [{ namaLengkap: 'Ahmad' }],
+                }),
+                { status: 200 }
+            );
+        });
+        vi.stubGlobal('fetch', successFetch);
+        const res = await testPsbCloudConnection({ endpointUrl: endpoint, backendProvider: 'gas', publicKey, adminKey });
+        expect(res.ok).toBe(true);
+        expect(res.rowCount).toBe(1);
     });
 
     it('read-only check: RAPOR_UNIFIED_GAS_SCRIPT_V3 contains no Drive sharing / ANYONE_WITH_LINK', () => {

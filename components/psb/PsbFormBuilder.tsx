@@ -69,13 +69,54 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     const [backendProvider, setBackendProvider] = useState<PsbCloudProvider>(config.backendProvider || 'gas');
     const [googleScriptUrl, setGoogleScriptUrl] = useState(config.googleScriptUrl || '');
     const [cloudApiKey, setCloudApiKey] = useState(config.cloudApiKey || '');
-    const initialPubKey = config.cloudPublicKey || ((config.backendProvider || 'gas') === 'gas' ? generatePsbPublicKey() : '');
-    const initialAdmKey = config.cloudAdminKey || ((config.backendProvider || 'gas') === 'gas' ? generatePsbAdminKey(initialPubKey) : '');
+    const savedInitialPub = (config.cloudPublicKey || '').trim();
+    const savedInitialAdm = (config.cloudAdminKey || '').trim();
+    const initialPubKey = savedInitialPub || ((config.backendProvider || 'gas') === 'gas' ? generatePsbPublicKey() : '');
+    const initialAdmKey = (savedInitialAdm && savedInitialAdm !== initialPubKey)
+        ? savedInitialAdm
+        : ((config.backendProvider || 'gas') === 'gas' ? generatePsbAdminKey(initialPubKey) : '');
     const [cloudPublicKey, setCloudPublicKey] = useState(initialPubKey);
     const [cloudAdminKey, setCloudAdminKey] = useState(initialAdmKey);
     const [showCloudAdminKey, setShowCloudAdminKey] = useState(false);
     const [driveFolderId, setDriveFolderId] = useState(config.driveFolderId || '');
     const [supabaseBucket, setSupabaseBucket] = useState(config.supabaseBucket || 'psb-berkas');
+
+    const prevExternalCloudRef = React.useRef({
+        url: config.googleScriptUrl || '',
+        provider: config.backendProvider || 'gas',
+        pub: (config.cloudPublicKey || '').trim(),
+        adm: (config.cloudAdminKey || '').trim(),
+        folderId: config.driveFolderId || '',
+    });
+
+    useEffect(() => {
+        const prev = prevExternalCloudRef.current;
+        const nextUrl = config.googleScriptUrl || '';
+        const nextProv = config.backendProvider || 'gas';
+        const nextPub = (config.cloudPublicKey || '').trim();
+        const nextAdm = (config.cloudAdminKey || '').trim();
+        const nextFolder = config.driveFolderId || '';
+        if (
+            nextUrl !== prev.url ||
+            nextProv !== prev.provider ||
+            nextPub !== prev.pub ||
+            nextAdm !== prev.adm ||
+            nextFolder !== prev.folderId
+        ) {
+            if (nextUrl && nextUrl !== prev.url) setGoogleScriptUrl(nextUrl);
+            if (nextProv !== prev.provider) setBackendProvider(nextProv);
+            if (nextPub && nextPub !== prev.pub) setCloudPublicKey(nextPub);
+            if (nextAdm && nextAdm !== prev.adm) setCloudAdminKey(nextAdm);
+            if (nextFolder !== prev.folderId) setDriveFolderId(nextFolder);
+            prevExternalCloudRef.current = {
+                url: nextUrl,
+                provider: nextProv,
+                pub: nextPub,
+                adm: nextAdm,
+                folderId: nextFolder,
+            };
+        }
+    }, [config.googleScriptUrl, config.backendProvider, config.cloudPublicKey, config.cloudAdminKey, config.driveFolderId]);
     const cleanDriveFolderId = extractDriveFolderId(driveFolderId);
     const [showScriptHelper, setShowScriptHelper] = useState(false);
     const [copiedScript, setCopiedScript] = useState(false);
@@ -329,8 +370,16 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
                     templates: prev.templates
                 }));
                 const nextProv = tpl.backendProvider || localConfig.backendProvider || 'gas';
-                const nextPub = tpl.cloudPublicKey ?? localConfig.cloudPublicKey ?? (nextProv === 'gas' ? generatePsbPublicKey() : '');
-                const nextAdm = tpl.cloudAdminKey ?? localConfig.cloudAdminKey ?? (nextProv === 'gas' ? generatePsbAdminKey(nextPub) : '');
+                const nextPub =
+                    (tpl.cloudPublicKey || '').trim() ||
+                    (localConfig.cloudPublicKey || '').trim() ||
+                    (nextProv === 'gas' ? generatePsbPublicKey() : '');
+                const rawAdm =
+                    (tpl.cloudAdminKey || '').trim() ||
+                    (localConfig.cloudAdminKey || '').trim();
+                const nextAdm = (rawAdm && rawAdm !== nextPub)
+                    ? rawAdm
+                    : (nextProv === 'gas' ? generatePsbAdminKey(nextPub) : '');
                 setSubmissionMethod(normalizeSubmissionMethod(tpl.submissionMethod));
                 setBackendProvider(nextProv);
                 setGoogleScriptUrl(tpl.googleScriptUrl || '');
@@ -1856,7 +1905,7 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                                         </p>
                                     )}
                                     {cloudTestResult && (
-                                        <p className={`text-[10px] mt-1 font-medium ${cloudTestResult.ok ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                        <p className={`text-[10px] mt-1 font-medium whitespace-pre-line leading-relaxed ${cloudTestResult.ok ? 'text-emerald-700' : 'text-rose-700'}`}>
                                             {cloudTestResult.ok ? '✅ ' : '❌ '}{cloudTestResult.message}
                                         </p>
                                     )}

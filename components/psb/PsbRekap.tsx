@@ -347,20 +347,28 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             }
         };
 
+        const pickNonEmptyKey = (...candidates: Array<string | undefined>): string => {
+            for (const c of candidates) {
+                const v = (c || '').trim();
+                if (v) return v;
+            }
+            return '';
+        };
+
         addEndpointIfValid(
             scriptUrl,
             primaryProvider,
             settings.psbConfig?.cloudApiKey,
-            settings.psbConfig?.cloudPublicKey ?? settings.portalConfig?.gasPublicKey ?? settings.portalConfig?.gasApiKey,
-            settings.psbConfig?.cloudAdminKey ?? settings.portalConfig?.gasAdminKey
+            pickNonEmptyKey(settings.psbConfig?.cloudPublicKey, settings.portalConfig?.gasPublicKey, settings.portalConfig?.gasApiKey),
+            pickNonEmptyKey(settings.psbConfig?.cloudAdminKey, settings.portalConfig?.gasAdminKey)
         );
         (settings.psbConfig?.templates || []).forEach((t) => {
             addEndpointIfValid(
                 t.googleScriptUrl,
                 t.backendProvider || primaryProvider,
-                t.cloudApiKey ?? settings.psbConfig?.cloudApiKey,
-                t.cloudPublicKey ?? settings.psbConfig?.cloudPublicKey ?? settings.portalConfig?.gasPublicKey ?? settings.portalConfig?.gasApiKey,
-                t.cloudAdminKey ?? settings.psbConfig?.cloudAdminKey ?? settings.portalConfig?.gasAdminKey
+                pickNonEmptyKey(t.cloudApiKey, settings.psbConfig?.cloudApiKey),
+                pickNonEmptyKey(t.cloudPublicKey, settings.psbConfig?.cloudPublicKey, settings.portalConfig?.gasPublicKey, settings.portalConfig?.gasApiKey),
+                pickNonEmptyKey(t.cloudAdminKey, settings.psbConfig?.cloudAdminKey, settings.portalConfig?.gasAdminKey)
             );
         });
         if (endpointConfigs.size === 0 && settings.portalConfig?.gasEndpoint) {
@@ -368,7 +376,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 settings.portalConfig.gasEndpoint,
                 'gas',
                 settings.portalConfig.gasApiKey,
-                settings.portalConfig.gasPublicKey ?? settings.portalConfig.gasApiKey,
+                pickNonEmptyKey(settings.portalConfig.gasPublicKey, settings.portalConfig.gasApiKey),
                 settings.portalConfig.gasAdminKey
             );
         }

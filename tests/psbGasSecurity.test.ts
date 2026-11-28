@@ -241,6 +241,62 @@ describe('PSB & Portal GAS security hardening (Fase 1)', () => {
         expect(res.rowCount).toBe(1);
     });
 
+    it.each(gasSources)('$name enforces strict folder ID matching when configured and berkas-psb- prefix fallback only when empty', ({ code }) => {
+        const fnStart = code.indexOf('function folderHasPsbPrefixOrTargetAncestor');
+        const fnEnd = code.indexOf('function describeFileParentFolders');
+        expect(fnStart).toBeGreaterThan(-1);
+        expect(fnEnd).toBeGreaterThan(fnStart);
+        const folderSnippet = code.slice(fnStart, fnEnd);
+
+        const makeIter = <T,>(items: T[]) => {
+            let idx = 0;
+            return {
+                hasNext: () => idx < items.length,
+                next: () => items[idx++],
+            };
+        };
+        const makeFolder = (id: string, name: string, parents: any[] = [], trashed = false) => ({
+            getId: () => id,
+            getName: () => name,
+            isTrashed: () => trashed,
+            getParents: () => makeIter(parents),
+        });
+        const makeFile = (parents: any[]) => ({
+            getParents: () => makeIter(parents),
+        });
+
+        const buildChecker = (configuredId: string) =>
+            new Function(
+                'resolveConfiguredDriveFolderId',
+                `${folderSnippet}; return isFileInPsbDestinationFolder;`
+            )(() => configuredId) as (file: any) => boolean;
+
+        const targetFolder = makeFolder('1ConfiguredTargetId999', 'Folder PSB Utama');
+        const subInTarget = makeFolder('sub-1', 'berkas-psb-2026-2027', [targetFolder]);
+        const deepInTarget = makeFolder('sub-6', 'lampiran-kk', [
+            makeFolder('sub-5', 'sub5', [
+                makeFolder('sub-4', 'sub4', [
+                    makeFolder('sub-3', 'sub3', [subInTarget]),
+                ]),
+            ]),
+        ]);
+        const rogueBerkasPsb = makeFolder('rogue-psb-1', 'berkas-psb-2026-2027', []);
+        const unrelatedFolder = makeFolder('other-1', 'Dokumen Pribadi', []);
+
+        const checkWithId = buildChecker('1ConfiguredTargetId999');
+        expect(checkWithId(makeFile([targetFolder]))).toBe(true);
+        expect(checkWithId(makeFile([subInTarget]))).toBe(true);
+        expect(checkWithId(makeFile([deepInTarget]))).toBe(true);
+        // Critical: when Folder ID IS configured, another folder named berkas-psb-* outside targetFolder MUST be rejected
+        expect(checkWithId(makeFile([rogueBerkasPsb]))).toBe(false);
+        expect(checkWithId(makeFile([unrelatedFolder]))).toBe(false);
+
+        const checkWithoutId = buildChecker('');
+        expect(checkWithoutId(makeFile([rogueBerkasPsb]))).toBe(true);
+        expect(checkWithoutId(makeFile([subInTarget]))).toBe(true);
+        expect(checkWithoutId(makeFile([unrelatedFolder]))).toBe(false);
+    });
+
     it('read-only check: RAPOR_UNIFIED_GAS_SCRIPT_V3 contains no Drive sharing / ANYONE_WITH_LINK', () => {
         expect(RAPOR_UNIFIED_GAS_SCRIPT_V3).not.toContain('ANYONE_WITH_LINK');
         expect(RAPOR_UNIFIED_GAS_SCRIPT_V3).not.toContain('setSharing');

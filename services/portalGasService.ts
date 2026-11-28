@@ -2169,9 +2169,12 @@ function folderHasPsbPrefixOrTargetAncestor(folder, targetFolderId, depth, visit
   const fid = folder.getId();
   if (visited[fid]) return false;
   visited[fid] = true;
-  if (targetFolderId && fid === targetFolderId) return true;
-  const fname = String(folder.getName() || '').toLowerCase();
-  if (depth <= 3 && fname.indexOf('berkas-psb-') === 0) return true;
+  if (targetFolderId) {
+    if (fid === targetFolderId) return true;
+  } else {
+    const fname = String(folder.getName() || '').toLowerCase();
+    if (depth <= 3 && fname.indexOf('berkas-psb-') === 0) return true;
+  }
   const ups = folder.getParents();
   while (ups.hasNext()) {
     if (folderHasPsbPrefixOrTargetAncestor(ups.next(), targetFolderId, depth + 1, visited)) {
@@ -2231,7 +2234,10 @@ function getFilePost(body) {
     throw new Error('Berkas tidak ditemukan atau sudah berada di tempat sampah Drive.');
   }
   if (!isFileInPsbDestinationFolder(file)) {
-    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi (folder berkas saat ini: ' + describeFileParentFolders(file) + '). Pindahkan berkas ke dalam folder "berkas-psb-..." atau folder tujuan PSB di Google Drive.');
+    const folderHint = resolveConfiguredDriveFolderId()
+      ? 'Pindahkan berkas ke dalam folder tujuan PSB yang dikonfigurasi di Google Drive (atau kosongkan ID Folder jika ingin memakai folder otomatis "berkas-psb-...").'
+      : 'Pindahkan berkas ke dalam folder "berkas-psb-..." di Google Drive.';
+    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi (folder berkas saat ini: ' + describeFileParentFolders(file) + '). ' + folderHint);
   }
   const fileSize = Number(file.getSize() || 0);
   if (fileSize > PSB_MAX_FILE_BYTES) {
@@ -2274,7 +2280,10 @@ function deleteFilePost(body) {
     throw new Error('Berkas tidak ditemukan di Google Drive.');
   }
   if (!isFileInPsbDestinationFolder(file)) {
-    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi (folder berkas saat ini: ' + describeFileParentFolders(file) + '). Pindahkan berkas ke dalam folder "berkas-psb-..." atau folder tujuan PSB di Google Drive.');
+    const delFolderHint = resolveConfiguredDriveFolderId()
+      ? 'Pindahkan berkas ke dalam folder tujuan PSB yang dikonfigurasi di Google Drive (atau kosongkan ID Folder jika ingin memakai folder otomatis "berkas-psb-...").'
+      : 'Pindahkan berkas ke dalam folder "berkas-psb-..." di Google Drive.';
+    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi (folder berkas saat ini: ' + describeFileParentFolders(file) + '). ' + delFolderHint);
   }
   if (!file.isTrashed()) {
     file.setTrashed(true);

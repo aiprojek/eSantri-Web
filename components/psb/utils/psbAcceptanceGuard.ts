@@ -60,7 +60,7 @@ export const checkPendaftarAgainstSantriPool = (
     const cleanNik = isSignificantIdentifier(pendaftar.nik, 8) ? normalizeIdToken(pendaftar.nik) : '';
     const cleanNisn = isSignificantIdentifier(pendaftar.nisn, 6) ? normalizeIdToken(pendaftar.nisn) : '';
 
-    let conflictCandidate: { santri: Santri; reason: 'nik' | 'nisn' } | null = null;
+    let conflictCandidate: { santri: Santri; reason: 'nik' | 'nisn' | 'status_nama' } | null = null;
 
     for (const s of santriPool) {
         if (!s || s.deleted) continue;
@@ -77,9 +77,11 @@ export const checkPendaftarAgainstSantriPool = (
         }
 
         if (pendaftar.status === 'Diterima' && cleanNama && sNama === cleanNama) {
-            // If both have DOB and they clearly differ, treat as two different people with same name
-            if (!cleanDob || !sDob || cleanDob === sDob) {
-                return { kind: 'exact_duplicate', matchedSantri: s, reason: 'status_nama' };
+            // If both DOBs exist and differ, they are different people.
+            // If either DOB is empty, NEVER auto-link silently (risk of mis-linking common names like "Muhammad Rizki");
+            // raise a confirmation conflict unless the admin explicitly overrides.
+            if ((!cleanDob || !sDob) && !conflictCandidate) {
+                conflictCandidate = { santri: s, reason: 'status_nama' };
             }
         }
 
@@ -88,7 +90,7 @@ export const checkPendaftarAgainstSantriPool = (
             if (areNamesCompatible(pendaftar.namaLengkap, s.namaLengkap)) {
                 return { kind: 'exact_duplicate', matchedSantri: s, reason: 'nik' };
             }
-            if (!conflictCandidate) {
+            if (!conflictCandidate || conflictCandidate.reason === 'status_nama') {
                 conflictCandidate = { santri: s, reason: 'nik' };
             }
         }
@@ -98,7 +100,7 @@ export const checkPendaftarAgainstSantriPool = (
             if (areNamesCompatible(pendaftar.namaLengkap, s.namaLengkap)) {
                 return { kind: 'exact_duplicate', matchedSantri: s, reason: 'nisn' };
             }
-            if (!conflictCandidate) {
+            if (!conflictCandidate || conflictCandidate.reason === 'status_nama') {
                 conflictCandidate = { santri: s, reason: 'nisn' };
             }
         }
@@ -125,7 +127,7 @@ export interface PartitionedAcceptanceBatch {
     identifierConflicts: Array<{
         pendaftar: Pendaftar;
         matchedSantri: Santri;
-        reason: 'nik' | 'nisn';
+        reason: 'nik' | 'nisn' | 'status_nama';
     }>;
 }
 
@@ -149,7 +151,7 @@ export const partitionPendaftarForAcceptance = (
         } else if (
             res.kind === 'identifier_conflict' &&
             res.matchedSantri &&
-            (res.reason === 'nik' || res.reason === 'nisn')
+            (res.reason === 'nik' || res.reason === 'nisn' || res.reason === 'status_nama')
         ) {
             identifierConflicts.push({
                 pendaftar: p,

@@ -107,4 +107,38 @@ describe('psbAcceptanceGuard', () => {
         const res = checkPendaftarAgainstSantriPool(namesake, pool);
         expect(res.kind).toBe('none');
     });
+
+    it('never auto-links status=Diterima common names as exact_duplicate when either DOB is empty; requires confirmation override', () => {
+        const pool = [makeSantri({ id: 4, namaLengkap: 'Muhammad Rizki', tanggalLahir: '' })];
+        const candidateMissingSantriDob = makePendaftar({
+            id: 41,
+            status: 'Diterima',
+            namaLengkap: 'Muhammad Rizki',
+            tanggalLahir: '2012-04-15',
+        });
+        const candidateBothEmptyDob = makePendaftar({
+            id: 42,
+            status: 'Diterima',
+            namaLengkap: 'Muhammad Rizki',
+            tanggalLahir: '',
+        });
+
+        const res1 = checkPendaftarAgainstSantriPool(candidateMissingSantriDob, pool);
+        expect(res1.kind).toBe('identifier_conflict');
+        expect(res1.reason).toBe('status_nama');
+
+        const res2 = checkPendaftarAgainstSantriPool(candidateBothEmptyDob, pool);
+        expect(res2.kind).toBe('identifier_conflict');
+        expect(res2.reason).toBe('status_nama');
+
+        const batch = partitionPendaftarForAcceptance([candidateMissingSantriDob, candidateBothEmptyDob], pool);
+        expect(batch.exactDuplicates).toHaveLength(0);
+        expect(batch.identifierConflicts).toHaveLength(2);
+
+        const overridden = partitionPendaftarForAcceptance([candidateMissingSantriDob], pool, {
+            ignoreIdentifierConflict: true,
+        });
+        expect(overridden.toMigrate).toHaveLength(1);
+        expect(overridden.exactDuplicates).toHaveLength(0);
+    });
 });

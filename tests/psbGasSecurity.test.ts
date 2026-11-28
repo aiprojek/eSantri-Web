@@ -35,7 +35,8 @@ describe('PSB & Portal GAS security hardening (Fase 1)', () => {
         vi.restoreAllMocks();
     });
 
-    it.each(gasSources)('$name includes mandatory security markers, seed key rotation, and removes ANYONE_WITH_LINK', ({ code }) => {
+    it.each(gasSources)('$name restricts public version metadata, uses uniform pre-auth errors, exposes authenticated diagnose POST action, and removes ANYONE_WITH_LINK', ({ code }) => {
+        const normalizedCode = code.replace(/"/g, "'");
         expect(code).toMatch(/SCRIPT_VERSION\s*=\s*4/);
         expect(code).toContain('ADMIN_KEY');
         expect(code).toContain('PUBLIC_KEY');
@@ -44,13 +45,34 @@ describe('PSB & Portal GAS security hardening (Fase 1)', () => {
         expect(code).toContain('verifyAdminKey');
         expect(code).toContain('verifyPublicSubmitKey');
         expect(code).toContain('resolveConfiguredDriveFolderId');
-        expect(code).toContain('hasSpreadsheet');
+        expect(code).toContain('buildAuthenticatedAdminDiagnostics');
+        expect(normalizedCode).toMatch(/(?:action|a)\s*===\s*'diagnose'/);
         expect(code).toContain('getFile');
         expect(code).toContain('deleteFile');
         expect(code).toContain('isFileInPsbDestinationFolder');
+        expect(code).toContain('folderHasPsbPrefixOrTargetAncestor');
+        expect(normalizedCode).toContain("deleteProperty('DRIVE_FOLDER_ID')");
         expect(code).toContain('verifyFileMagicBytes');
         expect(code).toContain('makeExistingFilesPrivate');
         expect(code).toContain('DriveApp.Access.PRIVATE');
+
+        // Pre-auth responses must NOT leak MISSING_ADMIN_KEY / ADMIN_EQUALS_PUBLIC differentiation
+        expect(code).not.toContain('MISSING_ADMIN_KEY');
+        expect(code).not.toContain('ADMIN_EQUALS_PUBLIC');
+        expect(code).toContain('UNAUTHORIZED');
+
+        // Public doGet?action=version block must NOT contain hasPublicKey, hasAdminKey, keysEqual, or hasSpreadsheet
+        const doGetIdx = normalizedCode.indexOf('function doGet(');
+        const doPostIdx = normalizedCode.indexOf('function doPost(');
+        expect(doGetIdx).toBeGreaterThan(-1);
+        expect(doPostIdx).toBeGreaterThan(doGetIdx);
+        const doGetBody = normalizedCode.slice(doGetIdx, doPostIdx);
+        expect(doGetBody).toContain('scriptVersion');
+        expect(doGetBody).toContain('service');
+        expect(doGetBody).not.toContain('hasPublicKey');
+        expect(doGetBody).not.toContain('hasAdminKey');
+        expect(doGetBody).not.toContain('keysEqual');
+        expect(doGetBody).not.toContain('hasSpreadsheet');
 
         expect(code).not.toContain('ANYONE_WITH_LINK');
         expect(code).not.toContain('DriveApp.Access.ANYONE');
@@ -163,10 +185,7 @@ describe('PSB & Portal GAS security hardening (Fase 1)', () => {
                         result: 'success',
                         success: true,
                         scriptVersion: 4,
-                        hasPublicKey: true,
-                        hasAdminKey: true,
-                        keysEqual: false,
-                        hasSpreadsheet: true,
+                        service: 'esantri-psb-gas',
                     }),
                     { status: 200 }
                 );
@@ -175,8 +194,8 @@ describe('PSB & Portal GAS security hardening (Fase 1)', () => {
                 JSON.stringify({
                     result: 'error',
                     success: false,
-                    errorCode: 'ADMIN_KEY_MISMATCH',
-                    message: 'Mismatch',
+                    errorCode: 'UNAUTHORIZED',
+                    message: 'Akses ditolak: kredensial admin tidak valid atau konfigurasi belum siap.',
                 }),
                 { status: 200 }
             );
@@ -193,19 +212,24 @@ describe('PSB & Portal GAS security hardening (Fase 1)', () => {
                         result: 'success',
                         success: true,
                         scriptVersion: 4,
-                        hasPublicKey: true,
-                        hasAdminKey: true,
-                        keysEqual: false,
-                        hasSpreadsheet: true,
+                        service: 'esantri-psb-gas',
                     }),
                     { status: 200 }
                 );
             }
+            const parsedBody = JSON.parse(String(init?.body || '{}'));
+            expect(parsedBody.includeDiagnostics).toBe(true);
             return new Response(
                 JSON.stringify({
                     result: 'success',
                     success: true,
                     scriptVersion: 4,
+                    diagnostics: {
+                        hasPublicKey: true,
+                        hasAdminKey: true,
+                        keysEqual: false,
+                        hasSpreadsheet: true,
+                    },
                     records: [{ namaLengkap: 'Ahmad' }],
                 }),
                 { status: 200 }

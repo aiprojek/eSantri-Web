@@ -983,4 +983,114 @@ describe('santriBerkas End-to-End Offline Attachment Flows (Butir 3.10)', () => 
         expect(berkasList[0].santriId).toBe(acceptedSantriId);
         expect(berkasList[0].statusUnduh).toBe('tersimpan');
     });
+
+    it('preserves pendaftarId for HKDF decryption and transfers plaintext/E2EE santriBerkas + unpulled refs on exact-duplicate linking', async () => {
+        const admin = makeUser({ id: 1, username: 'admin-dup-berkas', role: 'admin' });
+        const { config: e2eeConfig } = await setupE2eeConfig('DupLinkMasterKey2026!');
+        const plainSettings = makeSettings();
+        const e2eeSettings = makeSettings({ e2eeConfig });
+
+        const existingSantriId = 8801;
+        await db.santri.put(
+            makeSantri({
+                id: existingSantriId,
+                namaLengkap: 'Muhammad Rizki',
+                tanggalLahir: '2012-03-14',
+            })
+        );
+
+        // Scenario A: plaintext pre-pulled berkas on pendaftar 881 before linking
+        const kkPlainId = '1FileDupPlainKkAbCdEfGhIjKlMn001';
+        const pendaftarPlain = makePendaftar({
+            id: 881,
+            namaLengkap: 'Muhammad Rizki',
+            tanggalLahir: '2012-03-14',
+            customData: JSON.stringify({
+                uploadKk: `https://drive.google.com/file/d/${kkPlainId}/view`,
+            }),
+        });
+        await db.pendaftar.put(pendaftarPlain);
+
+        const plainFetch = createGasFetchMock({
+            [kkPlainId]: { name: 'kk-plain.jpg', mime: 'image/jpeg', bytes: JPEG_BYTES },
+        });
+        await savePendaftarAttachmentsToDevice([pendaftarPlain], {
+            settings: plainSettings,
+            currentUser: admin,
+            simpanAsliTanpaKompresi: true,
+            fetcherConfig: { fetchImpl: plainFetch, baseBackoffMs: 0 },
+        });
+
+        const linkedPlainCount = await linkPendaftarBerkasToSantri(pendaftarPlain.id, existingSantriId, admin);
+        expect(linkedPlainCount).toBe(1);
+
+        const plainRowsAfterLink = await getSantriBerkasBySantri(existingSantriId, pendaftarPlain.id, admin);
+        expect(plainRowsAfterLink).toHaveLength(1);
+        expect(plainRowsAfterLink[0].santriId).toBe(existingSantriId);
+        expect(plainRowsAfterLink[0].pendaftarId).toBe(pendaftarPlain.id);
+        const decryptedPlain = await decryptSantriBerkasBlob(plainRowsAfterLink[0], plainSettings, admin);
+        expect(new Uint8Array(await decryptedPlain.arrayBuffer())).toEqual(JPEG_BYTES);
+
+        // Scenario B: E2EE pre-pulled berkas + unpulled ref on duplicate pendaftar 882
+        await db.santriBerkas.clear();
+        const kkE2eeId = '1FileDupE2eeKkAbCdEfGhIjKlMn0002';
+        const ijUnpulledId = '1FileDupE2eeIjAbCdEfGhIjKlMn0003';
+        const pendaftarE2ee = makePendaftar({
+            id: 882,
+            namaLengkap: 'Muhammad Rizki',
+            tanggalLahir: '2012-03-14',
+            customData: JSON.stringify({
+                uploadKk: `https://drive.google.com/file/d/${kkE2eeId}/view`,
+                uploadIjazah: `https://drive.google.com/file/d/${ijUnpulledId}/view`,
+            }),
+        });
+        await db.pendaftar.put(pendaftarE2ee);
+
+        // Pull only uploadKk initially (before duplicate linking)
+        const partialFetch = createGasFetchMock({
+            [kkE2eeId]: { name: 'kk-e2ee.png', mime: 'image/png', bytes: PNG_BYTES },
+        });
+        await savePendaftarAttachmentsToDevice(
+            [{ ...pendaftarE2ee, customData: JSON.stringify({ uploadKk: `https://drive.google.com/file/d/${kkE2eeId}/view` }) }],
+            {
+                settings: e2eeSettings,
+                currentUser: admin,
+                simpanAsliTanpaKompresi: true,
+                fetcherConfig: { fetchImpl: partialFetch, baseBackoffMs: 0 },
+            }
+        );
+
+        const linkedE2eeCount = await linkPendaftarBerkasToSantri(pendaftarE2ee.id, existingSantriId, admin);
+        expect(linkedE2eeCount).toBe(1);
+
+        // Simulate PsbRekap exact-duplicate acceptance pulling remaining unpulled attachments with updated santriId
+        const fullFetch = createGasFetchMock({
+            [kkE2eeId]: { name: 'kk-e2ee.png', mime: 'image/png', bytes: PNG_BYTES },
+            [ijUnpulledId]: { name: 'ijazah-e2ee.pdf', mime: 'application/pdf', bytes: PDF_BYTES },
+        });
+        const linkedPull = await savePendaftarAttachmentsToDevice(
+            [{ ...pendaftarE2ee, santriId: existingSantriId, status: 'Diterima' }],
+            {
+                settings: e2eeSettings,
+                currentUser: admin,
+                simpanAsliTanpaKompresi: true,
+                onlyFailedOrCloud: true,
+                fetcherConfig: { fetchImpl: fullFetch, baseBackoffMs: 0 },
+            }
+        );
+        expect(linkedPull.saved).toBe(1);
+        expect(linkedPull.skipped).toBe(1);
+
+        const finalRows = await getSantriBerkasBySantri(existingSantriId, pendaftarE2ee.id, admin);
+        expect(finalRows).toHaveLength(2);
+        for (const row of finalRows) {
+            expect(row.santriId).toBe(existingSantriId);
+            expect(row.pendaftarId).toBe(pendaftarE2ee.id);
+            expect(row.terenkripsi).toBe(true);
+            const pt = await decryptSantriBerkasBlob(row, e2eeSettings, admin);
+            const expected = row.fieldId === 'uploadKk' ? PNG_BYTES : PDF_BYTES;
+            expect(new Uint8Array(await pt.arrayBuffer())).toEqual(expected);
+        }
+    });
 });
+

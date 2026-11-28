@@ -1125,22 +1125,30 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
             // Pastikan pendaftar yang memang sudah ada di Data Santri tertaut santriId & status='Diterima'
             const now = Date.now();
+            let linkedDuplicateBerkasCount = 0;
+            const linkedDuplicatePendaftarForPull: Pendaftar[] = [];
             if (exactDuplicates.length > 0) {
                 const syncLinks: Pendaftar[] = [];
                 for (const dup of exactDuplicates) {
+                    const linkedPendaftar: Pendaftar = {
+                        ...dup.pendaftar,
+                        status: 'Diterima',
+                        santriId: dup.matchedSantri.id,
+                        nis: dup.matchedSantri.nis || dup.pendaftar.nis,
+                        deleted: false,
+                        lastModified: now,
+                    };
+                    linkedDuplicatePendaftarForPull.push(linkedPendaftar);
                     if (dup.pendaftar.status !== 'Diterima' || dup.pendaftar.santriId !== dup.matchedSantri.id) {
-                        syncLinks.push({
-                            ...dup.pendaftar,
-                            status: 'Diterima',
-                            santriId: dup.matchedSantri.id,
-                            nis: dup.matchedSantri.nis || dup.pendaftar.nis,
-                            deleted: false,
-                            lastModified: now,
-                        });
+                        syncLinks.push(linkedPendaftar);
                     }
                     if (canManageBerkas && dup.pendaftar.id && dup.matchedSantri.id) {
                         try {
-                            await linkPendaftarBerkasToSantri(dup.pendaftar.id, dup.matchedSantri.id, currentUser);
+                            linkedDuplicateBerkasCount += await linkPendaftarBerkasToSantri(
+                                dup.pendaftar.id,
+                                dup.matchedSantri.id,
+                                currentUser
+                            );
                         } catch {
                             // non-fatal
                         }
@@ -1155,12 +1163,19 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             if (toMigrate.length === 0) {
                 if (identifierConflicts.length > 0 && exactDuplicates.length === 0) {
                     const firstConflict = identifierConflicts[0];
-                    const idLabel = firstConflict.reason === 'nik' ? 'NIK' : 'NISN';
                     const matchedDesc = describeExistingSantriLocation(firstConflict.matchedSantri, settings);
                     const conflictNames = identifierConflicts.map((c) => c.pendaftar.namaLengkap).join(', ');
+                    const isNameConflict = firstConflict.reason === 'status_nama';
+                    const idLabel = firstConflict.reason === 'nik' ? 'NIK' : 'NISN';
+                    const title = isNameConflict
+                        ? 'Konfirmasi Nama Santri yang Sama'
+                        : `Konfirmasi Kemiripan ${idLabel}`;
+                    const message = isNameConflict
+                        ? `Pendaftar "${conflictNames}" berstatus Diterima memiliki nama yang sama dengan santri yang sudah ada (${matchedDesc}), namun tanggal lahir belum lengkap untuk memastikan orang yang sama. Jika ini memang calon santri baru yang berbeda, klik "Tetap Terima Sebagai Santri Baru".`
+                        : `${idLabel} milik ${conflictNames} cocok dengan santri yang sudah ada di Data Santri: ${matchedDesc}. Jika ini memang calon santri baru yang berbeda, klik "Tetap Terima" untuk memasukkannya ke Data Santri.`;
                     showConfirmation(
-                        `Konfirmasi Kemiripan ${idLabel}`,
-                        `${idLabel} milik ${conflictNames} cocok dengan santri yang sudah ada di Data Santri: ${matchedDesc}. Jika ini memang calon santri baru yang berbeda, klik "Tetap Terima" untuk memasukkannya ke Data Santri.`,
+                        title,
+                        message,
                         () => {
                             void handleAcceptConfirmed(
                                 rawList,
@@ -1175,6 +1190,21 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     return;
                 }
 
+                if (canManageBerkas && attachmentOption?.saveAttachments && linkedDuplicatePendaftarForPull.length > 0) {
+                    try {
+                        const dupPull = await savePendaftarAttachmentsToDevice(linkedDuplicatePendaftarForPull, {
+                            settings,
+                            currentUser,
+                            simpanAsliTanpaKompresi: attachmentOption.simpanAsliTanpaKompresi,
+                        });
+                        if (dupPull.saved > 0) {
+                            showToast(`${dupPull.saved} lampiran pendaftar disimpan ke perangkat dan ditautkan ke Data Santri.`, 'success');
+                        }
+                    } catch {
+                        // non-fatal
+                    }
+                }
+
                 clearSantriViewFilters();
                 const details = exactDuplicates
                     .slice(0, 5)
@@ -1183,9 +1213,12 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 const extraNote = exactDuplicates.length > 5
                     ? `\n(+${exactDuplicates.length - 5} santri lainnya)`
                     : '';
+                const berkasNote = linkedDuplicateBerkasCount > 0
+                    ? `\n\nSebanyak ${linkedDuplicateBerkasCount} berkas offline (santriBerkas) pendaftar juga ikut ditautkan ke santri yang sudah ada.`
+                    : '';
                 showAlert(
                     'Santri Sudah Terdaftar di Data Santri',
-                    `Calon santri berikut sudah ada di Data Santri sehingga tidak digandakan:\n\n${details}${extraNote}\n\nFilter pencarian di menu Data Santri telah direset agar data langsung terlihat.`
+                    `Calon santri berikut sudah ada di Data Santri sehingga tidak digandakan:\n\n${details}${extraNote}${berkasNote}\n\nFilter pencarian di menu Data Santri telah direset agar data langsung terlihat.`
                 );
                 return;
             }
@@ -1328,10 +1361,17 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
             if (identifierConflicts.length > 0) {
                 const firstConflict = identifierConflicts[0];
+                const isNameConflict = firstConflict.reason === 'status_nama';
                 const idLabel = firstConflict.reason === 'nik' ? 'NIK' : 'NISN';
+                const matchedDesc = describeExistingSantriLocation(firstConflict.matchedSantri, settings);
+                const conflictNames = identifierConflicts.map(c => c.pendaftar.namaLengkap).join(', ');
                 showConfirmation(
-                    `Konfirmasi Kemiripan ${idLabel} (Sebagian Data)`,
-                    `${identifierConflicts.length} calon santri (${identifierConflicts.map(c => c.pendaftar.namaLengkap).join(', ')}) memiliki ${idLabel} yang sama dengan santri lain (${describeExistingSantriLocation(firstConflict.matchedSantri, settings)}). Tetap masukkan sebagai santri baru?`,
+                    isNameConflict
+                        ? 'Konfirmasi Nama Santri yang Sama (Sebagian Data)'
+                        : `Konfirmasi Kemiripan ${idLabel} (Sebagian Data)`,
+                    isNameConflict
+                        ? `${identifierConflicts.length} calon santri (${conflictNames}) berstatus Diterima memiliki nama yang sama dengan santri yang sudah ada (${matchedDesc}), namun tanggal lahir belum lengkap. Tetap masukkan sebagai santri baru?`
+                        : `${identifierConflicts.length} calon santri (${conflictNames}) memiliki ${idLabel} yang sama dengan santri lain (${matchedDesc}). Tetap masukkan sebagai santri baru?`,
                     () => {
                         void handleAcceptConfirmed(
                             identifierConflicts.map((c) => c.pendaftar),
@@ -1356,9 +1396,10 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                         }
                     }
                 }
-                if (attachmentOption?.saveAttachments && updatedPendaftarList.length > 0) {
+                const pullTargets = [...updatedPendaftarList, ...linkedDuplicatePendaftarForPull];
+                if (attachmentOption?.saveAttachments && pullTargets.length > 0) {
                     try {
-                        const pullSummary = await savePendaftarAttachmentsToDevice(updatedPendaftarList, {
+                        const pullSummary = await savePendaftarAttachmentsToDevice(pullTargets, {
                             settings,
                             currentUser,
                             simpanAsliTanpaKompresi: attachmentOption.simpanAsliTanpaKompresi,

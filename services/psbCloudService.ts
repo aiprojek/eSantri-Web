@@ -374,10 +374,6 @@ export interface PsbGasProbeResult {
     isLegacyGas: boolean;
     scriptVersion: number | null;
     probedAt: number;
-    hasPublicKey?: boolean;
-    hasAdminKey?: boolean;
-    keysEqual?: boolean;
-    hasSpreadsheet?: boolean;
     service?: string;
     versionErrorMessage?: string;
 }
@@ -504,10 +500,6 @@ export const probePsbGasVersion = async (endpointUrl: string): Promise<PsbGasPro
             isLegacyGas: false,
             scriptVersion: parsed.scriptVersion,
             probedAt: Date.now(),
-            hasPublicKey: typeof parsed.hasPublicKey === 'boolean' ? parsed.hasPublicKey : undefined,
-            hasAdminKey: typeof parsed.hasAdminKey === 'boolean' ? parsed.hasAdminKey : undefined,
-            keysEqual: typeof parsed.keysEqual === 'boolean' ? parsed.keysEqual : undefined,
-            hasSpreadsheet: typeof parsed.hasSpreadsheet === 'boolean' ? parsed.hasSpreadsheet : undefined,
             service: typeof parsed.service === 'string' ? parsed.service : undefined,
         };
         psbGasProbeCache.set(cleanUrl, result);
@@ -538,12 +530,23 @@ export interface PsbCloudConnectionParams {
     apiKey?: string;
     publicKey?: string;
     adminKey?: string;
+    includeDiagnostics?: boolean;
+}
+
+export interface PsbGasDiagnostics {
+    hasPublicKey?: boolean;
+    hasAdminKey?: boolean;
+    keysEqual?: boolean;
+    hasSpreadsheet?: boolean;
+    hasDriveFolder?: boolean;
+    driveFolderAccessible?: boolean | null;
 }
 
 export interface PsbCloudFetchResult {
     rows: any[];
     isLegacyGas: boolean;
     scriptVersion: number | null;
+    diagnostics?: PsbGasDiagnostics;
 }
 
 export const fetchPsbFromCloudWithMeta = async (
@@ -577,25 +580,6 @@ export const fetchPsbFromCloudWithMeta = async (
         const probe = await probePsbGasVersion(baseUrl);
 
         if (!probe.isLegacyGas) {
-            if (probe.hasSpreadsheet === false) {
-                throw new Error(
-                    'Project Google Apps Script di URL ini tidak terikat ke Google Sheets (getActiveSpreadsheet() kosong). ' +
-                        'Buka file Google Spreadsheet Anda lalu masuk via Ekstensi > Apps Script, tempel kode script, dan deploy ulang.'
-                );
-            }
-            if (probe.keysEqual === true) {
-                throw new Error(
-                    'PUBLIC_KEY dan ADMIN_KEY yang tersimpan di Script GAS terdeteksi sama. ' +
-                        'Klik "Acak Ulang" ADMIN_KEY di aplikasi, salin kode script baru ke Code.gs, lalu Deploy > Manage deployments > Edit > Version: New version.'
-                );
-            }
-            if (probe.hasAdminKey === false) {
-                throw new Error(
-                    'ADMIN_KEY di Script GAS masih kosong/belum terbaca. ' +
-                        'Pastikan script disalin setelah ADMIN_KEY muncul di aplikasi (atau isi Script Properties "ADMIN_KEY" di Apps Script), lalu Deploy > Manage deployments > Edit > Version: New version.'
-                );
-            }
-
             const adminKey = (params.adminKey || '').trim();
             if (!adminKey) {
                 throw new Error('Kunci Admin GAS (ADMIN_KEY) belum diisi di Pengaturan Koneksi Cloud PSB.');
@@ -613,6 +597,7 @@ export const fetchPsbFromCloudWithMeta = async (
                     body: JSON.stringify({
                         action: 'list',
                         adminKey,
+                        ...(params.includeDiagnostics ? { includeDiagnostics: true } : {}),
                     }),
                 });
             } catch (err) {
@@ -639,34 +624,38 @@ export const fetchPsbFromCloudWithMeta = async (
             }
 
             if (parsed && (parsed.result === 'error' || parsed.success === false)) {
-                if (parsed.errorCode === 'MISSING_ADMIN_KEY') {
+                if (
+                    parsed.errorCode === 'UNAUTHORIZED' ||
+                    parsed.errorCode === 'ADMIN_KEY_MISMATCH' ||
+                    parsed.errorCode === 'MISSING_ADMIN_KEY' ||
+                    parsed.errorCode === 'ADMIN_EQUALS_PUBLIC'
+                ) {
                     throw new Error(
-                        'Akses ditolak GAS: ADMIN_KEY di Script GAS masih kosong. ' +
-                            'Salin ulang kode script dari aplikasi ke Code.gs (atau set Script Property "ADMIN_KEY") lalu Deploy > Manage deployments > Edit > Version: New version.'
-                    );
-                }
-                if (parsed.errorCode === 'ADMIN_EQUALS_PUBLIC') {
-                    throw new Error(
-                        'Akses ditolak GAS: ADMIN_KEY dan PUBLIC_KEY di Script GAS tidak boleh sama. ' +
-                            'Acak ulang ADMIN_KEY di aplikasi, tempel script terbaru ke Code.gs, lalu Deploy > Manage deployments > Edit > Version: New version.'
-                    );
-                }
-                if (parsed.errorCode === 'ADMIN_KEY_MISMATCH') {
-                    throw new Error(
-                        'Akses ditolak GAS: ADMIN_KEY yang dimasukkan di aplikasi tidak cocok dengan ADMIN_KEY yang aktif di Script GAS.\n' +
-                            'Kemungkinan penyebab:\n' +
-                            '1) Setelah menyalin kode baru ke Code.gs, belum klik Deploy > Manage deployments > Edit > Version: New version (URL /exec masih memakai deployment versi sebelumnya).\n' +
-                            '2) Di Apps Script > Project Settings > Script Properties masih tersimpan ADMIN_KEY lama dengan nilai berbeda.\n' +
-                            '3) Kunci yang ditempel berasal dari sesi modal lain sebelum disimpan — pastikan isi Script Property ADMIN_KEY / DEFAULT_ADMIN_KEY sama persis dengan kolom ADMIN_KEY di aplikasi.'
+                        'Akses ditolak GAS: kredensial ADMIN_KEY tidak valid atau belum siap di Script GAS.\n' +
+                            'Pastikan:\n' +
+                            '1) ADMIN_KEY dan PUBLIC_KEY di Script GAS terisi dan tidak sama.\n' +
+                            '2) Setelah menyalin kode baru ke Code.gs, wajib klik Deploy > Manage deployments > Edit > Version: New version.\n' +
+                            '3) Nilai ADMIN_KEY di Apps Script (Code.gs / Script Properties) sama persis dengan kolom ADMIN_KEY di aplikasi.'
                     );
                 }
                 throw new Error(parsed.error || parsed.message || `Server ${meta.name} menolak akses baca data.`);
             }
             if (Array.isArray(parsed) || (parsed && (Array.isArray(parsed.records) || Array.isArray(parsed.data)))) {
+                const diag: PsbGasDiagnostics | undefined =
+                    parsed && parsed.diagnostics && typeof parsed.diagnostics === 'object'
+                        ? parsed.diagnostics
+                        : undefined;
+                if (diag && diag.hasSpreadsheet === false) {
+                    throw new Error(
+                        'Project Google Apps Script di URL ini tidak terikat ke Google Sheets (getActiveSpreadsheet() kosong). ' +
+                            'Buka file Google Spreadsheet Anda lalu masuk via Ekstensi > Apps Script, tempel kode script, dan deploy ulang.'
+                    );
+                }
                 return {
                     rows: normalizePsbCloudRows(parsed),
                     isLegacyGas: false,
                     scriptVersion: probe.scriptVersion,
+                    diagnostics: diag,
                 };
             }
             throw new Error(`Format respons ${meta.name} bukan daftar pendaftar.`);
@@ -800,16 +789,27 @@ export const testPsbCloudConnection = async (
         apiKey: params.apiKey,
         publicKey: params.publicKey,
         adminKey: params.adminKey,
+        includeDiagnostics: provider === 'gas',
     });
 
     const meta = getPsbCloudProviderMeta(provider);
-    const legacyNote = res.isLegacyGas
-        ? ' PERINGATAN: Script GAS masih versi lama (data dapat terbaca lewat GET publik). Segera perbarui script & deploy versi baru.'
-        : '';
+    const warnings: string[] = [];
+    if (res.isLegacyGas) {
+        warnings.push('PERINGATAN: Script GAS masih versi lama (data dapat terbaca lewat GET publik). Segera perbarui script & deploy versi baru.');
+    }
+    if (res.diagnostics) {
+        if (res.diagnostics.hasPublicKey === false) {
+            warnings.push('Catatan: PUBLIC_KEY belum diset di Script GAS — formulir publik tidak dapat mengirim pendaftar sebelum PUBLIC_KEY diisi.');
+        }
+        if (res.diagnostics.hasDriveFolder && res.diagnostics.driveFolderAccessible === false) {
+            warnings.push('Peringatan: Folder Google Drive induk yang dikonfigurasi tidak dapat diakses oleh akun GAS; unggahan akan otomatis masuk ke folder My Drive/berkas-psb-<tahun>.');
+        }
+    }
+    const warningNote = warnings.length > 0 ? ' ' + warnings.join(' ') : '';
     return {
         ok: true,
         rowCount: res.rows.length,
-        message: `Terhubung ke ${meta.name}! Terbaca ${res.rows.length} baris data pendaftar.${legacyNote}`,
+        message: `Terhubung ke ${meta.name}! Terbaca ${res.rows.length} baris data pendaftar.${warningNote}`,
         isLegacyGas: res.isLegacyGas,
         scriptVersion: res.scriptVersion,
     };
@@ -1286,6 +1286,13 @@ function resolveConfiguredDriveFolderId() {
     } catch (e) {}
     return fromDefault;
   }
+  if (!fromDefault && seed && fromProp === seed) {
+    try {
+      props.deleteProperty('DRIVE_FOLDER_ID');
+      props.deleteProperty('DRIVE_FOLDER_ID_SEED');
+    } catch (e) {}
+    return '';
+  }
   return fromProp || fromDefault;
 }
 
@@ -1316,25 +1323,11 @@ function resolveAdminKey() {
 function diagnoseAdminKey(providedKey) {
   var adm = resolveAdminKey();
   var pub = resolvePublicKey();
-  if (!adm) {
+  if (!adm || adm === pub || String(providedKey || '').trim() !== adm) {
     return {
       ok: false,
-      errorCode: 'MISSING_ADMIN_KEY',
-      message: 'Akses ditolak: ADMIN_KEY belum dikonfigurasi pada Script GAS.'
-    };
-  }
-  if (adm === pub) {
-    return {
-      ok: false,
-      errorCode: 'ADMIN_EQUALS_PUBLIC',
-      message: 'Akses ditolak: ADMIN_KEY tidak boleh sama dengan PUBLIC_KEY.'
-    };
-  }
-  if (String(providedKey || '').trim() !== adm) {
-    return {
-      ok: false,
-      errorCode: 'ADMIN_KEY_MISMATCH',
-      message: 'Akses ditolak: ADMIN_KEY tidak cocok dengan kunci yang aktif di Script GAS.'
+      errorCode: 'UNAUTHORIZED',
+      message: 'Akses ditolak: kredensial admin tidak valid atau konfigurasi belum siap.'
     };
   }
   return { ok: true };
@@ -1342,6 +1335,30 @@ function diagnoseAdminKey(providedKey) {
 
 function verifyAdminKey(providedKey) {
   return diagnoseAdminKey(providedKey).ok;
+}
+
+function buildAuthenticatedAdminDiagnostics() {
+  var pub = resolvePublicKey();
+  var adm = resolveAdminKey();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var folderId = resolveConfiguredDriveFolderId();
+  var driveFolderAccessible = null;
+  if (folderId) {
+    try {
+      DriveApp.getFolderById(folderId).getName();
+      driveFolderAccessible = true;
+    } catch (e) {
+      driveFolderAccessible = false;
+    }
+  }
+  return {
+    hasPublicKey: Boolean(pub),
+    hasAdminKey: Boolean(adm),
+    keysEqual: Boolean(adm && adm === pub),
+    hasSpreadsheet: Boolean(ss),
+    hasDriveFolder: Boolean(folderId),
+    driveFolderAccessible: driveFolderAccessible
+  };
 }
 
 function verifyPublicSubmitKey(providedKey) {
@@ -1488,26 +1505,45 @@ function extractAndValidateDriveFileId(rawInput) {
   throw new Error('Format ID atau URL berkas Google Drive tidak valid.');
 }
 
-function isFileInPsbDestinationFolder(file) {
-  var targetFolderId = resolveConfiguredDriveFolderId();
-  var parents = file.getParents();
-  while (parents.hasNext()) {
-    var parent = parents.next();
-    if (parent.isTrashed && parent.isTrashed()) continue;
-    var pId = parent.getId();
-    if (targetFolderId) {
-      if (pId === targetFolderId) return true;
-      var grandParents = parent.getParents();
-      while (grandParents.hasNext()) {
-        var gp = grandParents.next();
-        if ((!gp.isTrashed || !gp.isTrashed()) && gp.getId() === targetFolderId) return true;
-      }
-    } else {
-      var pName = String(parent.getName() || '').toLowerCase();
-      if (pName.indexOf('berkas-psb-') === 0) return true;
+function folderHasPsbPrefixOrTargetAncestor(folder, targetFolderId, depth, visited) {
+  if (!folder || depth > 6) return false;
+  if (folder.isTrashed && folder.isTrashed()) return false;
+  var fid = folder.getId();
+  if (visited[fid]) return false;
+  visited[fid] = true;
+  if (targetFolderId && fid === targetFolderId) return true;
+  var fname = String(folder.getName() || '').toLowerCase();
+  if (depth <= 3 && fname.indexOf('berkas-psb-') === 0) return true;
+  var ups = folder.getParents();
+  while (ups.hasNext()) {
+    if (folderHasPsbPrefixOrTargetAncestor(ups.next(), targetFolderId, depth + 1, visited)) {
+      return true;
     }
   }
   return false;
+}
+
+function isFileInPsbDestinationFolder(file) {
+  var targetFolderId = resolveConfiguredDriveFolderId();
+  var parents = file.getParents();
+  var visited = {};
+  while (parents.hasNext()) {
+    var parent = parents.next();
+    if (folderHasPsbPrefixOrTargetAncestor(parent, targetFolderId, 1, visited)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function describeFileParentFolders(file) {
+  var names = [];
+  var parents = file.getParents();
+  while (parents.hasNext()) {
+    var p = parents.next();
+    names.push(String(p.getName() || 'Drive'));
+  }
+  return names.length > 0 ? names.join(', ') : 'Root / Tanpa Folder';
 }
 
 function digestBytesToHex(digestBytes) {
@@ -1542,7 +1578,7 @@ function handleGetFilePost(rawData) {
     throw new Error('Berkas tidak ditemukan atau sudah berada di tempat sampah Drive.');
   }
   if (!isFileInPsbDestinationFolder(file)) {
-    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi.');
+    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi (folder berkas saat ini: ' + describeFileParentFolders(file) + '). Pindahkan berkas ke dalam folder "berkas-psb-..." atau folder tujuan PSB di Google Drive.');
   }
   var fileSize = Number(file.getSize() || 0);
   if (fileSize > PSB_MAX_FILE_BYTES) {
@@ -1590,7 +1626,7 @@ function handleDeleteFilePost(rawData) {
     throw new Error('Berkas tidak ditemukan di Google Drive.');
   }
   if (!isFileInPsbDestinationFolder(file)) {
-    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi.');
+    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi (folder berkas saat ini: ' + describeFileParentFolders(file) + '). Pindahkan berkas ke dalam folder "berkas-psb-..." atau folder tujuan PSB di Google Drive.');
   }
   if (!file.isTrashed()) {
     file.setTrashed(true);
@@ -1606,18 +1642,11 @@ function handleDeleteFilePost(rawData) {
 function doGet(e) {
   var action = (e && e.parameter && e.parameter.action) ? String(e.parameter.action).trim() : '';
   if (action === 'version') {
-    var pub = resolvePublicKey();
-    var adm = resolveAdminKey();
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
     return gasJsonOut({
       result: 'success',
       success: true,
       scriptVersion: SCRIPT_VERSION,
-      service: 'esantri-psb-gas',
-      hasPublicKey: Boolean(pub),
-      hasAdminKey: Boolean(adm),
-      keysEqual: Boolean(adm && adm === pub),
-      hasSpreadsheet: Boolean(ss)
+      service: 'esantri-psb-gas'
     });
   }
   return gasJsonOut({
@@ -1631,14 +1660,6 @@ function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.tryLock(30000);
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!ss) {
-      return gasJsonOut({
-        result: 'error',
-        success: false,
-        message: 'Spreadsheet aktif tidak ditemukan. Pastikan project Apps Script dibuat dari Google Sheets (Ekstensi > Apps Script), bukan script standalone.'
-      });
-    }
     var rawData;
 
     if (e.postData && (e.postData.type === "application/json" || e.postData.type === "text/plain" || e.postData.contents)) {
@@ -1656,6 +1677,24 @@ function doPost(e) {
     }
 
     var action = String(rawData.action || '').trim();
+    if (action === 'diagnose') {
+      var diagAuth = diagnoseAdminKey(rawData.adminKey);
+      if (!diagAuth.ok) {
+        return gasJsonOut({
+          result: 'error',
+          success: false,
+          errorCode: diagAuth.errorCode,
+          message: diagAuth.message
+        });
+      }
+      return gasJsonOut({
+        result: 'success',
+        success: true,
+        scriptVersion: SCRIPT_VERSION,
+        service: 'esantri-psb-gas',
+        diagnostics: buildAuthenticatedAdminDiagnostics()
+      });
+    }
     if (action === 'list' || action === 'getPsbSubmissions') {
       var listAuth = diagnoseAdminKey(rawData.adminKey);
       if (!listAuth.ok) {
@@ -1666,13 +1705,25 @@ function doPost(e) {
           message: listAuth.message
         });
       }
-      var records = collectAllPsbSubmissions(ss, rawData.tahunAjaran);
-      return gasJsonOut({
+      var listSs = SpreadsheetApp.getActiveSpreadsheet();
+      if (!listSs) {
+        return gasJsonOut({
+          result: 'error',
+          success: false,
+          message: 'Spreadsheet aktif tidak ditemukan. Pastikan project Apps Script dibuat dari Google Sheets (Ekstensi > Apps Script), bukan script standalone.'
+        });
+      }
+      var records = collectAllPsbSubmissions(listSs, rawData.tahunAjaran);
+      var listRes = {
         result: 'success',
         success: true,
         scriptVersion: SCRIPT_VERSION,
         records: records
-      });
+      };
+      if (rawData.includeDiagnostics) {
+        listRes.diagnostics = buildAuthenticatedAdminDiagnostics();
+      }
+      return gasJsonOut(listRes);
     }
     if (action === 'getFile') {
       return gasJsonOut(handleGetFilePost(rawData));
@@ -1687,6 +1738,15 @@ function doPost(e) {
         result: 'error',
         success: false,
         message: pubCheck.message
+      });
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) {
+      return gasJsonOut({
+        result: 'error',
+        success: false,
+        message: 'Spreadsheet aktif tidak ditemukan. Pastikan project Apps Script dibuat dari Google Sheets (Ekstensi > Apps Script), bukan script standalone.'
       });
     }
 

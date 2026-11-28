@@ -1675,18 +1675,11 @@ function doGet(e) {
   try {
     const a = ((e && e.parameter && e.parameter.action) || '').trim();
     if (a === 'version') {
-      const pub = resolvePublicKey();
-      const adm = resolveAdminKey();
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
       return out({
         success: true,
         result: 'success',
         scriptVersion: SCRIPT_VERSION,
-        service: 'esantri-portal-gas',
-        hasPublicKey: Boolean(pub),
-        hasAdminKey: Boolean(adm),
-        keysEqual: Boolean(adm && adm === pub),
-        hasSpreadsheet: Boolean(ss)
+        service: 'esantri-portal-gas'
       });
     }
     if (a === 'getPortalPublicInfo') return out(getPortalPublicInfo(e));
@@ -1706,6 +1699,7 @@ function doPost(e) {
     }
     const b = JSON.parse(rawContents);
     const a = (b.action || '').trim();
+    if (a === 'diagnose') return out(diagnosePortalAdminPost(b));
     if (a === 'upsertPortalConfig') return out(upsertPortalConfig(b));
     if (a === 'list' || a === 'getPsbSubmissions') return out(getPsbSubmissionsPost(b));
     if (a === 'getFile') return out(getFilePost(b));
@@ -1807,25 +1801,11 @@ function resolveAdminKey() {
 function diagnoseAdminKey(inputAdminKey) {
   const expectedAdmin = resolveAdminKey();
   const expectedPublic = resolvePublicKey();
-  if (!expectedAdmin) {
+  if (!expectedAdmin || expectedAdmin === expectedPublic || expectedAdmin !== String(inputAdminKey || '').trim()) {
     return {
       ok: false,
-      errorCode: 'MISSING_ADMIN_KEY',
-      message: 'Akses ditolak: ADMIN_KEY belum dikonfigurasi pada Script GAS.'
-    };
-  }
-  if (expectedAdmin === expectedPublic) {
-    return {
-      ok: false,
-      errorCode: 'ADMIN_EQUALS_PUBLIC',
-      message: 'Akses ditolak: ADMIN_KEY tidak boleh sama dengan PUBLIC_KEY.'
-    };
-  }
-  if (expectedAdmin !== String(inputAdminKey || '').trim()) {
-    return {
-      ok: false,
-      errorCode: 'ADMIN_KEY_MISMATCH',
-      message: 'Akses ditolak: ADMIN_KEY tidak cocok dengan kunci yang aktif di Script GAS.'
+      errorCode: 'UNAUTHORIZED',
+      message: 'Akses ditolak: kredensial admin tidak valid atau konfigurasi belum siap.'
     };
   }
   return { ok: true };
@@ -1833,6 +1813,44 @@ function diagnoseAdminKey(inputAdminKey) {
 
 function verifyAdminKey(inputAdminKey) {
   return diagnoseAdminKey(inputAdminKey).ok;
+}
+
+function buildAuthenticatedAdminDiagnostics() {
+  const pub = resolvePublicKey();
+  const adm = resolveAdminKey();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const folderId = resolveConfiguredDriveFolderId();
+  let driveFolderAccessible = null;
+  if (folderId) {
+    try {
+      DriveApp.getFolderById(folderId).getName();
+      driveFolderAccessible = true;
+    } catch (e) {
+      driveFolderAccessible = false;
+    }
+  }
+  return {
+    hasPublicKey: Boolean(pub),
+    hasAdminKey: Boolean(adm),
+    keysEqual: Boolean(adm && adm === pub),
+    hasSpreadsheet: Boolean(ss),
+    hasDriveFolder: Boolean(folderId),
+    driveFolderAccessible: driveFolderAccessible
+  };
+}
+
+function diagnosePortalAdminPost(body) {
+  const auth = diagnoseAdminKey(body.adminKey);
+  if (!auth.ok) {
+    return { success: false, result: 'error', errorCode: auth.errorCode, message: auth.message };
+  }
+  return {
+    success: true,
+    result: 'success',
+    scriptVersion: SCRIPT_VERSION,
+    service: 'esantri-portal-gas',
+    diagnostics: buildAuthenticatedAdminDiagnostics()
+  };
 }
 
 function verifyPublicSubmitKey(inputPublicKey) {
@@ -1972,9 +1990,10 @@ function loginSantriPost(body) {
 }
 
 function upsertPortalConfig(body) {
+  const auth = diagnoseAdminKey(body.adminKey);
+  if (!auth.ok) return { success: false, result: 'error', errorCode: auth.errorCode, message: auth.message };
   const portalId = resolvePortalId(body.portalId);
   const payload = body.payload || {};
-  if (!verifyAdminKey(body.adminKey)) throw new Error('Akses ditolak: ADMIN_KEY tidak valid atau belum dikonfigurasi.');
   const portalHeaders = getPortalHeaders();
   const sh = ensureSheet(SHEET_PORTALS, portalHeaders);
   const values = sh.getDataRange().getValues();
@@ -2032,6 +2051,13 @@ function resolveConfiguredDriveFolderId() {
       props.setProperty('DRIVE_FOLDER_ID_SEED', fromDefault);
     } catch (e) {}
     return fromDefault;
+  }
+  if (!fromDefault && seed && fromProp === seed) {
+    try {
+      props.deleteProperty('DRIVE_FOLDER_ID');
+      props.deleteProperty('DRIVE_FOLDER_ID_SEED');
+    } catch (e) {}
+    return '';
   }
   return fromProp || fromDefault;
 }
@@ -2137,26 +2163,45 @@ function extractAndValidateDriveFileId(rawInput) {
   throw new Error('Format ID atau URL berkas Google Drive tidak valid.');
 }
 
-function isFileInPsbDestinationFolder(file) {
-  const targetFolderId = resolveConfiguredDriveFolderId();
-  const parents = file.getParents();
-  while (parents.hasNext()) {
-    const parent = parents.next();
-    if (parent.isTrashed && parent.isTrashed()) continue;
-    const pId = parent.getId();
-    if (targetFolderId) {
-      if (pId === targetFolderId) return true;
-      const grandParents = parent.getParents();
-      while (grandParents.hasNext()) {
-        const gp = grandParents.next();
-        if ((!gp.isTrashed || !gp.isTrashed()) && gp.getId() === targetFolderId) return true;
-      }
-    } else {
-      const pName = String(parent.getName() || '').toLowerCase();
-      if (pName.indexOf('berkas-psb-') === 0) return true;
+function folderHasPsbPrefixOrTargetAncestor(folder, targetFolderId, depth, visited) {
+  if (!folder || depth > 6) return false;
+  if (folder.isTrashed && folder.isTrashed()) return false;
+  const fid = folder.getId();
+  if (visited[fid]) return false;
+  visited[fid] = true;
+  if (targetFolderId && fid === targetFolderId) return true;
+  const fname = String(folder.getName() || '').toLowerCase();
+  if (depth <= 3 && fname.indexOf('berkas-psb-') === 0) return true;
+  const ups = folder.getParents();
+  while (ups.hasNext()) {
+    if (folderHasPsbPrefixOrTargetAncestor(ups.next(), targetFolderId, depth + 1, visited)) {
+      return true;
     }
   }
   return false;
+}
+
+function isFileInPsbDestinationFolder(file) {
+  const targetFolderId = resolveConfiguredDriveFolderId();
+  const parents = file.getParents();
+  const visited = {};
+  while (parents.hasNext()) {
+    const parent = parents.next();
+    if (folderHasPsbPrefixOrTargetAncestor(parent, targetFolderId, 1, visited)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function describeFileParentFolders(file) {
+  const names = [];
+  const parents = file.getParents();
+  while (parents.hasNext()) {
+    const p = parents.next();
+    names.push(String(p.getName() || 'Drive'));
+  }
+  return names.length > 0 ? names.join(', ') : 'Root / Tanpa Folder';
 }
 
 function digestBytesToHex(digestBytes) {
@@ -2171,8 +2216,9 @@ function digestBytesToHex(digestBytes) {
 }
 
 function getFilePost(body) {
-  if (!verifyAdminKey(body.adminKey)) {
-    throw new Error('Akses ditolak: ADMIN_KEY tidak valid atau belum dikonfigurasi.');
+  const auth = diagnoseAdminKey(body.adminKey);
+  if (!auth.ok) {
+    return { result: 'error', success: false, errorCode: auth.errorCode, message: auth.message };
   }
   const fileId = extractAndValidateDriveFileId(body.fileId || body.fileUrl || body.url);
   let file;
@@ -2185,7 +2231,7 @@ function getFilePost(body) {
     throw new Error('Berkas tidak ditemukan atau sudah berada di tempat sampah Drive.');
   }
   if (!isFileInPsbDestinationFolder(file)) {
-    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi.');
+    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi (folder berkas saat ini: ' + describeFileParentFolders(file) + '). Pindahkan berkas ke dalam folder "berkas-psb-..." atau folder tujuan PSB di Google Drive.');
   }
   const fileSize = Number(file.getSize() || 0);
   if (fileSize > PSB_MAX_FILE_BYTES) {
@@ -2213,8 +2259,9 @@ function getFilePost(body) {
 }
 
 function deleteFilePost(body) {
-  if (!verifyAdminKey(body.adminKey)) {
-    throw new Error('Akses ditolak: ADMIN_KEY tidak valid atau belum dikonfigurasi.');
+  const auth = diagnoseAdminKey(body.adminKey);
+  if (!auth.ok) {
+    return { result: 'error', success: false, errorCode: auth.errorCode, message: auth.message };
   }
   const fileId = extractAndValidateDriveFileId(body.fileId || body.fileUrl || body.url);
   let file;
@@ -2227,7 +2274,7 @@ function deleteFilePost(body) {
     throw new Error('Berkas tidak ditemukan di Google Drive.');
   }
   if (!isFileInPsbDestinationFolder(file)) {
-    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi.');
+    throw new Error('Akses ditolak: berkas berada di luar folder tujuan PSB yang dikonfigurasi (folder berkas saat ini: ' + describeFileParentFolders(file) + '). Pindahkan berkas ke dalam folder "berkas-psb-..." atau folder tujuan PSB di Google Drive.');
   }
   if (!file.isTrashed()) {
     file.setTrashed(true);
@@ -2247,9 +2294,13 @@ function getPsbSubmissionsPost(body) {
   }
   const ss = getActiveSpreadsheetOrThrow();
   const sh = ss.getSheetByName(SHEET_PSB);
-  if (!sh) return { success: true, result: 'success', scriptVersion: SCRIPT_VERSION, records: [] };
+  const listRes = { success: true, result: 'success', scriptVersion: SCRIPT_VERSION, records: [] };
+  if (body.includeDiagnostics) {
+    listRes.diagnostics = buildAuthenticatedAdminDiagnostics();
+  }
+  if (!sh) return listRes;
   const rows = sh.getDataRange().getValues();
-  if (rows.length < 2) return { success: true, result: 'success', scriptVersion: SCRIPT_VERSION, records: [] };
+  if (rows.length < 2) return listRes;
   const headers = rows[0];
   const items = [];
   for (let i = 1; i < rows.length; i++) {
@@ -2268,7 +2319,8 @@ function getPsbSubmissionsPost(body) {
     }
     items.push(rec);
   }
-  return { success: true, result: 'success', scriptVersion: SCRIPT_VERSION, records: items };
+  listRes.records = items;
+  return listRes;
 }
 
 function makePsbRandomCode(len) {
